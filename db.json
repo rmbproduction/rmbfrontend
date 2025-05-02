@@ -1,0 +1,54 @@
+{
+  "services": [
+    {
+      "id": "periodic-service",
+      "icon": "Tool",
+      "title": "Periodic Service",
+      "description": "Regular maintenance to keep your bike in top condition",
+      "rating": 4.8,
+      "reviews": 156,
+      "packages": [
+        {
+          "id": 1,
+          "name": "Basic Service",
+          "price": 999,
+          "duration": "2 Hrs",
+          "warranty": "500 Kms or 1 Month",
+          "recommended": "Every 3000 Kms or 3 Months",
+          "features": [
+            "Engine Oil Replacement",
+            "Oil Filter Replacement",
+            "Air Filter Cleaning",
+            "Chain Lubrication",
+            "Basic Inspection"
+          ]
+        }
+      ]
+    }
+  ],
+  "mechanics": [
+    {
+      "id": 1,
+      "name": "John Smith",
+      "specialization": "Engine Expert",
+      "experience": "8 years",
+      "rating": 4.9,
+      "reviews": 234,
+      "available": true,
+      "location": "Rewari",
+      "image": "https://randomuser.me/api/portraits/men/1.jpg"
+    }
+  ],
+  "reviews": [
+    {
+      "id": 1,
+      "userId": "user123",
+      "serviceId": "periodic-service",
+      "rating": 5,
+      "comment": "Excellent service! The mechanic was very professional.",
+      "date": "2024-01-15",
+      "userName": "Rahul Kumar",
+      "userImage": "https://randomuser.me/api/portraits/men/2.jpg"
+    }
+  ]
+}

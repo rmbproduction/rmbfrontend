@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+
+@layer base {
+  html {
+    font-family: 'Inter', sans-serif;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Poppins', sans-serif;
+  }
+}
+
+.hero-gradient {
+  background: radial-gradient(circle at center, rgba(255, 87, 51, 0.15) 0%, transparent 70%);
+}
+
+.floating {
+  animation: float 6s ease-in-out infinite;
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px) rotate3d(1, 1, 1, 0deg);
+  }
+  50% {
+    transform: translateY(-20px) rotate3d(1, 1, 1, 5deg);
+  }
+  100% {
+    transform: translateY(0px) rotate3d(1, 1, 1, 0deg);
+  }
+}
+
+.card-3d {
+  transform-style: preserve-3d;
+  transition: transform 0.3s ease;
+}
+
+.card-3d:hover {
+  transform: translateY(-10px) rotateX(5deg) rotateY(5deg);
+}
+
+.parallax-bg {
+  transform: translateZ(-10px) scale(2);
+}
