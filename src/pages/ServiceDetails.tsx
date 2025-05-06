@@ -86,7 +86,16 @@ interface ServicePriceResponse {
     price: string;
 }
 
-// Add this type for CartItem
+// First, add the CartItem interface (before CartResponse)
+interface CartItem {
+  id: number;
+  service_id: number;
+  service_name: string;
+  quantity: number;
+  price: string;
+}
+
+// Then fix the linter error in addToRepairsBasket function
 interface CartResponse {
   id: number;
   status: string;
@@ -177,6 +186,7 @@ const ServiceDetails: React.FC = () => {
   const [servicePrices, setServicePrices] = useState<Record<number, string>>({});
   const [isCustomPrice, setIsCustomPrice] = useState<Record<number, boolean>>({});
   const [cartId, setCartId] = useState<number | null>(null);
+  const [processingService, setProcessingService] = useState<number | null>(null);
 
   // New function to fetch service prices for specific vehicle
   const fetchServicePrices = async (vehicleData: VehicleOwnership) => {
@@ -516,7 +526,7 @@ const ServiceDetails: React.FC = () => {
   };
 
   // Function to add service to repairs basket
-  const addToRepairsBasket = async (serviceId: number) => {
+  const addToRepairsBasket = async (serviceId: number, skipExistingCheck = false) => {
     try {
       // Get or create cart ID
       let currentCartId = cartId;
@@ -528,6 +538,30 @@ const ServiceDetails: React.FC = () => {
       const serviceToAdd = services.find(s => s.id === serviceId);
       if (!serviceToAdd) {
         throw new Error('Service not found');
+      }
+      
+      // If skipExistingCheck is false, check if the service already exists in the cart
+      if (!skipExistingCheck) {
+        // Check if this service is already in the cart
+        try {
+          const existingItemsResponse = await fetch(`http://127.0.0.1:8000/api/repairing_service/cart/${currentCartId}/items/`, {
+            credentials: 'omit'
+          });
+          
+          if (existingItemsResponse.ok) {
+            const existingItems = await existingItemsResponse.json();
+            const serviceExists = existingItems.some((item: CartItem) => item.service_id === serviceId);
+            
+            if (serviceExists) {
+              console.log('Service already in basket, skipping add operation');
+              toast.info('This service is already in your repairs basket');
+              return true; // Indicate that the service is already in the basket
+            }
+          }
+        } catch (error) {
+          console.error('Error checking existing cart items:', error);
+          // Continue with add operation even if check fails
+        }
       }
       
       // Now add the service to the cart
@@ -564,10 +598,12 @@ const ServiceDetails: React.FC = () => {
       
       // Dispatch an event to notify other components about the cart update
       window.dispatchEvent(new Event('cartUpdated'));
+      return true;
       
     } catch (error) {
       console.error('Error adding to repairs basket:', error);
       toast.error('Failed to add to repairs basket. Please try again.');
+      return false;
     }
   };
 
@@ -584,18 +620,21 @@ const ServiceDetails: React.FC = () => {
         return;
       }
       
-      // Always store service data in sessionStorage for recovery
-      const serviceData = {
-        id: serviceId,
-        name: serviceToBook.name,
-        price: serviceToBook.price,
-        quantity: 1
-      };
-      
-      console.log('Service selected for booking:', serviceData);
-      sessionStorage.setItem('pendingServiceData', JSON.stringify(serviceData));
+      // Set UI state for processing
+      setProcessingService(serviceId);
       
       if (!isAuthenticated) {
+        // Store service data in sessionStorage for recovery
+        const serviceData = {
+          id: serviceId,
+          name: serviceToBook.name,
+          price: serviceToBook.price,
+          quantity: 1
+        };
+        
+        console.log('Service selected for booking:', serviceData);
+        sessionStorage.setItem('pendingServiceData', JSON.stringify(serviceData));
+        
         // Store full vehicle data for post-login processing
         if (userVehicle) {
           sessionStorage.setItem('pendingVehicleData', JSON.stringify(userVehicle));
@@ -611,21 +650,19 @@ const ServiceDetails: React.FC = () => {
         return;
       }
       
-      // If user is authenticated, add to repairs basket
-      await addToRepairsBasket(serviceId);
+      // If user is authenticated, add to repairs basket but skip duplicates
+      const success = await addToRepairsBasket(serviceId, false);
       
-      // Make sure the service data is definitely stored before redirecting
-      // This helps ensure the checkout page can access it
-      setTimeout(() => {
-        // Dispatch event to update RepairsBasketIcon
-        window.dispatchEvent(new Event('cartUpdated'));
-        
-        // Then navigate to checkout
+      if (success) {
+        // Navigate to checkout immediately, don't wait
         navigate('/service-checkout');
-      }, 200); // Small delay to ensure storage completes
+      }
     } catch (error) {
       console.error('Error processing service request:', error);
       toast.error('Failed to process your request. Please try again.');
+    } finally {
+      // Clear processing state
+      setProcessingService(null);
     }
   };
 
@@ -980,6 +1017,7 @@ const ServiceDetails: React.FC = () => {
                         <button
                           onClick={() => addToRepairsBasket(service.id || index)}
                           className="flex items-center bg-white text-[#FF5733] border border-[#FF5733] px-4 py-2 rounded-md hover:bg-[#fff3f0] transition-colors"
+                          disabled={processingService === (service.id || index)}
                         >
                           <ShoppingBag className="w-4 h-4 mr-2" />
                           Add to Basket
@@ -987,8 +1025,16 @@ const ServiceDetails: React.FC = () => {
                         <button
                           onClick={() => getServiceNow(service.id || index)}
                           className="bg-[#FF5733] text-white px-6 py-2 rounded-md hover:bg-opacity-90 transition-colors"
+                          disabled={processingService === (service.id || index)}
                         >
-                          Get Service Now
+                          {processingService === (service.id || index) ? (
+                            <>
+                              <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span>
+                              Processing...
+                            </>
+                          ) : (
+                            "Get Service Now"
+                          )}
                         </button>
                       </div>
                     ) : (

@@ -1,48 +1,38 @@
-import { useState, useCallback } from 'react';
-import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
-import { googleMapsConfig } from '../config/api.config';
+import React, { useState } from 'react';
 
 interface LocationPickerProps {
   onLocationSelect?: (location: { lat: number; lng: number }) => void;
 }
 
 const LocationPicker = ({ onLocationSelect }: LocationPickerProps) => {
-  const [selectedLocation, setSelectedLocation] = useState(googleMapsConfig.defaultCenter);
+  const [address, setAddress] = useState('');
 
-  const handleMapClick = useCallback((e: google.maps.MapMouseEvent) => {
-    if (e.latLng) {
-      const newLocation = {
-        lat: e.latLng.lat(),
-        lng: e.latLng.lng(),
-      };
-      setSelectedLocation(newLocation);
-      onLocationSelect?.(newLocation);
+  const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setAddress(e.target.value);
+    // Use a placeholder location when real maps are removed
+    if (onLocationSelect) {
+      onLocationSelect({
+        lat: 28.6139, // Default coordinates
+        lng: 77.2090
+      });
     }
-  }, [onLocationSelect]);
+  };
 
   return (
-    <LoadScript googleMapsApiKey={googleMapsConfig.apiKey}>
-      <div className="w-full h-[400px] rounded-xl overflow-hidden">
-        <GoogleMap
-          mapContainerStyle={{ width: '100%', height: '100%' }}
-          center={selectedLocation}
-          zoom={googleMapsConfig.defaultZoom}
-          onClick={handleMapClick}
-          options={{
-            zoomControl: true,
-            streetViewControl: false,
-            mapTypeControl: false,
-            fullscreenControl: false,
-          }}
-        >
-          {selectedLocation && (
-            <Marker
-              position={selectedLocation}
-            />
-          )}
-        </GoogleMap>
+    <div className="w-full">
+      <div className="mb-4">
+        <input
+          type="text"
+          value={address}
+          onChange={handleAddressChange}
+          placeholder="Enter your location"
+          className="w-full p-3 border border-gray-300 rounded-lg"
+        />
       </div>
-    </LoadScript>
+      <div className="w-full h-[400px] rounded-xl overflow-hidden bg-gray-200 flex items-center justify-center">
+        <p className="text-gray-500">Map view unavailable</p>
+      </div>
+    </div>
   );
 };
 

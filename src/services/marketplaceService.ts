@@ -147,7 +147,14 @@ const marketplaceService = {
         }
       });
       
-      return response.data;
+      // Ensure response.data is an array before mapping
+      if (!Array.isArray(response.data)) {
+        console.error('Expected array response from sell-requests but got:', typeof response.data);
+        return [];
+      }
+      
+      // Enrich each vehicle in the data
+      return response.data.map(vehicleData => marketplaceService.enrichVehicleData(vehicleData));
     } catch (error) {
       console.error('Error fetching sell requests:', error);
       throw error;
@@ -157,249 +164,24 @@ const marketplaceService = {
   // Get a specific sell request by ID
   getSellRequest: async (id: string) => {
     try {
-      // Debug what's happening
-      console.log(`Attempting to get sell request with ID ${id}`);
-      
-      // CRITICAL FIX: First directly check all storage locations before API call
-      // We'll try each storage type in order of speed: sessionStorage → cache → localStorage
-      
-      // 1. First check sessionStorage - fastest and most direct
-      try {
-        const sessionData = sessionStorage.getItem(`vehicle_summary_${id}`);
-        if (sessionData) {
-          const parsedData = JSON.parse(sessionData);
-          console.log(`Found vehicle data in sessionStorage for ID ${id}:`, parsedData);
-          
-          // Verify the data has the expected vehicle structure
-          if (parsedData.vehicle && 
-              (parsedData.vehicle.registration_number || 
-               parsedData.vehicle.brand)) {
-            console.log('Using data from sessionStorage as it appears complete');
-            return parsedData;
-          } else {
-            console.log('SessionStorage data appears incomplete, checking other sources');
-          }
-        }
-      } catch (e) {
-        console.error('Error retrieving from sessionStorage:', e);
-      }
-      
-      // 2. Try getting from in-memory cache next
-      const cachedData = sellRequestCache.get(id);
-      if (cachedData) {
-        console.log(`Found cached sell request data for ID ${id}:`, cachedData);
-        
-        // Verify the data has the expected structure
-        if (cachedData.vehicle && 
-            (cachedData.vehicle.registration_number || 
-             cachedData.vehicle.brand)) {
-          
-          // Store in sessionStorage for faster subsequent access
-          try {
-            sessionStorage.setItem(`vehicle_summary_${id}`, JSON.stringify(cachedData));
-            console.log('Updated sessionStorage with cache data');
-          } catch (e) {
-            console.error('Failed to save to sessionStorage:', e);
-          }
-          
-          return cachedData;
-        } else {
-          console.warn('Cached data is incomplete, checking localStorage');
-        }
-      } else {
-        console.log(`No cache data found for ID ${id}, checking localStorage`);
-      }
-      
-      // 3. Check direct localStorage backup
-      try {
-        const localData = localStorage.getItem(`vehicle_data_${id}`);
-        if (localData) {
-          const parsedBackup = JSON.parse(localData);
-          console.log('Found localStorage backup for recovery:', parsedBackup);
-          
-          if (parsedBackup.brand || parsedBackup.registration_number) {
-            // Construct a full response from the backup
-            const recoveredData = {
-              id: id,
-              status: parsedBackup.status || 'pending',
-              vehicle: parsedBackup,
-              contact_number: localStorage.getItem('userPhone') || '',
-              pickup_address: localStorage.getItem('userAddress') || ''
-            };
-            
-            console.log('Using recovered data from localStorage:', recoveredData);
-            
-            // Cache the recovered data in memory
-            sellRequestCache.set(id, recoveredData);
-            
-            // Also store in sessionStorage
-            try {
-              sessionStorage.setItem(`vehicle_summary_${id}`, JSON.stringify(recoveredData));
-              console.log('Updated sessionStorage with localStorage data');
-            } catch (e) {
-              console.error('Failed to save to sessionStorage:', e);
-            }
-            
-            return recoveredData;
-          }
-        }
-      } catch (e) {
-        console.error('Error retrieving from localStorage backup:', e);
-      }
-      
-      // 4. If we got here, we need to fetch from API
-      console.log('No data found in local storage, making API request');
       const token = localStorage.getItem('accessToken');
-      if (!token) {
-        throw new Error('Authentication required. Please log in to continue.');
-      }
-      
-      console.log(`Making API request to fetch sell request with ID ${id}`);
       const response = await axios.get(`${API_URL}sell-requests/${id}/`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`
         }
       });
       
-      // Check if the response data is valid
-      if (!response.data) {
-        console.error('Empty response data from API');
-        throw new Error('Invalid response from server');
+      // Ensure response.data is valid before enriching
+      if (!response.data || typeof response.data !== 'object') {
+        console.error('Invalid response data from sell-request:', response.data);
+        return null;
       }
       
-      // Log the raw response to understand its structure
-      console.log(`Raw API response for sell request ID ${id}:`, response.data);
-      
-      // Add fallback values for any missing critical fields
-      const enhancedData = {
-        ...response.data,
-        vehicle: {
-          ...(response.data.vehicle || {}),
-          // Ensure these critical fields have values
-          brand: response.data.vehicle?.brand || 'Unknown',
-          model: response.data.vehicle?.model || 'Unknown',
-          registration_number: response.data.vehicle?.registration_number || 'Unknown',
-          year: response.data.vehicle?.year || new Date().getFullYear(),
-          fuel_type: response.data.vehicle?.fuel_type || 'petrol',
-          color: response.data.vehicle?.color || 'Not Specified',
-          vehicle_type: response.data.vehicle?.vehicle_type || 'bike',
-          kms_driven: response.data.vehicle?.kms_driven || 0,
-          Mileage: response.data.vehicle?.Mileage || response.data.vehicle?.mileage || '',
-          engine_capacity: response.data.vehicle?.engine_capacity || 0,
-          condition: response.data.vehicle?.condition || ''
-        }
-      };
-      
-      // Cache the enhanced response data
-      console.log(`Caching sell request data for ID ${id} with enhanced fields:`, enhancedData);
-      sellRequestCache.set(id, enhancedData);
-      
-      // Also directly store critical data in localStorage for redundancy
-      try {
-        localStorage.setItem(`vehicle_data_${id}`, JSON.stringify({
-          brand: enhancedData.vehicle.brand,
-          model: enhancedData.vehicle.model,
-          registration_number: enhancedData.vehicle.registration_number,
-          year: enhancedData.vehicle.year,
-          vehicle_type: enhancedData.vehicle.vehicle_type,
-          color: enhancedData.vehicle.color,
-          fuel_type: enhancedData.vehicle.fuel_type,
-          kms_driven: enhancedData.vehicle.kms_driven,
-          engine_capacity: enhancedData.vehicle.engine_capacity,
-          last_service_date: enhancedData.vehicle.last_service_date,
-          insurance_valid_till: enhancedData.vehicle.insurance_valid_till,
-          Mileage: enhancedData.vehicle.Mileage || enhancedData.vehicle.mileage,
-          price: enhancedData.vehicle.price || response.data.expected_price || 0,
-          status: enhancedData.status || 'pending',
-          condition: enhancedData.vehicle.condition || ''
-        }));
-        console.log('Successfully saved backup data to localStorage');
-      } catch (e) {
-        console.error('Failed to save backup vehicle data to localStorage:', e);
-      }
-      
-      // Also store in sessionStorage for fastest subsequent access
-      try {
-        sessionStorage.setItem(`vehicle_summary_${id}`, JSON.stringify(enhancedData));
-        console.log('Successfully saved data to sessionStorage');
-      } catch (e) {
-        console.error('Failed to save to sessionStorage:', e);
-      }
-      
-      return enhancedData;
+      // Enrich the data before returning
+      return marketplaceService.enrichVehicleData(response.data);
     } catch (error) {
-      console.error(`Error fetching sell request with ID ${id}:`, error);
-      
-      // Try to recover from error by looking for backup data in order of preference
-      // 1. Try sessionStorage first (fastest)
-      try {
-        const sessionData = sessionStorage.getItem(`vehicle_summary_${id}`);
-        if (sessionData) {
-          const parsedData = JSON.parse(sessionData);
-          console.log('Recovering from sessionStorage after API error:', parsedData);
-          
-          if (parsedData.vehicle && 
-              (parsedData.vehicle.registration_number || 
-               parsedData.vehicle.brand)) {
-            return parsedData;
-          }
-        }
-      } catch (e) {
-        console.error('sessionStorage recovery failed:', e);
-      }
-      
-      // 2. Try localStorage next
-      try {
-        const backupData = localStorage.getItem(`vehicle_data_${id}`);
-        if (backupData) {
-          const parsedBackup = JSON.parse(backupData);
-          console.log('Found backup vehicle data in localStorage:', parsedBackup);
-          
-          // Construct a minimal sell request to return
-          const recoveredData = {
-            id: id,
-            status: parsedBackup.status || 'pending',
-            vehicle: parsedBackup,
-            contact_number: localStorage.getItem('userPhone') || '',
-            pickup_address: localStorage.getItem('userAddress') || ''
-          };
-          
-          // Try to save to sessionStorage for future access
-          try {
-            sessionStorage.setItem(`vehicle_summary_${id}`, JSON.stringify(recoveredData));
-          } catch (e) {
-            console.error('Failed to save recovered data to sessionStorage:', e);
-          }
-          
-          console.log('Returning recovered data from localStorage:', recoveredData);
-          return recoveredData;
-        }
-      } catch (e) {
-        console.error('localStorage recovery attempt failed:', e);
-      }
-      
-      // If all recovery attempts failed, create a minimal object with default values
-      // This is better than showing "Unknown" values
-      const defaultData = {
-        id: id,
-        status: 'pending',
-        vehicle: {
-          brand: 'Unknown',
-          model: '',
-          registration_number: 'Unknown',
-          year: new Date().getFullYear(),
-          fuel_type: 'petrol',
-          color: 'Not Specified',
-          vehicle_type: 'bike',
-          kms_driven: 0,
-          engine_capacity: 0
-        },
-        contact_number: '',
-        pickup_address: ''
-      };
-      
-      console.log('All recovery attempts failed, returning default data');
-      return defaultData;
+      console.error('Error fetching sell request:', error);
+      throw error;
     }
   },
 
@@ -555,38 +337,71 @@ const marketplaceService = {
 
   // Submit a new vehicle sell request with improved error handling
   submitVehicle: async (formData: any, photos: any, documents: any = {}) => {
-    // Create FormData object to handle file uploads
+    console.log('Submitting vehicle to marketplace');
     const data = new FormData();
     
-    // Format contact number to match the expected format (regex: ^\+?1?\d{9,15}$)
-    const phoneNumber = formData.contactNumber || localStorage.getItem('userPhone') || '';
-    
-    // Format phone number: ensure it starts with '+' and has only digits
-    let formattedPhone = phoneNumber.replace(/[^\d+]/g, '');
+    // Format phone number
+    let formattedPhone = formData.contactNumber || localStorage.getItem('userPhone') || '';
     if (!formattedPhone.startsWith('+')) {
-      formattedPhone = '+' + formattedPhone;
+      formattedPhone = '+' + formattedPhone.replace(/\D/g, '');
     }
     
-    // Ensure phone number meets length requirements (9-15 digits)
-    const digits = formattedPhone.replace(/[^\d]/g, '');
-    if (digits.length < 9) {
-      console.warn('Phone number has fewer than 9 digits, this will cause validation to fail');
-      formattedPhone = '+' + digits.padEnd(9, '0');
-    } else if (digits.length > 15) {
-      console.warn('Phone number has more than 15 digits, truncating');
-      formattedPhone = '+' + digits.substring(0, 15);
+    // Format address (replace newlines with commas)
+    const formattedAddress = formData.pickupAddress ? formData.pickupAddress.replace(/\n/g, ', ') : '';
+    
+    // IMPORTANT: Save the complete vehicle data to both sessionStorage and localStorage
+    // This ensures we always have the data available for the summary page
+    try {
+      // Create a complete vehicle object with all client-side fields
+      const completeVehicleData = {
+        vehicle: {
+          vehicle_type: formData.type,
+          brand: formData.brand,
+          model: formData.model,
+          year: parseInt(formData.year),
+          color: formData.color,
+          registration_number: formData.registrationNumber.toUpperCase(),
+          kms_driven: parseInt(formData.kmsDriven),
+          Mileage: formData.mileage,
+          mileage: formData.mileage,
+          engine_capacity: formData.engineCapacity ? parseInt(formData.engineCapacity) : null,
+          condition: formData.condition,
+          fuel_type: formData.fuelType,
+          price: parseInt(formData.expectedPrice),
+          expected_price: parseInt(formData.expectedPrice),
+          emi_available: formData.emiAvailable,
+          features: formData.features,
+          highlights: formData.highlights,
+          last_service_date: formData.lastServiceDate,
+          insurance_valid_till: formData.insuranceValidTill,
+          description: formData.description || ''
+        },
+        contact_number: formData.contactNumber,
+        pickup_address: formData.pickupAddress,
+        is_price_negotiable: formData.isPriceNegotiable,
+        has_puc_certificate: formData.hasPucCertificate,
+        seller_notes: formData.sellerNotes,
+        status: 'pending'
+      };
+      
+      // Store in sessionStorage for immediate use
+      sessionStorage.setItem('last_submitted_vehicle', JSON.stringify(completeVehicleData));
+      
+      // Also back it up to localStorage for persistence
+      localStorage.setItem('last_submitted_vehicle', JSON.stringify(completeVehicleData));
+      
+      console.log('Saved complete vehicle data to storage for summary page', completeVehicleData);
+    } catch (storageError) {
+      console.error('Failed to save vehicle data to storage:', storageError);
     }
     
-    console.log('Original phone:', phoneNumber);
-    console.log('Formatted phone:', formattedPhone);
+    // Validate vehicle year before submitting
+    const currentYear = new Date().getFullYear();
+    const vehicleYear = parseInt(formData.year);
+    if (vehicleYear > currentYear) {
+      throw new Error(`Year: Ensure this value is less than or equal to ${currentYear}.`);
+    }
     
-    // Ensure pickup address is at least 10 characters as per the serializer validation
-    const address = formData.pickupAddress || localStorage.getItem('userAddress') || '';
-    const formattedAddress = address.length >= 10 ? 
-      address : 
-      address + ', Default City, Default State 12345'; // Ensure it's at least 10 chars
-    
-    // Get authentication token
     const token = localStorage.getItem('accessToken');
     if (!token) {
       console.error('No authentication token found! User must be logged in.');
@@ -2034,6 +1849,138 @@ const marketplaceService = {
       console.error('Error cancelling booking:', error);
       throw error;
     }
+  },
+
+  // Ensure vehicle data is properly formatted when retrieving
+  enrichVehicleData: (vehicleData: Record<string, any>) => {
+    if (!vehicleData) return null;
+    
+    // Create a properly formatted vehicle object with all possible properties
+    const enriched = {
+      ...vehicleData,
+      // Ensure these fields are properly set with fallbacks
+      vehicle: vehicleData.vehicle || vehicleData,
+      status: vehicleData.status || vehicleData.vehicle?.status || 'pending',
+      expected_price: vehicleData.expected_price || vehicleData.vehicle?.expected_price || vehicleData.price || 0,
+      // Ensure price is always available for safe fallback
+      price: vehicleData.price || vehicleData.expected_price || 0
+    };
+    
+    // Check if vehicle is an object before trying to set properties on it
+    if (enriched.vehicle && typeof enriched.vehicle === 'object') {
+      // Make sure vehicle data has essential fields for display
+      enriched.vehicle.expected_price = enriched.vehicle.expected_price || 
+                                        enriched.vehicle.price || 
+                                        enriched.expected_price || 
+                                        enriched.price || 
+                                        0;
+      
+      // Ensure other critical fields have values
+      enriched.vehicle.brand = enriched.vehicle.brand || vehicleData.brand || 'Unknown';
+      enriched.vehicle.model = enriched.vehicle.model || vehicleData.model || 'Unknown';
+      enriched.vehicle.year = enriched.vehicle.year || vehicleData.year || new Date().getFullYear();
+      enriched.vehicle.registration_number = enriched.vehicle.registration_number || 
+                                            vehicleData.registration_number || 'Unknown';
+      enriched.vehicle.fuel_type = enriched.vehicle.fuel_type || vehicleData.fuel_type || 'Petrol';
+      enriched.vehicle.color = enriched.vehicle.color || vehicleData.color || 'Not Available';
+      enriched.vehicle.kms_driven = enriched.vehicle.kms_driven || vehicleData.kms_driven || 0;
+      enriched.vehicle.Mileage = enriched.vehicle.Mileage || enriched.vehicle.mileage || 
+                                 vehicleData.Mileage || vehicleData.mileage || 'Not Available';
+      enriched.vehicle.mileage = enriched.vehicle.mileage || enriched.vehicle.Mileage || 
+                                 vehicleData.mileage || vehicleData.Mileage || 'Not Available';
+                                 
+      // Try to populate from sessionStorage if available (for specific vehicle)
+      if (vehicleData.id) {
+        try {
+          const sessionData = sessionStorage.getItem(`vehicle_summary_${vehicleData.id}`);
+          if (sessionData) {
+            const parsedData = JSON.parse(sessionData);
+            if (parsedData.vehicle) {
+              // Use session data for any missing fields
+              enriched.vehicle.brand = enriched.vehicle.brand !== 'Unknown' ? 
+                enriched.vehicle.brand : parsedData.vehicle.brand || 'Unknown';
+              enriched.vehicle.model = enriched.vehicle.model !== 'Unknown' ? 
+                enriched.vehicle.model : parsedData.vehicle.model || 'Unknown';
+              enriched.vehicle.registration_number = enriched.vehicle.registration_number !== 'Unknown' ? 
+                enriched.vehicle.registration_number : parsedData.vehicle.registration_number || 'Unknown';
+              enriched.vehicle.year = enriched.vehicle.year || parsedData.vehicle.year || new Date().getFullYear();
+              enriched.vehicle.fuel_type = enriched.vehicle.fuel_type || parsedData.vehicle.fuel_type || 'Petrol';
+              enriched.vehicle.price = enriched.vehicle.price || parsedData.vehicle.price || 0;
+              enriched.vehicle.expected_price = enriched.vehicle.expected_price || parsedData.vehicle.expected_price || 0;
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to fetch backup data from sessionStorage:', e);
+        }
+      }
+      
+      // Also try the last submitted vehicle from localStorage as fallback
+      try {
+        const lastSubmittedVehicle = localStorage.getItem('last_submitted_vehicle');
+        if (lastSubmittedVehicle) {
+          const backupData = JSON.parse(lastSubmittedVehicle);
+          if (backupData.vehicle) {
+            // Only override default values
+            if (enriched.vehicle.brand === 'Unknown') {
+              enriched.vehicle.brand = backupData.vehicle.brand || 'Unknown';
+            }
+            if (enriched.vehicle.model === 'Unknown') {
+              enriched.vehicle.model = backupData.vehicle.model || 'Unknown';
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to retrieve backup from localStorage:', e);
+      }
+    } else {
+      // If vehicle is a primitive, create a proper vehicle object
+      const vehicleId = enriched.vehicle;
+      enriched.vehicle = {
+        id: vehicleId,
+        brand: vehicleData.brand || 'Unknown',
+        model: vehicleData.model || 'Unknown',
+        year: vehicleData.year || new Date().getFullYear(),
+        registration_number: vehicleData.registration_number || 'Unknown',
+        price: vehicleData.price || vehicleData.expected_price || 0,
+        expected_price: vehicleData.expected_price || vehicleData.price || 0,
+        fuel_type: vehicleData.fuel_type || 'Petrol',
+        color: vehicleData.color || 'Not Available',
+        kms_driven: vehicleData.kms_driven || 0,
+        Mileage: vehicleData.Mileage || vehicleData.mileage || 'Not Available',
+        mileage: vehicleData.mileage || vehicleData.Mileage || 'Not Available'
+      };
+      
+      // Try to populate from latest stored data
+      try {
+        // First try with ID
+        if (vehicleId && typeof vehicleId === 'string') {
+          const storedVehicleData = localStorage.getItem(`vehicle_data_${vehicleId}`);
+          if (storedVehicleData) {
+            const parsedData = JSON.parse(storedVehicleData);
+            Object.assign(enriched.vehicle, parsedData);
+          }
+        }
+        
+        // Then try latest submission as fallback
+        const lastSubmitted = localStorage.getItem('last_submitted_vehicle');
+        if (lastSubmitted) {
+          const parsedSubmission = JSON.parse(lastSubmitted);
+          if (parsedSubmission.vehicle) {
+            // Only override default values
+            if (enriched.vehicle.brand === 'Unknown') {
+              enriched.vehicle.brand = parsedSubmission.vehicle.brand || 'Unknown';
+            }
+            if (enriched.vehicle.model === 'Unknown') {
+              enriched.vehicle.model = parsedSubmission.vehicle.model || 'Unknown';
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to fetch stored vehicle data:', e);
+      }
+    }
+    
+    return enriched;
   }
 };
 

@@ -35,9 +35,16 @@ export const API_CONFIG = {
    * @param endpoint - The API endpoint (can include leading slash)
    * @returns The complete API URL
    */
-  getApiUrl: (endpoint: string) => {
-    const baseUrl = API_CONFIG.BASE_URL;
-    return `${baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  getApiUrl: (endpoint: string): string => {
+    // Make sure endpoint starts with a slash if it doesn't already
+    const formattedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = `${API_CONFIG.BASE_URL}${formattedEndpoint}`;
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[API] Request URL: ${url}`);
+    }
+    
+    return url;
   },
   
   /**
@@ -154,12 +161,17 @@ export const API_CONFIG = {
      * @returns API endpoint for photo upload
      */
     getSellRequestPhotos: (requestId: string) => `/marketplace/sell-requests/${requestId}/photos/`
-  }
-};
-
-export const googleMapsConfig = {
-  apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyDXQq3xhrRFxFATfPD4NcWlHLE8NPkzH2s',
-  defaultCenter: { lat: 28.6139, lng: 77.2090 }, // Default center (Delhi, India)
-  defaultZoom: 12,
-  country: 'in'
+  },
+  
+  // Default headers
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  },
+  
+  // Default timeout in milliseconds
+  timeout: 30000, // 30 seconds
+  
+  // Debug mode
+  debugMode: process.env.NODE_ENV === 'development',
 };

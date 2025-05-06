@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle, Home, ArrowRight, Calendar } from 'lucide-react';
+import { CheckCircle, Home, ArrowRight, Calendar, Clock, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface ThankYouModalProps {
@@ -18,6 +18,10 @@ interface ThankYouModalProps {
     price?: string;
     duration?: string;
     visits?: number;
+    features?: string[];
+    status?: 'pending' | 'approved' | 'rejected';
+    plan_type?: string;
+    request_date?: string;
   };
 }
 
@@ -33,6 +37,22 @@ const ThankYouModal: React.FC<ThankYouModalProps> = ({
   const defaultMessage = type === 'subscription' 
     ? 'Thank you for subscribing to our service plan. We\'ll contact you shortly to confirm your selected dates.'
     : 'Thank you for booking our service. Our experts will contact you shortly.';
+
+  // Helper function to format date
+  const formatDate = (dateString?: string): string => {
+    if (!dateString) return '';
+    
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'long', 
+        year: 'numeric'
+      });
+    } catch (error) {
+      return dateString;
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -57,20 +77,79 @@ const ThankYouModal: React.FC<ThankYouModalProps> = ({
         <div className="p-6">
           {type === 'subscription' && subscriptionData && (
             <div className="space-y-4">
+              {/* Subscription Status */}
+              {subscriptionData.status && (
+                <div className={`flex items-center p-3 rounded-lg ${
+                  subscriptionData.status === 'pending' ? 'bg-yellow-50 border border-yellow-200' : 
+                  subscriptionData.status === 'approved' ? 'bg-green-50 border border-green-200' : 
+                  'bg-red-50 border border-red-200'
+                }`}>
+                  {subscriptionData.status === 'pending' ? (
+                    <Clock className="h-5 w-5 text-yellow-500 mr-3" />
+                  ) : subscriptionData.status === 'approved' ? (
+                    <CheckCircle className="h-5 w-5 text-green-500 mr-3" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 text-red-500 mr-3" />
+                  )}
+                  <div>
+                    <p className="text-sm font-medium">
+                      {subscriptionData.status === 'pending' ? 'Subscription Request Pending' : 
+                      subscriptionData.status === 'approved' ? 'Subscription Approved' : 
+                      'Subscription Request Rejected'}
+                    </p>
+                    {subscriptionData.request_date && (
+                      <p className="text-xs text-gray-600">
+                        Submitted on {formatDate(subscriptionData.request_date)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            
+              {/* Plan Details */}
               <div className="p-4 bg-orange-50 rounded-lg border border-orange-100">
-                <h3 className="font-semibold text-lg text-gray-800 mb-2">{subscriptionData.name} Subscription</h3>
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-semibold text-lg text-gray-800">{subscriptionData.name} Subscription</h3>
+                  {subscriptionData.plan_type === 'premium' && (
+                    <span className="bg-[#FFC107] text-[#333333] text-xs px-2 py-0.5 rounded-full font-bold">
+                      PREMIUM
+                    </span>
+                  )}
+                </div>
+                
                 <div className="flex justify-between mb-1">
                   <span className="text-gray-600">Price:</span>
                   <span className="font-medium">₹{subscriptionData.price}</span>
                 </div>
+                
                 <div className="flex justify-between mb-1">
                   <span className="text-gray-600">Duration:</span>
                   <span className="font-medium">{subscriptionData.duration}</span>
                 </div>
+                
                 {subscriptionData.visits && (
-                  <div className="flex justify-between">
+                  <div className="flex justify-between mb-1">
                     <span className="text-gray-600">Service Visits:</span>
                     <span className="font-medium">{subscriptionData.visits} visits</span>
+                  </div>
+                )}
+                
+                {subscriptionData.features && subscriptionData.features.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-orange-200">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">Key Features:</h4>
+                    <ul className="text-sm text-gray-600 space-y-1">
+                      {subscriptionData.features.slice(0, 3).map((feature, index) => (
+                        <li key={index} className="flex items-start">
+                          <CheckCircle className="h-3 w-3 text-orange-500 mr-2 mt-1 flex-shrink-0" />
+                          <span>{feature}</span>
+                        </li>
+                      ))}
+                      {subscriptionData.features.length > 3 && (
+                        <li className="text-xs text-orange-600 ml-5">
+                          +{subscriptionData.features.length - 3} more features
+                        </li>
+                      )}
+                    </ul>
                   </div>
                 )}
               </div>
@@ -80,7 +159,11 @@ const ThankYouModal: React.FC<ThankYouModalProps> = ({
                 <div>
                   <p className="text-sm font-medium text-blue-800">Next Steps</p>
                   <p className="text-sm text-blue-600">
-                    We'll email you shortly to confirm your preferred service dates.
+                    {subscriptionData.status === 'pending' 
+                      ? "We'll review your subscription request and contact you soon."
+                      : subscriptionData.status === 'approved'
+                      ? "You can now schedule your service visits from your account dashboard."
+                      : "We'll email you shortly to confirm your preferred service dates."}
                   </p>
                 </div>
               </div>
@@ -127,6 +210,17 @@ const ThankYouModal: React.FC<ThankYouModalProps> = ({
               <Home size={18} className="mr-2" />
               Go to Home
             </Link>
+            
+            {type === 'subscription' && (
+              <Link
+                to="/profile?tab=subscriptions"
+                className="flex-1 py-3 px-4 bg-green-600 text-white rounded-lg text-center font-medium hover:bg-green-700 transition-colors flex items-center justify-center"
+                onClick={onClose}
+              >
+                <Calendar size={18} className="mr-2" />
+                View in My Subscriptions
+              </Link>
+            )}
             
             <button
               type="button"

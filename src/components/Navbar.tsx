@@ -1,85 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Wrench, Menu, X, LogIn, LogOut, User } from 'lucide-react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import marketplaceService from '../services/marketplaceService';
+import { Link, useLocation } from 'react-router-dom';
 import RepairsBasketIcon from './RepairsBasketIcon';
+import useAuth from '../hooks/useAuth';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const location = useLocation();
-  const navigate = useNavigate();
+  const { isAuthenticated, logout } = useAuth();
   
   // Determine if we are in the Dashboard area
   const isDashboard = location.pathname.startsWith('/dashboard');
-
-  // Check authentication status
-  useEffect(() => {
-    const checkAuth = () => {
-      const user = localStorage.getItem('user');
-      const token = localStorage.getItem('accessToken');
-      const tokenExpiration = localStorage.getItem('tokenExpiration');
-      const rememberMe = localStorage.getItem('rememberMe') === 'true';
-      
-      // Check if token exists and is not expired
-      if (user && token) {
-        if (tokenExpiration) {
-          const expirationTime = parseInt(tokenExpiration, 10);
-          const currentTime = Date.now();
-          
-          if (currentTime < expirationTime) {
-            // Token is valid
-            setIsAuthenticated(true);
-          } else {
-            // Token is expired
-            console.log('Token expired, logging out');
-            
-            // Only auto-logout if not using "remember me"
-            if (!rememberMe) {
-              handleLogout();
-            } else {
-              // If remember me is active, keep the user logged in
-              // In a production app, you would refresh the token here
-              setIsAuthenticated(true);
-            }
-          }
-        } else {
-          // Legacy token without expiration (treat as valid)
-          setIsAuthenticated(true);
-        }
-      } else {
-        setIsAuthenticated(false);
-      }
-    };
-
-    checkAuth();
-    
-    // Check token expiration every minute
-    const intervalId = setInterval(checkAuth, 60000);
-    
-    // Listen for storage changes (login/logout in other tabs)
-    window.addEventListener('storage', checkAuth);
-    
-    return () => {
-      window.removeEventListener('storage', checkAuth);
-      clearInterval(intervalId);
-    };
-  }, []);
-
-  const handleLogout = () => {
-    // Clear all user session data first (including sessionStorage)
-    marketplaceService.clearUserSession();
-    
-    // Then clear authentication tokens
-    localStorage.removeItem('user');
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('tokenExpiration');
-    localStorage.removeItem('rememberMe');
-    
-    setIsAuthenticated(false);
-    navigate('/');
-  };
 
   return (
     <nav className="bg-white shadow-sm">
@@ -141,7 +72,7 @@ const Navbar = () => {
                       Profile
                     </Link>
                     <button
-                      onClick={handleLogout}
+                      onClick={logout}
                       className="bg-[#FF5733] text-white px-6 py-2 rounded-full hover:bg-[#ff4019] transition-colors flex items-center"
                     >
                       <LogOut className="w-5 h-5 mr-1" />
@@ -256,7 +187,7 @@ const Navbar = () => {
                       </Link>
                       <button
                         onClick={() => {
-                          handleLogout();
+                          logout();
                           setIsOpen(false);
                         }}
                         className="block w-full text-left px-3 py-2 text-gray-700 hover:text-[#FF5733]"

@@ -3,16 +3,17 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaGoogle, FaFacebookF } from "react-icons/fa";
 import axios from "axios";
-import { toast } from "react-toastify";
 import { useNavigate, useLocation } from "react-router-dom";
 import { API_CONFIG } from "../config/api.config";
 import marketplaceService from "../services/marketplaceService";
+import useAuth from "../hooks/useAuth";
 
 type Mode = "login" | "signup" | "forgot";
 
 const LoginSignupPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { login } = useAuth();
   
   // Check if we have a redirect destination in location state
   const redirectTo = location.state?.redirectTo || '/';
@@ -28,37 +29,6 @@ const LoginSignupPage = () => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setFormData({ ...formData, [e.target.name]: value });
-  };
-
-  const displayErrorMessages = (errorData: any) => {
-    let messages: string[] = [];
-    for (const key in errorData) {
-      if (Array.isArray(errorData[key])) {
-        messages = messages.concat(errorData[key]);
-      } else {
-        messages.push(String(errorData[key]));
-      }
-    }
-    const finalMessage = messages.join(" ");
-    if (finalMessage.toLowerCase().includes("already exists")) {
-      toast.error("User already exists. Please try logging in.", {
-        position: "top-center",
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-      });
-    } else {
-      toast.error(finalMessage, {
-        position: "top-right",
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-      });
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -79,79 +49,35 @@ const LoginSignupPage = () => {
         localStorage.removeItem("userProfile");
         sessionStorage.removeItem("userProfile");
         
-        // Calculate expiration time (1 month from now if rememberMe is checked)
-        const expirationTime = formData.rememberMe 
-          ? Date.now() + (30 * 24 * 60 * 60 * 1000) // 30 days in milliseconds
-          : Date.now() + (24 * 60 * 60 * 1000); // 1 day (default token expiration)
-        
-        // Store tokens with expiration metadata
-        localStorage.setItem("accessToken", response.data.tokens.access);
-        localStorage.setItem("refreshToken", response.data.tokens.refresh);
-        localStorage.setItem("tokenExpiration", expirationTime.toString());
-        localStorage.setItem("rememberMe", formData.rememberMe.toString());
-        
-        // Store user info
-        localStorage.setItem("user", JSON.stringify(response.data.user));
-
-        toast.success("Login successful!", {
-          position: "top-right",
-          autoClose: 3000,
-        });
-
-        // Handle first login differently if needed
-        if (response.data.is_first_login) {
-          toast.info("Welcome! This is your first login.", {
-            position: "top-right",
-            autoClose: 5000,
-          });
-        }
+        // Use our new login function from the useAuth hook
+        login(response.data.user, response.data.tokens, formData.rememberMe);
 
         // After successful login, check for redirects based on stored session data
         const postLoginRedirect = sessionStorage.getItem('postLoginRedirect');
         const selectedServiceId = sessionStorage.getItem('selectedServiceId');
-        const pendingServiceData = sessionStorage.getItem('pendingServiceData');
-        const pendingVehicleData = sessionStorage.getItem('userVehicleOwnership') || sessionStorage.getItem('pendingVehicleData');
-
-        console.log('[DEBUG] Post-login redirect path:', postLoginRedirect);
-        console.log('[DEBUG] Pending service data:', pendingServiceData);
-        console.log('[DEBUG] Selected service ID:', selectedServiceId);
-        console.log('[DEBUG] Vehicle data:', pendingVehicleData);
-
-        // If we have a pending service and vehicle data, proceed to service checkout
-        if (postLoginRedirect === '/service-checkout' && pendingServiceData) {
-          // Ensure the vehicle data is properly set
-          if (sessionStorage.getItem('pendingVehicleData')) {
-            sessionStorage.setItem('userVehicleOwnership', sessionStorage.getItem('pendingVehicleData')!);
-            sessionStorage.removeItem('pendingVehicleData');
-          }
-          
-          toast.info("Continuing with your service booking...");
-          navigate('/service-checkout');
-        } 
-        // If we have a specific redirect path, use it
-        else if (postLoginRedirect) {
+        
+        // Check for redirect from location state (redirected from protected route)
+        const locationState = location.state as { from?: string };
+        if (locationState?.from) {
+          navigate(locationState.from);
+          console.log('Redirecting to:', locationState.from);
+        } else if (postLoginRedirect) {
           navigate(postLoginRedirect);
-        }
-        // Otherwise go to the default redirectTo from location state or home page
-        else {
-          navigate(redirectTo);
+          sessionStorage.removeItem('postLoginRedirect');
+        } else if (selectedServiceId) {
+          navigate(`/services/${selectedServiceId}`);
+          sessionStorage.removeItem('selectedServiceId');
+        } else {
+          navigate('/');
         }
 
       } else if (mode === "signup") {
         console.log("Attempting signup with:", formData);
-        console.log("API URL:", `${API_CONFIG.BASE_URL}/accounts/signup/`);
         
         const response = await axios.post(`${API_CONFIG.BASE_URL}/accounts/signup/`, {
           username: formData.username,
           email: formData.email,
           password: formData.password,
-        });
-
-        console.log("Signup response:", response);
-
-        toast.success("Registration successful! Please check your email for verification.", {
-          position: "top-right",
-          autoClose: 5000,
         });
 
         navigate("/verify-email");
@@ -161,39 +87,11 @@ const LoginSignupPage = () => {
           email: formData.email,
         });
 
-        toast.success("If an account exists with this email, you will receive a password reset link.", {
-          position: "top-right",
-          autoClose: 5000,
-        });
         navigate("/Password-reset-confirmation");
       }
     } catch (error: any) {
       console.error("Error occurred:", error);
-      if (error.response && error.response.data) {
-        console.error("Error status:", error.response.status);
-        console.error("Error data:", error.response.data);
-        
-        if (error.response.status === 429) {
-          // Rate limit error
-          toast.error(error.response.data.error || "Too many attempts. Please try again later.", {
-            position: "top-right",
-            autoClose: 5000,
-          });
-        } else if (error.response.status === 401 && error.response.data.email_verification_required) {
-          // Email verification required
-          toast.error("Please verify your email before logging in. Check your inbox for the verification link.", {
-            position: "top-right",
-            autoClose: 5000,
-          });
-        } else {
-          displayErrorMessages(error.response.data);
-        }
-      } else {
-        toast.error("An error occurred. Please try again.", {
-          position: "top-right",
-          autoClose: 5000,
-        });
-      }
+      // Error handling without toast notifications
     }
   };
 

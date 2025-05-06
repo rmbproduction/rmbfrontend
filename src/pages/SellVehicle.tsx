@@ -22,6 +22,7 @@ import {
 import { getStatusIcon, getStatusColor, getStatusBadgeColor } from '../utils/statusUtils';
 import StatusDisplay from '../components/StatusDisplay';
 import LocationInput from '../components/LocationInput';
+import persistentStorageService from '../services/persistentStorageService';
 
 const statusDescriptions: { [key: string]: string } = {
   pending: 'Pending Review: Our team will review your listing shortly.',
@@ -110,6 +111,31 @@ const PreviousVehicles = ({ onClose }: { onClose: () => void }) => {
   const formatPrice = (price: string | number) => {
     return Number(price).toLocaleString('en-IN');
   };
+  
+  // Get the expected price with fallbacks
+  const getExpectedPrice = (vehicle: any) => {
+    // Check all possible locations for expected price
+    return vehicle.vehicle?.expected_price || 
+           vehicle.vehicle?.price || 
+           vehicle.expected_price || 
+           vehicle.price || 
+           0;
+  };
+  
+  // Get the status with proper display value
+  const getStatusDisplay = (vehicle: any, id: string) => {
+    // First check if we have status from the status info
+    if (vehicleStatuses[id]?.title) {
+      return vehicleStatuses[id].title;
+    }
+    
+    if (vehicleStatuses[id]?.status_display) {
+      return vehicleStatuses[id].status_display;
+    }
+    
+    // Fallback to vehicle status
+    return vehicle.status === 'sale_vehicle' ? 'For Sale' : vehicle.status;
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -136,6 +162,7 @@ const PreviousVehicles = ({ onClose }: { onClose: () => void }) => {
           <div className="space-y-5">
             {vehicles.map(vehicle => {
               const status = vehicle.status;
+              const expectedPrice = getExpectedPrice(vehicle);
               return (
                 <div key={vehicle.id} className="border rounded-lg p-5 hover:shadow-md transition-shadow bg-white">
                   <div className="flex">
@@ -166,7 +193,7 @@ const PreviousVehicles = ({ onClose }: { onClose: () => void }) => {
                           {vehicle.vehicle?.brand} {vehicle.vehicle?.model} {vehicle.vehicle?.year}
                         </h4>
                         <span className={`px-3 py-1 text-xs rounded-full font-medium ${getStatusBadgeColor(status)}`}>
-                          {vehicleStatuses[vehicle.id]?.title || vehicleStatuses[vehicle.id]?.status_display || vehicle.status}
+                          {getStatusDisplay(vehicle, vehicle.id)}
                         </span>
                       </div>
                       
@@ -190,7 +217,7 @@ const PreviousVehicles = ({ onClose }: { onClose: () => void }) => {
                       <div className="flex justify-between items-center pt-3 border-t">
                         <div className="flex items-baseline">
                           <span className="text-sm text-gray-500 mr-2">Expected Price:</span>
-                          <span className="font-bold text-lg text-[#FF5733]">₹{formatPrice(vehicle.vehicle?.expected_price || 0)}</span>
+                          <span className="font-bold text-lg text-[#FF5733]">₹{formatPrice(expectedPrice)}</span>
                         </div>
                         
                         <Link 
@@ -379,6 +406,25 @@ const SellVehicle = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  
+  // Add these to existing state variables
+  const [showQuickHistory, setShowQuickHistory] = useState(false);
+  const [quickHistory, setQuickHistory] = useState<any[]>([]);
+  
+  // Add this effect to load quick history
+  useEffect(() => {
+    // Load quick history for the sidebar
+    const loadQuickHistory = async () => {
+      try {
+        const history = await persistentStorageService.getVehicleHistory(5); // Just get 5 most recent
+        setQuickHistory(history);
+      } catch (error) {
+        console.error('Error loading quick history:', error);
+      }
+    };
+    
+    loadQuickHistory();
+  }, []);
   
   // Save form data to localStorage whenever it changes
   useEffect(() => {
@@ -597,10 +643,23 @@ const SellVehicle = () => {
     
     if (formData.contactNumber && !/^[0-9+\s-]{10,15}$/.test(formData.contactNumber)) {
       errors.contactNumber = 'Contact number should be 10-15 digits';
-      }
+    }
     
     if (formData.expectedPrice && isNaN(Number(formData.expectedPrice))) {
       errors.expectedPrice = 'Expected price must be a number';
+    }
+    
+    // Validate year is not greater than current year
+    const currentYear = new Date().getFullYear();
+    if (formData.year) {
+      const year = parseInt(formData.year);
+      if (isNaN(year)) {
+        errors.year = 'Year must be a valid number';
+      } else if (year > currentYear) {
+        errors.year = `Year cannot be greater than current year (${currentYear})`;
+      } else if (year < 1900) {
+        errors.year = 'Year must be 1900 or later';
+      }
     }
     
     setFormErrors(errors);
@@ -953,6 +1012,82 @@ const SellVehicle = () => {
             Get the best price for your two-wheeler in just a few easy steps
           </p>
         </div>
+
+        {/* Quick history component */}
+        <div className="mb-6 flex justify-between items-center">
+          {quickHistory.length > 0 && (
+            <button
+              onClick={() => setShowQuickHistory(true)}
+              className="flex items-center text-[#FF5733] hover:text-[#ff4019] transition-colors"
+            >
+              <Clock className="w-4 h-4 mr-1" />
+              Recently Viewed Vehicles
+            </button>
+          )}
+        </div>
+        
+        {/* Quick history popup */}
+        {showQuickHistory && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">Recent Vehicles</h3>
+                <button 
+                  onClick={() => setShowQuickHistory(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-3">
+                {quickHistory.map(item => (
+                  <Link
+                    key={item.vehicleId}
+                    to={`/sell-vehicle/${item.vehicleId}/summary`}
+                    className="flex items-center p-3 hover:bg-gray-50 rounded-lg transition-colors"
+                    onClick={() => setShowQuickHistory(false)}
+                  >
+                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mr-3">
+                      {item.summary?.thumbnail ? (
+                        <SafeImage
+                          src={item.summary.thumbnail}
+                          alt={`${item.summary.brand} ${item.summary.model}`}
+                          className="w-10 h-10 rounded-full object-cover"
+                          vehicleId={item.vehicleId}
+                          fallbackComponent={<Bike className="w-6 h-6 text-gray-400" />}
+                        />
+                      ) : (
+                        <Bike className="w-6 h-6 text-gray-400" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-800">
+                        {item.summary.brand} {item.summary.model}
+                      </div>
+                      <div className="text-xs text-gray-500 flex items-center">
+                        <Tag className="w-3 h-3 mr-1" />
+                        {item.summary.registration_number || 'Unknown'}
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                  </Link>
+                ))}
+                
+                <div className="pt-3 border-t mt-3">
+                  <Link
+                    to="/previous-vehicles"
+                    className="text-[#FF5733] hover:text-[#ff4019] transition-colors text-sm flex items-center justify-center"
+                    onClick={() => setShowQuickHistory(false)}
+                  >
+                    View All Vehicles
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {isAuthenticated && hasPreviousVehicles && showPreviousVehicles && (
           <PreviousVehicles onClose={() => setShowPreviousVehicles(false)} />

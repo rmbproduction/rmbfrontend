@@ -28,12 +28,12 @@ import VehicleBuyPage from './pages/VehicleBuyPage';
 import VehicleDetailPage from './pages/VehicleDetailPage';
 import VehiclePurchasePage from './pages/VehiclePurchasePage';
 import PurchaseSuccessPage from './pages/PurchaseSuccessPage';
+import PreviousVehiclesPage from './pages/PreviousVehiclesPage';
 import Cart from './pages/Cart';
 import AboutUsSection from './components/AboutUsSection';
 import ServiceCheckout from './pages/ServiceCheckout';
 import BookingConfirmation from './pages/BookingConfirmation';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
@@ -63,13 +63,13 @@ function App() {
           <Route path="/login-signup" element={<LoginSignupPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/faq" element={<FaqPage />} />
-          <Route path="/profile" element={<Profile />} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/Password-reset-confirmation" element={<PasswordResetConfirmation />} />
           
-          {/* Sell Vehicle Routes */}
-          <Route path="/sell-vehicle" element={<SellVehicle />} />
-          <Route path="/sell-success" element={<SellSuccess />} />
-          <Route path="/sell-vehicle/:id/summary" element={<VehicleSummary />} />
+          {/* Sell Vehicle Routes - Protected */}
+          <Route path="/sell-vehicle" element={<ProtectedRoute><SellVehicle /></ProtectedRoute>} />
+          <Route path="/sell-success" element={<ProtectedRoute><SellSuccess /></ProtectedRoute>} />
+          <Route path="/sell-vehicle/:id/summary" element={<ProtectedRoute><VehicleSummary /></ProtectedRoute>} />
 
           {/* Buy Vehicle Routes */}
           <Route path="/vehicles" element={<VehicleBuyPage />} />
@@ -106,12 +106,14 @@ function App() {
           <Route path="/test-api" element={<TestAPI />} />
 
           {/* Purchase pages */}
-          <Route path="/vehicles/:id/purchase" element={<VehiclePurchasePage />} />
-          <Route path="/purchase-success" element={<PurchaseSuccessPage />} />
+          <Route path="/vehicles/:id/purchase" element={<ProtectedRoute><VehiclePurchasePage /></ProtectedRoute>} />
+          <Route path="/purchase-success" element={<ProtectedRoute><PurchaseSuccessPage /></ProtectedRoute>} />
+
+          {/* Previous Vehicles Page */}
+          <Route path="/previous-vehicles" element={<ProtectedRoute><PreviousVehiclesPage /></ProtectedRoute>} />
         </Routes>
 
         <Footer />
-        <ToastContainer />
       </div>
     </Router>
   );

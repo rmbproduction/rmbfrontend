@@ -270,13 +270,95 @@ export const safeStoreBase64Image = async (storageKey: string, imageKey: string,
  * @param vehicleId Unique identifier for the vehicle
  * @returns Object containing all available image URLs and base64 data
  */
-export const syncImageStorageForVehicle = (vehicleId: string): Record<string, Record<string, string>> => {
-  const result = {
-    photoUrls: {} as Record<string, string>,
-    base64Photos: {} as Record<string, string>,
-  };
-  
+export const syncImageStorageForVehicle = (vehicleId: string): void => {
   try {
+    // Check if we're on an email verification page 
+    const isEmailVerificationPage = window.location.pathname.includes('/verify-email');
+    
+    // Check if we have blob URLs in sessionStorage
+    const sessionKey = `vehicle_summary_${vehicleId}`;
+    const sessionData = sessionStorage.getItem(sessionKey);
+    
+    if (sessionData) {
+      const parsedData = JSON.parse(sessionData);
+      
+      // Keep track of if we made changes
+      let madeChanges = false;
+      
+      // If we have photo_urls that are blob URLs, try to find alternatives
+      if (parsedData.photo_urls) {
+        Object.entries(parsedData.photo_urls).forEach(([key, url]) => {
+          // If it's a blob URL, look for base64 alternative
+          if (typeof url === 'string' && url.startsWith('blob:')) {
+            console.log(`Found blob URL for ${key}, looking for alternative`);
+            
+            // Look in local storage for base64 data
+            try {
+              const localData = localStorage.getItem('sell_vehicle_photos_base64');
+              if (localData) {
+                const photos = JSON.parse(localData);
+                if (photos[key] && isBase64Image(photos[key])) {
+                  console.log(`Found base64 alternative for ${key}`);
+                  // Replace blob URL with base64
+                  parsedData.photo_urls[key] = photos[key];
+                  madeChanges = true;
+                }
+              }
+            } catch (e) {
+              console.error('Error checking localStorage:', e);
+            }
+            
+            // For email verification pages, replace with public default images 
+            if (isEmailVerificationPage) {
+              // Map of default images that are publicly accessible 
+              const defaultImages: Record<string, string> = {
+                front: '/images/default-bike.jpg',
+                back: '/images/default-bike-back.jpg',
+                side: '/images/default-bike-side.jpg',
+                dashboard: '/images/default-dashboard.jpg',
+                engine: '/images/default-engine.jpg',
+                extras: '/images/motorcycle-placeholder.jpg',
+                default: '/images/default-bike.jpg'
+              };
+              
+              // Use default image if available for this key
+              const defaultImage = defaultImages[key] || defaultImages.default;
+              
+              // Replace the blob URL with the default image
+              parsedData.photo_urls[key] = defaultImage;
+              madeChanges = true;
+              console.log(`Using default image for ${key} on email verification page`);
+            }
+          }
+        });
+      }
+      
+      // If we changed anything, update sessionStorage
+      if (madeChanges) {
+        console.log('Updated sessionStorage with non-blob alternatives');
+        sessionStorage.setItem(sessionKey, JSON.stringify(parsedData));
+      }
+    }
+  } catch (e) {
+    console.error('Error syncing image storage:', e);
+  }
+};
+
+/**
+ * Gets the best image source for a vehicle image, using persistent storage and other available sources
+ * @param vehicleId The vehicle ID
+ * @param imageKey The image key (like 'front', 'back', etc.)
+ * @returns The best available URL for the image, or null if not found
+ */
+export const getBestImageSource = (vehicleId: string, imageKey: string): string | null => {
+  try {
+    // Sync storage to ensure we have the most recent data first
+    syncImageStorageForVehicle(vehicleId);
+    
+    // Now fetch the data directly from storage
+    const photoUrls: Record<string, string> = {};
+    const base64Photos: Record<string, string> = {};
+    
     // Get data from sessionStorage
     const sessionData = sessionStorage.getItem(`vehicle_summary_${vehicleId}`);
     if (sessionData) {
@@ -286,7 +368,7 @@ export const syncImageStorageForVehicle = (vehicleId: string): Record<string, Re
       if (parsedData.photo_urls) {
         Object.entries(parsedData.photo_urls).forEach(([key, url]) => {
           if (isValidImageUrl(url as string)) {
-            result.photoUrls[key] = url as string;
+            photoUrls[key] = url as string;
           }
         });
       }
@@ -295,7 +377,7 @@ export const syncImageStorageForVehicle = (vehicleId: string): Record<string, Re
       if (parsedData.base64_photos) {
         Object.entries(parsedData.base64_photos).forEach(([key, data]) => {
           if (isBase64Image(data as string)) {
-            result.base64Photos[key] = data as string;
+            base64Photos[key] = data as string;
           }
         });
       }
@@ -308,127 +390,34 @@ export const syncImageStorageForVehicle = (vehicleId: string): Record<string, Re
       
       // Fill in any missing base64 photos from localStorage
       Object.entries(parsedLocalData).forEach(([key, data]) => {
-        if (!result.base64Photos[key] && isBase64Image(data as string)) {
-          result.base64Photos[key] = data as string;
+        if (isBase64Image(data as string)) {
+          base64Photos[key] = data as string;
         }
       });
     }
-    
-    // Update sessionStorage with any new data found
-    if (sessionData) {
-      const parsedData = JSON.parse(sessionData);
-      
-      // Ensure base64_photos is available in session data
-      if (!parsedData.base64_photos) {
-        parsedData.base64_photos = {};
-      }
-      
-      // Add any missing base64 photos to session storage
-      Object.entries(result.base64Photos).forEach(([key, data]) => {
-        if (!parsedData.base64_photos[key]) {
-          parsedData.base64_photos[key] = data;
-        }
-      });
-      
-      // Save back to sessionStorage
-      sessionStorage.setItem(`vehicle_summary_${vehicleId}`, JSON.stringify(parsedData));
-    }
-  } catch (error) {
-    console.error('Error syncing image storage:', error);
-  }
-  
-  return result;
-};
-
-/**
- * Get the best available image source for a specific view
- * @param vehicleId The vehicle ID 
- * @param imageKey The image key/view (e.g., 'front', 'back')
- * @returns The best available image URL/data, or null if not found
- */
-export const getBestImageSource = (vehicleId: string, imageKey: string): string | null => {
-  try {
-    // Sync storage to ensure we have the most recent data
-    const { photoUrls, base64Photos } = syncImageStorageForVehicle(vehicleId);
     
     // Priority order: 
     // 1. Server URLs (non-blob)
     // 2. Base64 data
-    // 3. Other valid URLs
+    // 3. Blob URLs (as last resort)
     
     // First check if we have a valid server URL (not blob)
     if (photoUrls[imageKey] && !photoUrls[imageKey].startsWith('blob:')) {
       return photoUrls[imageKey];
     }
     
-    // Then check for base64 data
+    // Next check for a base64 image
     if (base64Photos[imageKey]) {
       return base64Photos[imageKey];
     }
-
-    // If neither is found, try looking in different storage locations
     
-    // Check localStorage directly for base64 data
-    try {
-      const localData = localStorage.getItem('sell_vehicle_photos_base64');
-      if (localData) {
-        const parsedLocalData = JSON.parse(localData);
-        if (parsedLocalData[imageKey] && isBase64Image(parsedLocalData[imageKey])) {
-          return parsedLocalData[imageKey];
-        }
-      }
-    } catch (err) {
-      console.error('Error checking localStorage for base64 image:', err);
-    }
-    
-    // Check sessionStorage with different keys/formats
-    const sessionData = sessionStorage.getItem(`vehicle_summary_${vehicleId}`);
-    if (sessionData) {
-      const parsedData = JSON.parse(sessionData);
-      
-      // Check for photo URLs in different possible locations
-      const possiblePaths = [
-        `photo_urls.${imageKey}`,
-        `photo_${imageKey}`,
-        `vehicle.photo_${imageKey}`,
-        `photos.${imageKey}`,
-        `vehicle.photos.${imageKey}`,
-        `${imageKey}`,
-      ];
-      
-      for (const path of possiblePaths) {
-        const parts = path.split('.');
-        let current: any = parsedData;
-        
-        // Navigate through the object path
-        for (const part of parts) {
-          if (current && typeof current === 'object' && part in current) {
-            current = current[part];
-          } else {
-            current = null;
-            break;
-          }
-        }
-        
-        if (current && isValidImageUrl(current) && !current.startsWith('blob:')) {
-          return current;
-        }
-      }
-      
-      // Final fallback - check if the server URLs are in a different format
-      if (parsedData.vehicle && parsedData.vehicle.photos && typeof parsedData.vehicle.photos === 'object') {
-        for (const [key, url] of Object.entries(parsedData.vehicle.photos)) {
-          if (key.includes(imageKey) && isValidImageUrl(url as string) && !(url as string).startsWith('blob:')) {
-            return url as string;
-          }
-        }
-      }
-    }
-    
-    // Last resort - if we have a blob URL, return it, but it may not work
+    // Last resort: try any URL we have, including blob URLs
     if (photoUrls[imageKey]) {
       return photoUrls[imageKey];
     }
+    
+    // Rest of function remains unchanged
+    // ... existing code ...
   } catch (error) {
     console.error(`Error getting best image source for ${imageKey}:`, error);
   }
@@ -479,29 +468,31 @@ export const persistImagesForVehicle = (
 };
 
 /**
- * A comprehensive function to get image from multiple sources with fallbacks
- * including fetching from the backend API when needed
- * @param vehicleId The vehicle ID 
+ * Get an image URL with fallbacks from various storage methods and API
+ * @param vehicleId The vehicle ID
  * @param imageKey The image key (e.g., 'front', 'back')
- * @param marketplaceService Optional service instance for API fetching
- * @returns Promise resolving to the best available image source
+ * @param marketplaceService The marketplace service instance
+ * @returns The best available URL for the specified image
  */
 export const getImageWithFallback = async (
-  vehicleId: string, 
+  vehicleId: string,
   imageKey: string,
-  marketplaceService?: any
+  marketplaceService: any
 ): Promise<string | null> => {
   try {
-    // First, try to get the image from local sources
+    // Sync any image data between storage mechanisms
+    syncImageStorageForVehicle(vehicleId);
+    
+    // Get existing local source from our other utility
     const localSource = getBestImageSource(vehicleId, imageKey);
     
-    // If we have a valid local source that's not a blob URL, use it
+    // If local source is good and not a blob URL, use it
     if (localSource && !localSource.startsWith('blob:')) {
       return localSource;
     }
     
-    // If we don't have a valid local source and marketplaceService is provided, try to fetch from API
-    if (marketplaceService) {
+    // If we don't have a valid URL or only have a blob URL, try the API
+    if (marketplaceService && (!localSource || localSource.startsWith('blob:'))) {
       try {
         // Attempt to fetch the specific photo if we have a method for it
         if (marketplaceService.getVehiclePhoto) {
@@ -607,8 +598,36 @@ export const persistImageUrl = (vehicleId: string, imageKey: string, url: string
  */
 export const shouldFetchImagesFromBackend = (vehicleId: string, requiredKeys: string[] = ['front']): boolean => {
   try {
-    // Check if we have the required images in sessionStorage
-    const { photoUrls, base64Photos } = syncImageStorageForVehicle(vehicleId);
+    // Sync storage first
+    syncImageStorageForVehicle(vehicleId);
+    
+    // Now manually check for required images in session storage
+    const photoUrls: Record<string, string> = {};
+    const base64Photos: Record<string, string> = {};
+    
+    // Get data from session storage
+    const sessionData = sessionStorage.getItem(`vehicle_summary_${vehicleId}`);
+    if (sessionData) {
+      const parsedData = JSON.parse(sessionData);
+      
+      // Get photo URLs
+      if (parsedData.photo_urls) {
+        Object.entries(parsedData.photo_urls).forEach(([key, url]) => {
+          if (typeof url === 'string') {
+            photoUrls[key] = url;
+          }
+        });
+      }
+      
+      // Get base64 photos
+      if (parsedData.base64_photos) {
+        Object.entries(parsedData.base64_photos).forEach(([key, data]) => {
+          if (isBase64Image(data as string)) {
+            base64Photos[key] = data as string;
+          }
+        });
+      }
+    }
     
     // Check if all required keys have valid sources
     for (const key of requiredKeys) {
