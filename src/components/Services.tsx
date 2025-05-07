@@ -175,7 +175,9 @@ const Services = () => {
                     </div>
                     <h3 className="text-xl font-semibold ml-3">{service.title}</h3>
                   </div>
-                  <p className="text-gray-600 mb-6">{service.description}</p>
+                  <p className="text-gray-600 mb-6">
+                    {service.description || `Complete ${service.title.toLowerCase()} solutions for your bike to keep it running at peak performance.`}
+                  </p>
                   {service.features && service.features.length > 0 && (
                     <ul className="space-y-2 mb-4">
                       {service.features.slice(0, 3).map((feature, index) => (

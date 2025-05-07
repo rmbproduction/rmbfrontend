@@ -95,6 +95,10 @@ export const useAuth = () => {
       user: userData,
       loading: false,
     });
+    
+    // Dispatch a custom event to notify all components about the auth state change
+    // This ensures the Navbar immediately updates without requiring a page refresh
+    window.dispatchEvent(new Event('auth-state-changed'));
   }, []);
 
   // Logout function
@@ -118,6 +122,9 @@ export const useAuth = () => {
       user: null,
       loading: false,
     });
+    
+    // Dispatch a custom event to notify all components about the auth state change
+    window.dispatchEvent(new Event('auth-state-changed'));
     
     // Navigate to home
     navigate('/');

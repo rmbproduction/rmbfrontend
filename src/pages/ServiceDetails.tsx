@@ -7,6 +7,7 @@ import ManufacturerSelect from '../components/ManufacturerSelect';
 import { toast } from 'react-toastify';
 import MultiStepVehicleSelector from '../components/SelectVehicle';
 import { checkUserAuthentication } from '../utils/auth';
+import { categoryService, serviceService } from '../services/apiService';
 
 // Type definitions
 interface ServiceFeature {
@@ -38,6 +39,7 @@ interface ServicePackage {
   duration: string;
   warranty?: string;
   recommended: string;
+  description?: string;
   features: { name: string }[];
   image?: string;
 }
@@ -132,42 +134,6 @@ const getServiceIcon = (category: Category): React.FC<{ className?: string }> =>
   return iconMapping.default;
 };
 
-// Create default service packages if none are provided
-const createDefaultServicePackages = (categoryName: string): ServicePackage[] => {
-  return [
-    {
-      name: "Basic Service",
-      price: "₹2999",
-      duration: "4 Hrs",
-      warranty: "1000 Kms or 1 Month",
-      recommended: "Every 5000 Kms or 3 Months",
-      features: [
-        { name: 'Engine Oil Replacement' },
-        { name: 'Oil Filter Replacement' },
-        { name: 'Air Filter Cleaning' },
-        { name: 'Chain Lubrication' },
-        { name: 'Basic Inspection' }
-      ],
-      image: "/images/services/basic-service.jpg"
-    },
-    {
-      name: "Premium Service",
-      price: "₹4999",
-      duration: "6 Hrs",
-      warranty: "2000 Kms or 2 Months",
-      recommended: "Every 10,000 Kms or 6 Months",
-      features: [
-        { name: 'All Basic Service Features' },
-        { name: 'Deep Engine Cleaning' },
-        { name: 'Brake Adjustment' },
-        { name: 'Chain Adjustment' },
-        { name: 'Complete Diagnostics' }
-      ],
-      image: "/images/services/premium-service.jpg"
-    }
-  ];
-};
-
 // Main component
 const ServiceDetails: React.FC = () => {
   const navigate = useNavigate();
@@ -203,40 +169,20 @@ const ServiceDetails: React.FC = () => {
         const service = services[i];
         
         // We need the real service ID, not just the index
-        // This assumes each service has an 'id' field we can use - adjust if needed
         const serviceIdForApi = service.id || i + 1;
         
         console.log(`[PRICE] Fetching price for service ${service.name} (ID: ${serviceIdForApi})`);
         
-        // Make API call to get service price
-        const url = `http://127.0.0.1:8000/api/repairing_service/service-price/${serviceIdForApi}/?manufacturer_id=${vehicleData.manufacturer}&vehicle_model_id=${vehicleData.model}`;
-        
         try {
-          // Added credentials: 'omit' to explicitly disable sending auth cookies
-          const response = await fetch(url, {
-            method: 'GET',
-            credentials: 'omit',
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
-            }
-          });
+          // Use the centralized API service
+          const data = await serviceService.getServicePrice(serviceIdForApi, vehicleData.manufacturer, vehicleData.model);
           
-          if (response.ok) {
-            const data = await response.json();
-            // Store the price (custom or base)
-            priceMap[i] = `₹${data.price}`;
-            // Store whether this is a custom price or base price
-            customPriceMap[i] = data.is_custom_price;
-            
-            console.log(`[PRICE] Price for service ${service.name}: ₹${data.price} (Custom: ${data.is_custom_price})`);
-          } else {
-            // If API response is not OK, use the default price
-            const basePrice = service.price.replace('₹', '');
-            priceMap[i] = `₹${basePrice}`;
-            customPriceMap[i] = false;
-            console.log(`[PRICE] Using default price for service ${service.name}: ₹${basePrice} (API error)`);
-          }
+          // Store the price (custom or base)
+          priceMap[i] = `₹${data.price}`;
+          // Store whether this is a custom price or base price
+          customPriceMap[i] = data.is_custom_price;
+          
+          console.log(`[PRICE] Price for service ${service.name}: ₹${data.price} (Custom: ${data.is_custom_price})`);
         } catch (priceErr) {
           console.error(`Error fetching price for service ${service.name}:`, priceErr);
           // Fallback to default price on error
@@ -317,6 +263,32 @@ const ServiceDetails: React.FC = () => {
     return services[index]?.price || '';
   };
 
+  // Helper function to properly format recommendation text with spaces
+  const formatRecommendation = (text: string | boolean | undefined): string => {
+    // If text is empty, null, undefined or false, return null so fallbacks can be applied
+    if (!text) return '';
+    
+    if (typeof text === 'string') {
+      // Remove any extra spaces
+      const trimmedText = text.trim();
+      
+      // If there's no content after trimming, return empty string
+      if (trimmedText.length === 0) return '';
+      
+      // If the text already starts with "Every", return it as is
+      if (trimmedText.startsWith('Every')) return trimmedText;
+      
+      // Otherwise, add "Every " prefix with proper spacing
+      return `Every ${trimmedText}`;
+    }
+    
+    // If it's a true boolean, use a default value
+    if (text === true) return 'Every 10,000 Kms or 6 Months';
+    
+    // Default fallback
+    return '';
+  };
+
   // Fetch service data
   useEffect(() => {
     const fetchServiceDetails = async () => {
@@ -329,26 +301,8 @@ const ServiceDetails: React.FC = () => {
       }
 
       try {
-        // API endpoint for services by category
-        const url = `http://127.0.0.1:8000/api/repairing_service/services/?category_id=${serviceId}`;
-        console.log('[NEW] Making API request to:', url);
-        
-        // Removed potential auth headers, only sending required content-type headers
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-          },
-          // Explicitly disable credentials to prevent any auth cookies from being sent
-          credentials: 'omit'
-        });
-        
-        if (!response.ok) {
-          throw new Error(`API request failed: ${response.status} ${response.statusText}`);
-        }
-        
-        const data = await response.json();
+        // Use the centralized API service to fetch services by category
+        const data = await serviceService.getServicesByCategory(serviceId);
         console.log('[NEW] API response data:', JSON.stringify(data).substring(0, 500) + '...');
         
         // First, check if data is a list of categories or services
@@ -373,13 +327,21 @@ const ServiceDetails: React.FC = () => {
             servicesList = data;
             // Fetch the category details separately
             try {
-              const categoryResponse = await fetch(`http://127.0.0.1:8000/api/repairing_service/service-categories/`);
-              if (categoryResponse.ok) {
-                const categoriesData = await categoryResponse.json();
-                categoryData = categoriesData.find((cat: any) => cat.uuid === serviceId);
-              }
+              const categoriesData = await categoryService.getCategoryById(serviceId);
+              categoryData = categoriesData;
             } catch (categoryErr) {
               console.error('[NEW] Error fetching category details:', categoryErr);
+              // Create a fallback category object instead of throwing an error
+              // This allows services to still be displayed even if category details can't be fetched
+              categoryData = {
+                uuid: serviceId,
+                name: "Service Category",
+                slug: "service-category",
+                description: "",
+                image: null,
+                icon: null
+              };
+              console.log('[NEW] Using fallback category data due to API error');
             }
           }
           
@@ -399,59 +361,44 @@ const ServiceDetails: React.FC = () => {
             
             console.log('[NEW] Raw services:', servicesList);
             
-            // If no services returned, create default ones for the UI
+            // If no services returned, show empty state instead of creating defaults
             if (servicesList.length === 0) {
-              console.log('[NEW] No services found, creating defaults');
-              setServices(createDefaultServicePackages(categoryData.name));
+              console.log('[NEW] No services found');
+              setServices([]);
             } else {
               // Process services to match the expected format
               const processedServices = servicesList.map((service: any, idx: number) => ({
-                id: service.id || idx + 1, // Store the real service ID from API
-                name: service.name || (service.id % 2 === 0 ? 'Basic Service' : 'Premium Service'),
-                price: service.base_price || (service.id % 2 === 0 ? '₹2999' : '₹4999'),
-                duration: service.duration || (service.id % 2 === 0 ? '4 Hrs' : '6 Hrs'),
-                warranty: service.warranty || (service.id % 2 === 0 ? '1000 Kms or 1 Month' : '2000 Kms or 2 Months'),
-                recommended: typeof service.recommended === 'string' 
-                  ? service.recommended 
-                  : (service.id % 2 === 0 
-                    ? 'Every 5000 Kms or 3 Months' 
-                    : 'Every 10,000 Kms or 6 Months'),
+                id: service.id || idx + 1, 
+                name: service.name,
+                price: service.base_price,
+                duration: service.duration,
+                warranty: service.warranty,
+                recommended: service.recommended ? formatRecommendation(service.recommended) : '',
+                description: service.description || '',
                 features: Array.isArray(service.features) && service.features.length > 0
                   ? service.features 
-                  : service.id % 2 === 0 
-                    ? [
-                        { name: 'Engine Oil Replacement' },
-                        { name: 'Oil Filter Replacement' },
-                        { name: 'Air Filter Cleaning' },
-                        { name: 'Chain Lubrication' },
-                        { name: 'Basic Inspection' }
-                      ]
-                    : [
-                        { name: 'All Basic Service Features' },
-                        { name: 'Deep Engine Cleaning' },
-                        { name: 'Brake Adjustment' },
-                        { name: 'Chain Adjustment' },
-                        { name: 'Complete Diagnostics' }
-                      ],
-                image: service.image || (service.id % 2 === 0 ? '/images/services/basic-service.jpg' : '/images/services/premium-service.jpg')
+                  : [],
+                image: service.image_url || service.image
               }));
               
               setServices(processedServices);
+              
+              // If we have services but no category, use service category ID as fallback
+              if (!categoryData && processedServices.length > 0) {
+                const firstService = processedServices[0];
+                categoryData = {
+                  uuid: serviceId,
+                  name: firstService.name ? `${firstService.name} Category` : "Service Category",
+                  slug: "service-category",
+                  description: "",
+                  image: null,
+                  icon: null
+                };
+                console.log('[NEW] Created fallback category from service data');
+              }
             }
           } else {
-            // If category wasn't found but we have an id, use it to create a fallback
-            const fallbackCategory = {
-              uuid: serviceId,
-              name: "Service Category",
-              slug: "service-category",
-              description: "Service and maintenance for your bike",
-              rating: 4.8,
-              reviews_count: 256
-            };
-            
-            setCategory(fallbackCategory);
-            setServices(createDefaultServicePackages(fallbackCategory.name));
-            console.warn('[NEW] Category not found, using fallback');
+            throw new Error('Category not found');
           }
         } else {
           // Response was not an array, which is unexpected
@@ -461,18 +408,9 @@ const ServiceDetails: React.FC = () => {
         console.error('[NEW] Error in fetchServiceDetails:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch service details');
         
-        // Create fallback data for a better user experience
-        const fallbackCategory = {
-          uuid: serviceId || 'fallback',
-          name: "Maintenance Service",
-          slug: "maintenance-service",
-          description: "Regular maintenance to keep your bike in top condition",
-          rating: 4.8,
-          reviews_count: 256
-        };
-        
-        setCategory(fallbackCategory);
-        setServices(createDefaultServicePackages(fallbackCategory.name));
+        // Don't create fallback data, just set empty data
+        setCategory(null);
+        setServices([]);
         
         // Auto-retry on network errors, but limit attempts
         if (retryCount < 3 && (err instanceof Error && err.message.includes('network'))) {
@@ -501,19 +439,8 @@ const ServiceDetails: React.FC = () => {
   // Add a function to create a new cart
   const createCart = async (): Promise<number> => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/repairing_service/cart/create/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'omit'
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to create cart');
-      }
-      
-      const data: CartResponse = await response.json();
+      // Use the centralized API service
+      const data = await serviceService.createCart();
       // Save cart ID to session storage
       sessionStorage.setItem('cartId', data.id.toString());
       setCartId(data.id);
@@ -544,19 +471,13 @@ const ServiceDetails: React.FC = () => {
       if (!skipExistingCheck) {
         // Check if this service is already in the cart
         try {
-          const existingItemsResponse = await fetch(`http://127.0.0.1:8000/api/repairing_service/cart/${currentCartId}/items/`, {
-            credentials: 'omit'
-          });
+          const existingItems = await serviceService.getCartItems(currentCartId);
+          const serviceExists = existingItems.some((item: CartItem) => item.service_id === serviceId);
           
-          if (existingItemsResponse.ok) {
-            const existingItems = await existingItemsResponse.json();
-            const serviceExists = existingItems.some((item: CartItem) => item.service_id === serviceId);
-            
-            if (serviceExists) {
-              console.log('Service already in basket, skipping add operation');
-              toast.info('This service is already in your repairs basket');
-              return true; // Indicate that the service is already in the basket
-            }
+          if (serviceExists) {
+            console.log('Service already in basket, skipping add operation');
+            toast.info('This service is already in your repairs basket');
+            return true; // Indicate that the service is already in the basket
           }
         } catch (error) {
           console.error('Error checking existing cart items:', error);
@@ -564,25 +485,8 @@ const ServiceDetails: React.FC = () => {
         }
       }
       
-      // Now add the service to the cart
-      const response = await fetch(`http://127.0.0.1:8000/api/repairing_service/cart/${currentCartId}/add/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          service_id: serviceId,
-          quantity: 1,
-          service_name: serviceToAdd.name // Include the service name
-        }),
-        credentials: 'omit'
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to add service to repairs basket');
-      }
-      
-      const data: CartResponse = await response.json();
+      // Now add the service to the cart using the centralized API service
+      const data = await serviceService.addToCart(currentCartId, serviceId, 1, serviceToAdd.name);
       console.log('Added service to repairs basket:', data);
       toast.success('Service added to your repairs basket!', {
         position: 'top-center'
@@ -860,10 +764,10 @@ const ServiceDetails: React.FC = () => {
             <div className="flex-1">
               <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{category.name}</h1>
               <p className="text-gray-700 mt-2">
-                {category.description || 'Includes full replacement of worn-out chain and sprocket kit.'}
+                {category.description || `Complete ${category.name.toLowerCase()} services and solutions for your vehicle. Professional maintenance to keep your bike running at its best.`}
               </p>
               
-              {/* Ratings display */}
+              {/* Ratings display - COMMENTED OUT
               <div className="flex items-center mt-3">
                 <div className="flex">
                   {[1, 2, 3, 4, 5].map((star) => (
@@ -882,6 +786,7 @@ const ServiceDetails: React.FC = () => {
                 <span className="ml-2 text-gray-700 font-medium">{rating.toFixed(1)}</span>
                 <span className="ml-1 text-gray-500">({reviewsCount} reviews)</span>
               </div>
+              */}
             </div>
           </div>
         </div>
@@ -944,6 +849,13 @@ const ServiceDetails: React.FC = () => {
                     {/* Service name */}
                     <h2 className="text-xl font-bold text-gray-900 mb-2">{service.name}</h2>
                     
+                    {/* Service description */}
+                    <p className="text-gray-600 mb-4">
+                      {service.description && service.description.length > 0
+                        ? service.description
+                        : "No description available"}
+                    </p>
+                    
                     {/* Service price with customization if available */}
                     <div className="mb-4">
                       {userVehicle ? (
@@ -985,7 +897,7 @@ const ServiceDetails: React.FC = () => {
                           <MapPin className="w-4 h-4 text-gray-500" />
                         </div>
                         <span className="ml-2 font-medium w-24">Recommended:</span>
-                        <span>{service.recommended}</span>
+                        <span className="ml-3">{service.recommended ? formatRecommendation(service.recommended) : 'As needed'}</span>
                       </div>
                     </div>
                     

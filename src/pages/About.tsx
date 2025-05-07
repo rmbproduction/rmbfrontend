@@ -4,31 +4,38 @@ import { Award, Users, PenTool as Tool, Clock } from 'lucide-react';
 
 const About = () => {
   const stats = [
-    { icon: Users, label: 'Happy Customers', value: '10,000+' },
-    { icon: Tool, label: 'Repairs Completed', value: '25,000+' },
-    { icon: Clock, label: 'Years of Experience', value: '15+' },
-    { icon: Award, label: 'Service Awards', value: '20+' },
+    // { icon: Users, label: 'Happy Customers', value: '10,000+' },
+    // { icon: Tool, label: 'Repairs Completed', value: '25,000+' },
+    // { icon: Clock, label: 'Years of Experience', value: '15+' },
+    // { icon: Award, label: 'Service Awards', value: '20+' },
   ];
 
   const team = [
-    {
-      name: 'John Smith',
-      role: 'Master Mechanic',
-      image: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
-      bio: '15 years of experience in bike repairs and maintenance.',
-    },
-    {
-      name: 'Sarah Johnson',
-      role: 'Service Manager',
-      image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
-      bio: 'Expert in customer service and team management.',
-    },
-    {
-      name: 'Michael Chen',
-      role: 'Technical Specialist',
-      image: 'https://images.unsplash.com/photo-1519244703995-f4e0f30006d5?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
-      bio: 'Specialized in modern bike electronics and diagnostics.',
-    },
+    // {
+    //   name: 'John Smith',
+    //   role: 'Master Mechanic',
+    //   image: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
+    //   bio: '15 years of experience in bike repairs and maintenance.',
+    // },
+    // {
+    //   name: 'Sarah Johnson',
+    //   role: 'Service Manager',
+    //   image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
+    //   bio: 'Expert in customer service and team management.',
+    // },
+    // {
+    //   name: 'Michael Chen',
+    //   role: 'Technical Specialist',
+    //   image: 'https://images.unsplash.com/photo-1519244703995-f4e0f30006d5?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
+    //   bio: 'Specialized in modern bike electronics and diagnostics.',
+    // },
+    // {
+    //   name: 'Michael Chen',
+    //   role: 'Technical Specialist',
+    //   image: 'https://images.unsplash.com/photo-1519244703995-f4e0f30006d5?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
+    //   bio: 'Specialized in modern bike electronics and diagnostics.',
+    // },
+   
   ];
 
   return (
@@ -109,28 +116,32 @@ const About = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.8 }}
         >
-          <h2 className="text-3xl font-bold text-center mb-12">Our Expert Team</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {team.map((member, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.2 * index }}
-                className="bg-white rounded-2xl shadow-lg overflow-hidden"
-              >
-                <img
-                  src={member.image}
-                  alt={member.name}
-                  className="w-full h-64 object-cover"
-                />
-                <div className="p-6">
-                  <h3 className="text-xl font-semibold text-gray-900">{member.name}</h3>
-                  <p className="text-[#FF5733] font-medium mb-2">{member.role}</p>
-                  <p className="text-gray-600">{member.bio}</p>
-                </div>
-              </motion.div>
-            ))}
+          {/* <h2 className="text-3xl font-bold text-center mb-12">Our Expert Team</h2> */}
+          <div className="flex justify-center">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 auto-rows-fr justify-items-center">
+              {team.map((member, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.2 * index }}
+                  className="bg-white rounded-2xl shadow-lg overflow-hidden h-full flex flex-col w-full max-w-sm"
+                >
+                  <div className="aspect-w-4 aspect-h-3 w-full">
+                    <img
+                      src={member.image}
+                      alt={member.name}
+                      className="w-full h-64 object-cover"
+                    />
+                  </div>
+                  <div className="p-6 flex-grow flex flex-col">
+                    <h3 className="text-xl font-semibold text-gray-900">{member.name}</h3>
+                    <p className="text-[#FF5733] font-medium mb-2">{member.role}</p>
+                    <p className="text-gray-600 flex-grow">{member.bio}</p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           </div>
         </motion.div>
       </div>

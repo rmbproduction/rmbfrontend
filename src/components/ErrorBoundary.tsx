@@ -1,6 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertCircle, RefreshCw, Home } from 'lucide-react';
-import { Link } from 'react-router-dom';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -118,13 +117,13 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                   <RefreshCw size={18} />
                   Refresh page
                 </button>
-                <Link
-                  to="/"
+                <a
+                  href="/"
                   className="flex items-center justify-center gap-2 text-gray-800 bg-gray-200 hover:bg-gray-300 font-medium rounded-lg py-2 px-4 transition-colors"
                 >
                   <Home size={18} />
                   Go to Home
-                </Link>
+                </a>
               </div>
             </div>
           </div>

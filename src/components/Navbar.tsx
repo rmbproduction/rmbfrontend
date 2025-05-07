@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Wrench, Menu, X, LogIn, LogOut, User } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import RepairsBasketIcon from './RepairsBasketIcon';
@@ -7,10 +7,27 @@ import useAuth from '../hooks/useAuth';
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, logout, checkAuth } = useAuth();
   
   // Determine if we are in the Dashboard area
   const isDashboard = location.pathname.startsWith('/dashboard');
+  
+  // Listen for authentication state changes from anywhere in the app
+  useEffect(() => {
+    // This function will be called when auth state changes
+    const handleAuthChange = () => {
+      console.log('Auth state changed, updating Navbar');
+      checkAuth(); // Force a re-check of the authentication state
+    };
+    
+    // Add event listener
+    window.addEventListener('auth-state-changed', handleAuthChange);
+    
+    // Clean up listener on component unmount
+    return () => {
+      window.removeEventListener('auth-state-changed', handleAuthChange);
+    };
+  }, [checkAuth]);
 
   return (
     <nav className="bg-white shadow-sm">

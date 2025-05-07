@@ -4,7 +4,8 @@ import { motion } from 'framer-motion';
 import { 
   Camera, ChevronRight, ChevronLeft, Upload, Tag, 
   FileText, Info, AlertCircle, Check, X, Plus, Trash,
-  Bike, Clock, Eye, Calendar, DollarSign, Loader
+  Bike, Eye, Calendar, DollarSign, Loader,
+  Clock
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import marketplaceService from '../services/marketplaceService';
@@ -31,8 +32,77 @@ const statusDescriptions: { [key: string]: string } = {
   completed: 'Completed: The sale has been completed successfully.',
 };
 
+// Helper functions moved outside of component scope
+const getVehicleBrand = (vehicle: any) => {
+  return vehicle.vehicle?.brand || 
+        vehicle.vehicle_details?.brand || 
+        vehicle.brand ||
+        'Unknown';
+};
+
+const getVehicleModel = (vehicle: any) => {
+  return vehicle.vehicle?.model || 
+        vehicle.vehicle_details?.model || 
+        vehicle.model ||
+        'Unknown';
+};
+
+const getVehicleRegistration = (vehicle: any) => {
+  return vehicle.vehicle?.registration_number || 
+        vehicle.vehicle_details?.registration_number || 
+        vehicle.registration_number ||
+        'N/A';
+};
+
+const getVehicleCondition = (vehicle: any) => {
+  // Add extremely detailed logging to diagnose the condition value source
+  console.log('DETAILED CONDITION DEBUG for vehicle:', {
+    id: vehicle.id,
+    directCondition: vehicle.condition,
+    vehicleCondition: vehicle.vehicle?.condition,
+    detailsCondition: vehicle.vehicle_details?.condition,
+    summaryCondition: vehicle.summary?.condition,
+    allProps: Object.keys(vehicle),
+    hasVehicle: !!vehicle.vehicle,
+    hasVehicleDetails: !!vehicle.vehicle_details,
+    hasSummary: !!vehicle.summary
+  });
+  
+  // Get raw condition value from all possible sources
+  const rawCondition = vehicle.condition || 
+        vehicle.vehicle?.condition || 
+        vehicle.vehicle_details?.condition ||
+        vehicle.summary?.condition;
+  
+  console.log(`Raw condition value for vehicle ${vehicle.id}:`, rawCondition);
+  
+  // If we have a condition value, properly capitalize it
+  if (rawCondition && typeof rawCondition === 'string') {
+    // Convert to lowercase first then capitalize first letter
+    const formatted = rawCondition.toLowerCase();
+    const capitalized = formatted.charAt(0).toUpperCase() + formatted.slice(1);
+    console.log(`Formatted condition: "${rawCondition}" -> "${capitalized}"`);
+    return capitalized;
+  }
+  
+  // Default fallback
+  return 'Good';
+};
+
+// Get the expected price with fallbacks
+const getExpectedPrice = (vehicle: any) => {
+  // Check all possible locations for expected price
+  return vehicle.vehicle?.expected_price || 
+         vehicle.vehicle?.price || 
+         vehicle.expected_price || 
+         vehicle.price || 
+         vehicle.vehicle_details?.expected_price ||
+         vehicle.vehicle_details?.price ||
+         0;
+};
+
 // PreviousVehicles component to display user's previous vehicle submissions
-const PreviousVehicles = ({ onClose }: { onClose: () => void }) => {
+const PreviousVehicles = ({ onClose }: { onClose: () => void }): JSX.Element => {
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [vehicleStatuses, setVehicleStatuses] = useState<{[key: string]: {status: string, status_display?: string, title?: string, message: string}}>({});
@@ -58,10 +128,77 @@ const PreviousVehicles = ({ onClose }: { onClose: () => void }) => {
     setLoading(true);
     try {
       const sellRequests = await marketplaceService.getSellRequests();
-      setVehicles(sellRequests);
+      console.log('Retrieved sell requests:', sellRequests);
+      
+      // CRITICAL FIX: Sync with vehicle summary data to get latest condition values
+      const enhancedSellRequests = await Promise.all(sellRequests.map(async (request: any) => {
+        try {
+          // Try to get the latest data from sessionStorage first (fastest)
+          const sessionData = sessionStorage.getItem(`vehicle_summary_${request.id}`);
+          if (sessionData) {
+            const parsedData = JSON.parse(sessionData);
+            console.log(`Found session data for vehicle ${request.id}:`, parsedData);
+            
+            // Get the condition from vehicle_summary data
+            const condition = parsedData.vehicle?.condition || 
+                             parsedData.vehicle_details?.condition || 
+                             parsedData.condition;
+                             
+            if (condition && condition !== 'Not Available') {
+              console.log(`Updating condition for vehicle ${request.id} to: ${condition}`);
+              
+              // Create a deep copy to avoid mutating the original
+              const enhancedRequest = JSON.parse(JSON.stringify(request));
+              
+              // Set the condition in all possible locations
+              enhancedRequest.condition = condition;
+              if (enhancedRequest.vehicle) {
+                enhancedRequest.vehicle.condition = condition;
+              }
+              if (enhancedRequest.vehicle_details) {
+                enhancedRequest.vehicle_details.condition = condition;
+              }
+              
+              return enhancedRequest;
+            }
+          }
+          
+          // If no session data, try persistent storage
+          const persistentData = await persistentStorageService.getVehicleData(request.id);
+          if (persistentData) {
+            const condition = persistentData.vehicle?.condition || 
+                             persistentData.vehicle_details?.condition || 
+                             persistentData.condition;
+                             
+            if (condition && condition !== 'Not Available') {
+              console.log(`Updating condition for vehicle ${request.id} to: ${condition} (from persistent storage)`);
+              
+              // Create a deep copy
+              const enhancedRequest = JSON.parse(JSON.stringify(request));
+              
+              // Set the condition in all possible locations
+              enhancedRequest.condition = condition;
+              if (enhancedRequest.vehicle) {
+                enhancedRequest.vehicle.condition = condition;
+              }
+              if (enhancedRequest.vehicle_details) {
+                enhancedRequest.vehicle_details.condition = condition;
+              }
+              
+              return enhancedRequest;
+            }
+          }
+        } catch (e) {
+          console.error(`Error enhancing vehicle ${request.id}:`, e);
+        }
+        
+        return request;
+      }));
+      
+      setVehicles(enhancedSellRequests);
       
       // Fetch status information for each sell request
-      await refreshVehicleStatuses(sellRequests);
+      await refreshVehicleStatuses(enhancedSellRequests);
     } catch (fetchError) {
       console.error('Error fetching vehicles:', fetchError);
       toast.error('Failed to load your vehicles');
@@ -110,16 +247,6 @@ const PreviousVehicles = ({ onClose }: { onClose: () => void }) => {
 
   const formatPrice = (price: string | number) => {
     return Number(price).toLocaleString('en-IN');
-  };
-  
-  // Get the expected price with fallbacks
-  const getExpectedPrice = (vehicle: any) => {
-    // Check all possible locations for expected price
-    return vehicle.vehicle?.expected_price || 
-           vehicle.vehicle?.price || 
-           vehicle.expected_price || 
-           vehicle.price || 
-           0;
   };
   
   // Get the status with proper display value
@@ -190,23 +317,37 @@ const PreviousVehicles = ({ onClose }: { onClose: () => void }) => {
                     <div className="flex-1">
                       <div className="flex justify-between mb-2">
                         <h4 className="font-semibold text-gray-800 text-lg">
-                          {vehicle.vehicle?.brand} {vehicle.vehicle?.model} {vehicle.vehicle?.year}
+                          {getVehicleBrand(vehicle)} {getVehicleModel(vehicle)} {vehicle.vehicle?.year || vehicle.vehicle_details?.year || vehicle.year}
                         </h4>
                         <span className={`px-3 py-1 text-xs rounded-full font-medium ${getStatusBadgeColor(status)}`}>
                           {getStatusDisplay(vehicle, vehicle.id)}
                         </span>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-y-2 text-sm mb-2">
+                      <div className="grid grid-cols-2 gap-y-2 text-sm mb-3">
                         <div className="flex items-center text-gray-600">
                           <Tag className="w-4 h-4 mr-1 text-[#FF5733]" />
                           <span className="font-medium">Registration: </span>
-                          <span className="ml-1">{vehicle.vehicle?.registration_number || 'N/A'}</span>
+                          <span className="ml-1">
+                            {getVehicleRegistration(vehicle)}
+                          </span>
                         </div>
                         <div className="flex items-center text-gray-600">
                           <Clock className="w-4 h-4 mr-1 text-[#FF5733]" />
                           <span className="font-medium">Listed: </span>
                           <span className="ml-1">{new Date(vehicle.created_at).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-y-2 text-sm mb-3">
+                        <div className="flex items-center text-gray-600">
+                          <span className="font-medium">Condition: </span>
+                          <span className="ml-1 capitalize">
+                            {/* Add debug title to show all condition sources */}
+                            <span title={`Sources: direct=${vehicle.condition}, vehicle=${vehicle.vehicle?.condition}, details=${vehicle.vehicle_details?.condition}`}>
+                              {getVehicleCondition(vehicle)}
+                            </span>
+                          </span>
                         </div>
                       </div>
                       
@@ -406,25 +547,6 @@ const SellVehicle = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
-  
-  // Add these to existing state variables
-  const [showQuickHistory, setShowQuickHistory] = useState(false);
-  const [quickHistory, setQuickHistory] = useState<any[]>([]);
-  
-  // Add this effect to load quick history
-  useEffect(() => {
-    // Load quick history for the sidebar
-    const loadQuickHistory = async () => {
-      try {
-        const history = await persistentStorageService.getVehicleHistory(5); // Just get 5 most recent
-        setQuickHistory(history);
-      } catch (error) {
-        console.error('Error loading quick history:', error);
-      }
-    };
-    
-    loadQuickHistory();
-  }, []);
   
   // Save form data to localStorage whenever it changes
   useEffect(() => {
@@ -869,6 +991,32 @@ const SellVehicle = () => {
         documents
       );
       
+      // CRITICAL IMPROVEMENT: Save response data directly to sessionStorage for immediate access
+      try {
+        // Use the enrichVehicleData function to ensure consistent data structure
+        const enrichedData = marketplaceService.enrichVehicleData(response);
+        
+        // Save directly to session storage with the proper key for immediate access
+        sessionStorage.setItem(`vehicle_summary_${response.id}`, JSON.stringify(enrichedData));
+        console.log('Saved vehicle data to sessionStorage after submission:', response.id);
+        
+        // Also save to persistent storage if available
+        await persistentStorageService.saveVehicleData(response.id, enrichedData);
+        
+        // Save to vehicle history
+        // await persistentStorageService.addToVehicleHistory(response.id.toString(), {
+        //   brand: formData.brand,
+        //   model: formData.model,
+        //   year: formData.year,
+        //   registration_number: formData.registrationNumber,
+        //   price: formData.expectedPrice,
+        //   thumbnail: photoURLs.front || null
+        // });
+      } catch (storageError) {
+        console.error('Error saving submission data to storage:', storageError);
+        // Non-fatal error, just log it
+      }
+      
       toast.success('Your vehicle has been submitted successfully!', {
           position: 'top-right',
           autoClose: 5000
@@ -887,7 +1035,7 @@ const SellVehicle = () => {
       // If network error, try to save locally
       if (error.message?.includes('network') || error.message?.includes('connection')) {
         toast.warning(
-            <div>
+          <div>
             <strong>Connection issue detected.</strong>
             <p className="mt-1">Would you like to retry submission?</p>
             <div className="mt-2 flex justify-end space-x-2">
@@ -901,16 +1049,19 @@ const SellVehicle = () => {
                 className="px-4 py-1 bg-[#FF5733] text-white rounded"
                 onClick={async () => {
                   toast.dismiss();
-            try {
-                    // Retry submission with the same parameters as original attempt
+                  
+                  // Show loading toast
+                  const loadingToastId = toast.loading("Retrying submission...");
+                  
+                  try {
+                    // Retry submission
                     const retryResponse = await marketplaceService.submitVehicle(
-                      // First argument: formData
                       {
                         type: formData.type,
-                  brand: formData.brand,
-                  model: formData.model,
-                  year: formData.year,
-                  color: formData.color,
+                        brand: formData.brand,
+                        model: formData.model,
+                        year: formData.year,
+                        color: formData.color,
                         registrationNumber: formData.registrationNumber,
                         kmsDriven: formData.kmsDriven,
                         mileage: formData.mileage,
@@ -929,35 +1080,64 @@ const SellVehicle = () => {
                         isPriceNegotiable: formData.isPriceNegotiable,
                         hasPucCertificate: formData.hasPucCertificate
                       },
-                      // Second argument: photos
                       photos,
-                      // Third argument: documents
                       documents
                     );
                     
-                    toast.success('Your vehicle has been submitted successfully!', {
-                position: 'top-right',
-                autoClose: 5000
-              });
+                    // Close loading toast
+                    toast.dismiss(loadingToastId);
                     
-                    navigate(`/sell-vehicle/${retryResponse.id}/summary`);
+                    // Success toast
+                    toast.success('Vehicle submitted successfully!');
+                    
+                    // Save data to storage
+                    if (retryResponse && retryResponse.id) {
+                      try {
+                        const enrichedData = marketplaceService.enrichVehicleData(retryResponse);
+                        sessionStorage.setItem(`vehicle_summary_${retryResponse.id}`, JSON.stringify(enrichedData));
+                        await persistentStorageService.saveVehicleData(retryResponse.id, enrichedData);
+                        
+                        // Add to history
+                        // await persistentStorageService.addToVehicleHistory(
+                        //   String(retryResponse.id), 
+                        //   {
+                        //     brand: formData.brand,
+                        //     model: formData.model,
+                        //     year: formData.year,
+                        //     registration_number: formData.registrationNumber,
+                        //     price: formData.expectedPrice,
+                        //     thumbnail: photoURLs.front || null
+                        //   }
+                        // );
+                      } catch (storageError) {
+                        console.error('Error saving to storage:', storageError);
+                        // Non-fatal error
+                      }
+                      
+                      // Redirect to summary page
+                      navigate(`/sell-vehicle/${retryResponse.id}/summary`);
+                    }
                   } catch (retryError) {
-                    console.error('Retry failed:', retryError);
-                    toast.error('Submission failed again. Please try later.');
+                    // Close loading toast
+                    toast.dismiss(loadingToastId);
+                    
+                    // Show error toast
+                    toast.error('Failed to submit vehicle. Please try again later.');
+                    console.error('Retry submission failed:', retryError);
                   }
                 }}
               >
                 Retry
               </button>
             </div>
-            </div>,
-            {
-              position: 'top-right',
+          </div>,
+          {
+            position: 'top-right',
             autoClose: false,
             closeOnClick: false
           }
         );
-        } else {
+      } else {
         toast.error(`Submission failed: ${error.message || 'Unknown error'}`, {
           position: 'top-right',
           autoClose: 5000
@@ -1012,82 +1192,6 @@ const SellVehicle = () => {
             Get the best price for your two-wheeler in just a few easy steps
           </p>
         </div>
-
-        {/* Quick history component */}
-        <div className="mb-6 flex justify-between items-center">
-          {quickHistory.length > 0 && (
-            <button
-              onClick={() => setShowQuickHistory(true)}
-              className="flex items-center text-[#FF5733] hover:text-[#ff4019] transition-colors"
-            >
-              <Clock className="w-4 h-4 mr-1" />
-              Recently Viewed Vehicles
-            </button>
-          )}
-        </div>
-        
-        {/* Quick history popup */}
-        {showQuickHistory && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-800">Recent Vehicles</h3>
-                <button 
-                  onClick={() => setShowQuickHistory(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              
-              <div className="space-y-3">
-                {quickHistory.map(item => (
-                  <Link
-                    key={item.vehicleId}
-                    to={`/sell-vehicle/${item.vehicleId}/summary`}
-                    className="flex items-center p-3 hover:bg-gray-50 rounded-lg transition-colors"
-                    onClick={() => setShowQuickHistory(false)}
-                  >
-                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mr-3">
-                      {item.summary?.thumbnail ? (
-                        <SafeImage
-                          src={item.summary.thumbnail}
-                          alt={`${item.summary.brand} ${item.summary.model}`}
-                          className="w-10 h-10 rounded-full object-cover"
-                          vehicleId={item.vehicleId}
-                          fallbackComponent={<Bike className="w-6 h-6 text-gray-400" />}
-                        />
-                      ) : (
-                        <Bike className="w-6 h-6 text-gray-400" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-800">
-                        {item.summary.brand} {item.summary.model}
-                      </div>
-                      <div className="text-xs text-gray-500 flex items-center">
-                        <Tag className="w-3 h-3 mr-1" />
-                        {item.summary.registration_number || 'Unknown'}
-                      </div>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-gray-400" />
-                  </Link>
-                ))}
-                
-                <div className="pt-3 border-t mt-3">
-                  <Link
-                    to="/previous-vehicles"
-                    className="text-[#FF5733] hover:text-[#ff4019] transition-colors text-sm flex items-center justify-center"
-                    onClick={() => setShowQuickHistory(false)}
-                  >
-                    View All Vehicles
-                    <ChevronRight className="w-4 h-4 ml-1" />
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {isAuthenticated && hasPreviousVehicles && showPreviousVehicles && (
           <PreviousVehicles onClose={() => setShowPreviousVehicles(false)} />

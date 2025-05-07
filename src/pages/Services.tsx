@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Wrench, ArrowRight, Bike, Settings, Search } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { categoryService } from '../services/apiService';
 
 interface ServiceCategory {
   uuid: string;
@@ -24,33 +25,8 @@ const ServicesPage = () => {
       setError(null);
       
       try {
-        // Base URL from env or default to local Django API
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/service';
-        
-        // This endpoint should match our Django API's URL pattern for service categories
-        const url = `${baseUrl}/service-categories/`;
-        
-        // Check if token exists for authenticated requests
-        const token = localStorage.getItem('accessToken');
-        const headers: HeadersInit = {
-          'Content-Type': 'application/json',
-        };
-        
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-        
-        const response = await fetch(url, {
-          method: 'GET',
-          headers,
-          credentials: 'include'
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch service categories: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
+        // Use the centralized API service
+        const data = await categoryService.getCategories();
         
         if (!Array.isArray(data)) {
           throw new Error('Invalid response format: expected an array of categories');
@@ -62,30 +38,8 @@ const ServicesPage = () => {
         setError(err.message || 'An unexpected error occurred');
         toast.error('Failed to load service categories');
         
-        // Use fallback data for demo if fetch fails
-        setCategories([
-          {
-            uuid: '1',
-            name: 'General Maintenance',
-            slug: 'general-maintenance',
-            image: null,
-            description: 'Regular maintenance services to keep your vehicle running smoothly.'
-          },
-          {
-            uuid: '2',
-            name: 'Engine Service',
-            slug: 'engine-service',
-            image: null,
-            description: 'Complete engine diagnostics and repair services.'
-          },
-          {
-            uuid: '3',
-            name: 'Brake Service',
-            slug: 'brake-service',
-            image: null,
-            description: 'Brake inspection, repair and replacement services.'
-          }
-        ]);
+        // Remove fallback data
+        setCategories([]);
       } finally {
         setLoading(false);
       }
@@ -97,10 +51,13 @@ const ServicesPage = () => {
   const getCategoryIcon = (slug: string) => {
     switch (slug.toLowerCase()) {
       case 'general-maintenance':
+      case 'general-services':
         return <Wrench className="h-10 w-10 text-[#FF5733]" />;
       case 'engine-service':
+      case 'engine':
         return <Settings className="h-10 w-10 text-[#FF5733]" />;
       case 'brake-service':
+      case 'periodic-service':
         return <Bike className="h-10 w-10 text-[#FF5733]" />;
       default:
         return <Wrench className="h-10 w-10 text-[#FF5733]" />;
@@ -111,7 +68,7 @@ const ServicesPage = () => {
     ? categories 
     : categories.filter(category => 
         category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        category.description.toLowerCase().includes(searchQuery.toLowerCase())
+        (category.description && category.description.toLowerCase().includes(searchQuery.toLowerCase()))
       );
   
   return (
@@ -173,7 +130,11 @@ const ServicesPage = () => {
                     {getCategoryIcon(category.slug)}
                     <h2 className="ml-4 text-xl font-bold text-gray-900">{category.name}</h2>
                   </div>
-                  <p className="text-gray-600 mb-6 line-clamp-3">{category.description}</p>
+                  <p className="text-gray-600 mb-6 line-clamp-3">
+                    {category.description && category.description.length > 0 
+                      ? category.description 
+                      : "No description available"}
+                  </p>
                   <Link
                     to={`/services/${category.uuid}`}
                     className="flex items-center text-[#FF5733] font-medium hover:text-[#E64A19] transition-colors"
@@ -197,4 +158,4 @@ const ServicesPage = () => {
   );
 };
 
-export default ServicesPage; 
+export default ServicesPage;

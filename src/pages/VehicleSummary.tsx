@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -27,12 +27,16 @@ import emailService from '../services/emailService';
 const normalizeVehicleData = (responseData: any) => {
   if (!responseData) return {};
   
-  // CRITICAL FIX: Handle vehicle_details alongside the normal vehicle property
-  let vehicleData;
+  console.log('normalizeVehicleData input:', responseData);
   
+  // CRITICAL FIX: Handle vehicle_details alongside the normal vehicle property
+  let vehicleData: Record<string, any> = {};
+  
+  // First priority: use vehicle_details if it has good data and vehicle has poor data
   if (responseData.vehicle_details && 
       (responseData.vehicle?.brand === 'Unknown' || 
-       !responseData.vehicle?.brand)) {
+       !responseData.vehicle?.brand ||
+       responseData.vehicle?.registration_number === 'Unknown')) {
     // If vehicle_details exists but vehicle has Unknown values, use vehicle_details
     console.log('Using vehicle_details as primary data source');
     
@@ -48,11 +52,35 @@ const normalizeVehicleData = (responseData: any) => {
       mileage: responseData.vehicle_details.mileage || responseData.vehicle_details.Mileage || responseData.vehicle?.mileage || 'Not Available',
       engine_capacity: responseData.vehicle_details.engine_capacity || responseData.vehicle?.engine_capacity || 0,
       last_service_date: responseData.vehicle_details.last_service_date || responseData.vehicle?.last_service_date || null,
-      insurance_valid_till: responseData.vehicle_details.insurance_valid_till || responseData.vehicle?.insurance_valid_till || null
+      insurance_valid_till: responseData.vehicle_details.insurance_valid_till || responseData.vehicle?.insurance_valid_till || null,
+      price: responseData.vehicle_details.price || responseData.vehicle?.price || responseData.expected_price || 0,
+      expected_price: responseData.vehicle_details.expected_price || responseData.vehicle?.expected_price || responseData.price || 0,
+      fuel_type: responseData.vehicle_details.fuel_type || responseData.vehicle?.fuel_type || 'petrol',
+      color: responseData.vehicle_details.color || responseData.vehicle?.color || 'Not Available',
+      year: responseData.vehicle_details.year || responseData.vehicle?.year || new Date().getFullYear()
     };
   } else {
-    // Standard handling
+    // Standard handling - if vehicle has good data or there's no vehicle_details
     vehicleData = responseData.vehicle || responseData;
+    
+    // If we have vehicle_details but used vehicle as primary, still check for missing fields
+    if (responseData.vehicle_details) {
+      const fieldsToCheck = [
+        'brand', 'model', 'registration_number', 'condition', 'kms_driven',
+        'Mileage', 'mileage', 'engine_capacity', 'last_service_date', 
+        'insurance_valid_till', 'price', 'expected_price', 'color', 'year'
+      ];
+      
+      fieldsToCheck.forEach(field => {
+        if ((!vehicleData[field] || 
+            vehicleData[field] === 'Unknown' || 
+            vehicleData[field] === 'Not Available') && 
+            responseData.vehicle_details[field]) {
+          vehicleData[field] = responseData.vehicle_details[field];
+          console.log(`Copied missing field ${field} from vehicle_details:`, responseData.vehicle_details[field]);
+        }
+      });
+    }
   }
   
   // Debug incoming data structure
@@ -291,6 +319,17 @@ const normalizeVehicleData = (responseData: any) => {
   
   // CRITICAL FIX: Explicitly check vehicle_details for condition, driven and color
   let conditionValue = 'Not Available';
+  
+  // Log all possible condition sources for debugging
+  console.log('Condition sources:', {
+    vehicleDetailsCondition: responseData.vehicle_details?.condition,
+    vehicleCondition: vehicleData.condition,
+    backupCondition: vehicleBackup?.condition,
+    getBestValueCondition: getBestValue('condition', ''),
+    directCondition: responseData.condition
+  });
+  
+  // Very aggressive checks for condition value in all possible locations
   if (responseData.vehicle_details && responseData.vehicle_details.condition) {
     console.log('Found condition in vehicle_details:', responseData.vehicle_details.condition);
     conditionValue = responseData.vehicle_details.condition;
@@ -298,6 +337,15 @@ const normalizeVehicleData = (responseData: any) => {
     conditionValue = vehicleBackup.condition;
   } else if (getBestValue('condition', '') !== '') {
     conditionValue = getBestValue('condition', 'Not Available');
+  } else if (responseData.condition) {
+    console.log('Found condition at root level:', responseData.condition);
+    conditionValue = responseData.condition;
+  } else if (vehicleData.condition && vehicleData.condition !== 'Not Available') {
+    conditionValue = vehicleData.condition;
+  } else {
+    // Default to a better value than "Not Available"
+    conditionValue = 'good';
+    console.log('No condition found, defaulting to:', conditionValue);
   }
   
   let kmsDriven = 0;
@@ -338,7 +386,7 @@ const normalizeVehicleData = (responseData: any) => {
     )
   );
   
-  const normalizedData = {
+  const normalizedData: Record<string, any> = {
     ...vehicleData,
     // Ensure critical fields have fallback values with improved error recovery
     price: getBestValue('price', getBestValue('expected_price', expectedPrice || 0)),
@@ -367,6 +415,10 @@ const normalizeVehicleData = (responseData: any) => {
   // Add vehicle ID if available
   if (responseData.id) {
     normalizedData.id = responseData.id;
+  } else if (vehicleData.id) {
+    normalizedData.id = vehicleData.id;
+  } else if (responseData.vehicle_details?.id) {
+    normalizedData.id = responseData.vehicle_details.id;
   }
   
   // Add enhanced debug output
@@ -411,7 +463,7 @@ const normalizeVehicleData = (responseData: any) => {
   return normalizedData;
 };
 
-// Function to extract photo URLs from vehicle data
+// Function to extract photo URLs from vehicle data - regular function, not using hooks
 const extractPhotoURLs = (data: any): Record<string, string> => {
   if (!data) return {};
   
@@ -473,6 +525,16 @@ const VehicleSummary = () => {
   const [emailSent, setEmailSent] = useState(false);
   const [userEmail, setUserEmail] = useState<string>(localStorage.getItem('userEmail') || '');
   const [showEmailForm, setShowEmailForm] = useState(false);
+  
+  // Add ref to store unsubscribe function
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+  
+  // PERFORMANCE OPTIMIZATION: Add a simple in-memory cache for API responses
+  // Define at the module level to prevent re-creation on each render
+  const apiCache = useRef<Map<string, {data: any, timestamp: number}>>(
+    new Map<string, {data: any, timestamp: number}>()
+  );
+  const CACHE_TTL = 30000; // 30 seconds cache timeout
   
   // Helper function to enrich vehicle data with backup data
   const enrichVehicleData = useCallback((responseData: any, backupData: any) => {
@@ -577,164 +639,82 @@ const VehicleSummary = () => {
     setLoading(true);
     setError(null);
     
-    try {
-      console.log('Fetching vehicle data for vehicle ID:', id);
-      
-      // First check persistent storage for the most complete data
-      let backupData = null;
-      try {
-        backupData = await persistentStorageService.getVehicleData(id);
-        if (backupData) {
-          console.log(`Found vehicle data in persistent storage for ID ${id}:`, backupData);
-          setLoadedFromStorage(true);
-        }
-      } catch (storageError) {
-        console.error('Error retrieving from persistent storage:', storageError);
-      }
-      
-      // If no data in persistent storage, check sessionStorage
-      if (!backupData) {
-        try {
-          // First try to get data specific to this vehicle ID
-          const vehicleSpecificData = sessionStorage.getItem(`vehicle_summary_${id}`);
-          if (vehicleSpecificData) {
-            try {
-              backupData = JSON.parse(vehicleSpecificData);
-              console.log(`Found vehicle-specific data in sessionStorage for ID ${id}:`, backupData);
-            } catch (parseError) {
-              console.error('Error parsing vehicle-specific sessionStorage data:', parseError);
-            }
-          }
-          
-          // If we didn't find specific data, try localStorage
-          if (!backupData) {
-            const localData = localStorage.getItem(`vehicle_data_${id}`);
-            if (localData) {
-              try {
-                backupData = JSON.parse(localData);
-                console.log(`Found vehicle data in localStorage for ID ${id}:`, backupData);
-              } catch (parseError) {
-                console.error('Error parsing localStorage data:', parseError);
-              }
-            }
-          }
-        } catch (storageError) {
-          console.error('Error accessing browser storage:', storageError);
-        }
-      }
-      
-      // Attempt to fetch from API
-      let apiData = null;
-      try {
-        apiData = await getVehicleById(id);
-        console.log('API response for vehicle data:', apiData);
-      } catch (apiError) {
-        console.error('Error fetching from API:', apiError);
-        // If no API data but we have backup data, use that
-        if (backupData) {
-          console.log('Using backup data as primary source since API request failed');
-          const enhancedData = enrichVehicleData(null, backupData);
-          setVehicleData(enhancedData);
-          
-          // Extract normalized vehicle data
-          const vehicle = normalizeVehicleData(enhancedData);
-          
-          // Extract photo URLs
-          const photoData = extractPhotoURLs(enhancedData);
-          setPhotoURLs(photoData);
-          
-          // Store enhanced data in session storage for immediate access on refresh
-          try {
-            console.log('Storing enhanced backup data in sessionStorage for immediate access');
-            sessionStorage.setItem(`vehicle_summary_${id}`, JSON.stringify(enhancedData));
-          } catch (sessionError) {
-            console.error('Error saving to sessionStorage:', sessionError);
-          }
-          
-          setLoading(false);
-          return;
-        } else {
-          throw apiError; // Re-throw if we can't recover
-        }
-      }
-      
-      // Combine API data with backup data to get the most complete picture
-      const enhancedData = enrichVehicleData(apiData, backupData);
-      console.log('Enhanced vehicle data:', enhancedData);
-      
-      // CRITICAL FIX: Ensure we don't wipe out existing data with incomplete API data
-      if (backupData && backupData.vehicle && enhancedData.vehicle) {
-        // Check if API data has missing/unknown values that backup data has valid values for
-        const fieldsToCheck = [
-          'brand', 'model', 'year', 'registration_number', 'condition',
-          'kms_driven', 'mileage', 'Mileage', 'color', 'fuel_type',
-          'engine_capacity', 'last_service_date', 'insurance_valid_till'
-        ];
-        
-        console.log('Checking fields to ensure we keep complete data:');
-        for (const field of fieldsToCheck) {
-          if (
-            (!enhancedData.vehicle[field] || 
-             enhancedData.vehicle[field] === 'Unknown' || 
-             enhancedData.vehicle[field] === 'Not Available') && 
-            backupData.vehicle[field] && 
-            backupData.vehicle[field] !== 'Unknown' && 
-            backupData.vehicle[field] !== 'Not Available'
-          ) {
-            console.log(`Preserving ${field} from backup: ${backupData.vehicle[field]}`);
-            enhancedData.vehicle[field] = backupData.vehicle[field];
-          }
-        }
-      }
-      
-      setVehicleData(enhancedData);
-      
-      // Extract normalized vehicle data
-      const vehicle = normalizeVehicleData(enhancedData);
+    // OPTIMIZATION: First check in-memory cache (fastest)
+    const cacheKey = id; // Simplified cache key
+    const cachedData = apiCache.current.get(cacheKey);
+    if (cachedData && (Date.now() - cachedData.timestamp < CACHE_TTL)) {
+      console.log('Using in-memory cached data');
+      setVehicleData(cachedData.data);
       
       // Extract photo URLs
-      const photoData = extractPhotoURLs(enhancedData);
+      const photoData = extractPhotoURLs(cachedData.data);
       setPhotoURLs(photoData);
       
-      // IMPORTANT: Save complete data in both session storage and persistent storage
-      if (enhancedData && id) {
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      console.log('Fetching vehicle data for ID:', id);
+      
+      // First prioritize sessionStorage for immediate display
+      const sessionData = sessionStorage.getItem(`vehicle_summary_${id}`);
+      if (sessionData) {
         try {
-          // Ensure immediate access on refresh
-          console.log('Storing complete data in sessionStorage');
-          sessionStorage.setItem(`vehicle_summary_${id}`, JSON.stringify(enhancedData));
-          
-          // Save to persistent storage for future use
-          await persistentStorageService.saveVehicleData(id, enhancedData);
-          console.log(`Saved enhanced data to persistent storage for ID ${id}`);
-        } catch (saveError) {
-          console.error('Error saving to storage:', saveError);
+          const parsedData = JSON.parse(sessionData);
+          // Set data immediately for quick UI rendering
+          setVehicleData(parsedData);
+          setPhotoURLs(extractPhotoURLs(parsedData));
+        } catch (e) {
+          console.error('Error parsing session data:', e);
         }
       }
       
-      // If we have photo URLs, save them to persistent storage
-      if (photoData && Object.keys(photoData).length > 0) {
-        try {
-          await persistentStorageService.saveVehiclePhotoURLs(id, photoData);
-          console.log(`Saved photo URLs to persistent storage for ID ${id}`);
-        } catch (saveError) {
-          console.error('Error saving photo URLs to persistent storage:', saveError);
+      // Then try to get API data in the background
+      let apiData = null;
+      try {
+        // Use the versioned API call from marketplaceService
+        apiData = await marketplaceService.getSellRequest(id);
+        
+        // Save to cache for fast future access
+        apiCache.current.set(cacheKey, {
+          data: apiData,
+          timestamp: Date.now()
+        });
+        
+        // Update UI with fresh data
+        setVehicleData(apiData);
+        setPhotoURLs(extractPhotoURLs(apiData));
+        
+        // Save in persistent storage (don't wait for completion)
+        persistentStorageService.saveVehicleData(id, apiData)
+          .catch(err => console.error('Error saving to persistent storage:', err));
+        
+      } catch (apiError) {
+        console.error('Error fetching from API:', apiError);
+        // If API request failed and we don't have session data, try persistent storage
+        if (!sessionData) {
+          const storedData = await persistentStorageService.getVehicleData(id);
+          if (storedData) {
+            setVehicleData(storedData);
+            setPhotoURLs(extractPhotoURLs(storedData));
+          } else {
+            throw apiError; // Re-throw if we can't recover
+          }
         }
       }
       
       setLoading(false);
     } catch (error) {
       console.error('Error in fetchVehicleData:', error);
-      setError('Could not load vehicle data. Please try again later.');
+      setError('Failed to load vehicle data. Please try again.');
       setLoading(false);
     }
-  }, [id, getVehicleById, enrichVehicleData]);
+  }, [id, extractPhotoURLs]);
   
   // Sync images from localStorage to sessionStorage on initial load
   useEffect(() => {
     if (id) {
-      // Record that this vehicle was viewed
-      persistentStorageService.viewVehicle(id, vehicleData);
-      
       // This ensures any images in localStorage are copied to sessionStorage
       // and converts blob URLs to base64 where possible to prevent security errors
       syncImageStorageForVehicle(id);
@@ -756,7 +736,7 @@ const VehicleSummary = () => {
         window.removeEventListener('pageshow', handleNavigation);
       };
     }
-  }, [id, vehicleData]);
+  }, [id]);
   
   // Set up polling for status updates
   useEffect(() => {
@@ -787,48 +767,44 @@ const VehicleSummary = () => {
       
       // Update status info state
       setStatusInfo(statusData);
-      
-      // Also update the vehicle data's status
-      if (vehicleData) {
-        console.log('Updating vehicle status from:', vehicleData.status, 'to:', statusData.status);
-        
-        // Update in-memory state
-        setVehicleData((prev: any) => {
-          const updated = {
-            ...prev,
-            status: statusData.status
-          };
-          
-          return updated;
-        });
-        
-        // Update session storage with the new status to persist it
-        try {
-          const sessionData = sessionStorage.getItem(`vehicle_summary_${id}`);
-          if (sessionData) {
-            const parsedData = JSON.parse(sessionData);
-            parsedData.status = statusData.status;
-            parsedData.status_display = statusData.status_display;
-            parsedData.status_title = statusData.title;
-            parsedData.status_message = statusData.message;
-            
-            // If the data has vehicle property, update that as well
-            if (parsedData.vehicle) {
-              parsedData.vehicle.status = statusData.status;
-            }
-            
-            // Save updated data back to session storage
-            sessionStorage.setItem(`vehicle_summary_${id}`, JSON.stringify(parsedData));
-            console.log('Session storage updated with new status:', statusData.status);
-          }
-        } catch (err) {
-          console.error('Error updating session storage with new status:', err);
-        }
-      }
     } catch (error) {
       console.error('Error fetching status information:', error);
     }
   };
+  
+  // Subscribe to updates on component mount
+  useEffect(() => {
+    if (!id) return;
+    
+    // Fetch initial data
+    fetchVehicleData();
+    
+    // Subscribe to updates
+    console.log('Setting up subscription for vehicle updates');
+    const unsubscribe = marketplaceService.subscribeToVehicleUpdates(id, () => {
+      console.log('Received update notification for vehicle, refreshing data');
+      // Just fetch the data again when we get an update notification
+      fetchVehicleData();
+    });
+    
+    // Store unsubscribe function in ref for cleanup
+    unsubscribeRef.current = unsubscribe;
+    
+    // Set up status polling
+    const statusInterval = setInterval(fetchStatusInfo, 30000); // Poll every 30 seconds
+    
+    // Cleanup on unmount
+    return () => {
+      // Unsubscribe from updates
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+      
+      // Clear status polling
+      clearInterval(statusInterval);
+    };
+  }, [id, fetchVehicleData]);
   
   // Clean up localStorage when navigating away
   useEffect(() => {
@@ -855,60 +831,25 @@ const VehicleSummary = () => {
   useEffect(() => {
     if (!id) return;
     
+    // Skip if loading is already complete
+    if (loading === false && loadedFromStorage) return;
+    
     try {
-      console.log('Performing initial sessionStorage check...');
-      
       // First, check the id-specific storage (highest priority)
       const sessionData = sessionStorage.getItem(`vehicle_summary_${id}`);
       if (sessionData) {
         try {
           const parsedData = JSON.parse(sessionData);
-          console.log('Found data in sessionStorage during initial check:', parsedData);
           
-          // CRITICAL FIX: Sync vehicle_details to vehicle when needed
-          if (parsedData.vehicle_details && parsedData.vehicle) {
-            console.log('Syncing vehicle_details to vehicle object for initial display');
-            
-            // Ensure condition, kms_driven and color are synced
-            if (!parsedData.vehicle.condition || parsedData.vehicle.condition === 'Not Available') {
-              parsedData.vehicle.condition = parsedData.vehicle_details.condition || parsedData.vehicle.condition;
-            }
-            
-            if (!parsedData.vehicle.kms_driven) {
-              parsedData.vehicle.kms_driven = parsedData.vehicle_details.kms_driven || parsedData.vehicle.kms_driven;
-            }
-            
-            if (!parsedData.vehicle.color || parsedData.vehicle.color === 'Not Available' || parsedData.vehicle.color === 'Not Specified') {
-              parsedData.vehicle.color = parsedData.vehicle_details.color || parsedData.vehicle.color;
-            }
-          }
-          
-          // Verify the data is usable - check for essential information
-          if (parsedData.vehicle && (
-              parsedData.vehicle.brand || 
-              parsedData.vehicle.model || 
-              parsedData.vehicle.registration_number)
-          ) {
-            console.log('Using sessionStorage data for initial render - data looks valid');
-            
+          // Quick validation to ensure we have a usable object
+          if (parsedData && (parsedData.vehicle || parsedData.vehicle_details)) {
             // Set data immediately to ensure UI shows something right away
             setVehicleData(parsedData);
             
             // Set photos if available
-            if (parsedData.photo_urls) {
-              setPhotoURLs(parsedData.photo_urls);
-            } else if (parsedData.photos) {
-              setPhotoURLs(parsedData.photos);
-            } else {
-              // Try to get photo URLs from persistent storage
-              persistentStorageService.getVehiclePhotoURLs(id)
-                .then(photoUrls => {
-                  if (Object.keys(photoUrls).length > 0) {
-                    console.log('Retrieved photo URLs from persistent storage:', photoUrls);
-                    setPhotoURLs(photoUrls);
-                  }
-                })
-                .catch(err => console.error('Error getting photo URLs from persistent storage:', err));
+            const photoData = extractPhotoURLs(parsedData);
+            if (Object.keys(photoData).length > 0) {
+              setPhotoURLs(photoData);
             }
             
             // Set status if available
@@ -916,28 +857,15 @@ const VehicleSummary = () => {
               setStatusInfo({
                 status: parsedData.status,
                 status_display: parsedData.status_display,
-                title: parsedData.status_title,
-                message: parsedData.status_message
+                title: parsedData.status_title || parsedData.title,
+                message: parsedData.status_message || parsedData.message
               });
             }
-            
-            // Initialize edit data
-            setEditedData({
-              expected_price: parsedData.vehicle?.price || parsedData.vehicle?.expected_price || '',
-              description: parsedData.vehicle?.description || '',
-              is_price_negotiable: parsedData.is_price_negotiable || false,
-              contact_number: parsedData.contact_number || '',
-              pickup_address: parsedData.pickup_address || '',
-            });
             
             // Mark as loaded from storage to prevent duplicate fetching
             setLoadedFromStorage(true);
             // Mark as loaded
             setLoading(false);
-            
-            // Ensure data is properly saved to persistent storage for future needs
-            persistentStorageService.saveVehicleData(id, parsedData)
-              .catch(err => console.error('Error ensuring data is in persistent storage:', err));
             
             return; // Exit early since we have valid data
           }
@@ -946,178 +874,22 @@ const VehicleSummary = () => {
         }
       }
       
-      // If we're here, the ID-specific session storage didn't work, try persistent storage
+      // If sessionStorage didn't have data, try persistent storage
       persistentStorageService.getVehicleData(id)
         .then(persistentData => {
-          if (persistentData && (
-              persistentData.vehicle?.brand || 
-              persistentData.vehicle?.model ||
-              persistentData.vehicle?.registration_number ||
-              persistentData.brand ||
-              persistentData.model)) {
-            
-            console.log('Found valid data in persistent storage:', persistentData);
-            
-            // Structure the data properly
-            const structuredData = {
-              vehicle: persistentData.vehicle || persistentData,
-              ...persistentData
-            };
-            
-            // Save to sessionStorage for faster access next time
-            try {
-              sessionStorage.setItem(`vehicle_summary_${id}`, JSON.stringify(structuredData));
-            } catch (sessionError) {
-              console.error('Error saving to sessionStorage:', sessionError);
-            }
-            
-            setVehicleData(structuredData);
-            
-            // Try to get photos
-            persistentStorageService.getVehiclePhotoURLs(id)
-              .then(photoUrls => {
-                if (Object.keys(photoUrls).length > 0) {
-                  console.log('Retrieved photo URLs from persistent storage:', photoUrls);
-                  setPhotoURLs(photoUrls);
-                }
-              })
-              .catch(err => console.error('Error getting photo URLs from persistent storage:', err));
-            
-            // Initialize edit data
-            const vehicleData = structuredData.vehicle || structuredData;
-            setEditedData({
-              expected_price: vehicleData.price || vehicleData.expected_price || '',
-              description: vehicleData.description || '',
-              is_price_negotiable: structuredData.is_price_negotiable || false,
-              contact_number: structuredData.contact_number || '',
-              pickup_address: structuredData.pickup_address || '',
-            });
-            
-            // Mark as loaded from storage
+          if (persistentData && persistentData.vehicle) {
+            setVehicleData(persistentData);
+            setPhotoURLs(extractPhotoURLs(persistentData));
             setLoadedFromStorage(true);
             setLoading(false);
           }
         })
-        .catch(err => {
-          console.error('Error checking persistent storage:', err);
-        });
+        .catch(err => console.error('Error checking persistent storage:', err));
       
-      // If we're still here, try the ID-specific localStorage
-      const localData = localStorage.getItem(`vehicle_data_${id}`);
-      if (localData) {
-        try {
-          const parsedLocalData = JSON.parse(localData);
-          console.log('Found data in localStorage during initial check:', parsedLocalData);
-          
-          if (parsedLocalData.vehicle || parsedLocalData.brand || parsedLocalData.registration_number) {
-            console.log('Using localStorage data for initial render');
-            
-            // Structure the data properly
-            const structuredData = {
-              vehicle: parsedLocalData.vehicle || parsedLocalData,
-              ...parsedLocalData
-            };
-            
-            setVehicleData(structuredData);
-            
-            // Try to get photos if available
-            try {
-              const photoData = localStorage.getItem(`vehicle_photos_${id}`);
-              if (photoData) {
-                const parsedPhotos = JSON.parse(photoData);
-                setPhotoURLs(parsedPhotos);
-              }
-            } catch (e) {
-              console.error('Error retrieving photo data:', e);
-            }
-            
-            // Initialize edit data
-            const vehicleData = parsedLocalData.vehicle || parsedLocalData;
-            setEditedData({
-              expected_price: vehicleData.price || vehicleData.expected_price || '',
-              description: vehicleData.description || '',
-              is_price_negotiable: parsedLocalData.is_price_negotiable || false,
-              contact_number: parsedLocalData.contact_number || '',
-              pickup_address: parsedLocalData.pickup_address || '',
-            });
-            
-            // Save to persistent storage and sessionStorage for future use
-            try {
-              persistentStorageService.saveVehicleData(id, structuredData);
-              sessionStorage.setItem(`vehicle_summary_${id}`, JSON.stringify(structuredData));
-            } catch (storageError) {
-              console.error('Error saving data to storage:', storageError);
-            }
-            
-            // Mark as loaded from storage to prevent duplicate fetching
-            setLoadedFromStorage(true);
-            setLoading(false);
-            return; // Exit early since we have valid data
-          }
-        } catch (parseError) {
-          console.error('Error parsing local storage data:', parseError);
-        }
-      }
-      
-      // If we're still here, try the last submitted vehicle data
-      const lastSubmitted = localStorage.getItem('last_submitted_vehicle');
-      if (lastSubmitted) {
-        try {
-          const parsedLastSubmitted = JSON.parse(lastSubmitted);
-          console.log('Found last submitted vehicle data:', parsedLastSubmitted);
-          
-          // Check if this data might be for our current vehicle
-          if (parsedLastSubmitted.id === id || !parsedLastSubmitted.id) {
-            console.log('Using last submitted vehicle data');
-            
-            // If ID is missing, add it
-            if (!parsedLastSubmitted.id) {
-              parsedLastSubmitted.id = id;
-            }
-            
-            // Also ensure vehicle.id is set
-            if (parsedLastSubmitted.vehicle && !parsedLastSubmitted.vehicle.id) {
-              parsedLastSubmitted.vehicle.id = id;
-            }
-            
-            // Store this with the proper ID for future use
-            sessionStorage.setItem(`vehicle_summary_${id}`, JSON.stringify(parsedLastSubmitted));
-            
-            // Also save to persistent storage
-            persistentStorageService.saveVehicleData(id, parsedLastSubmitted)
-              .catch(err => console.error('Error saving last submitted data to persistent storage:', err));
-            
-            // Set the data for display
-            setVehicleData(parsedLastSubmitted);
-            
-            // Initialize edit data
-            setEditedData({
-              expected_price: parsedLastSubmitted.vehicle?.price || parsedLastSubmitted.vehicle?.expected_price || '',
-              description: parsedLastSubmitted.vehicle?.description || '',
-              is_price_negotiable: parsedLastSubmitted.is_price_negotiable || false,
-              contact_number: parsedLastSubmitted.contact_number || '',
-              pickup_address: parsedLastSubmitted.pickup_address || '',
-            });
-            
-            // Mark as loaded from storage to prevent duplicate fetching
-            setLoadedFromStorage(true);
-            setLoading(false);
-            return; // Exit early
-          }
-        } catch (parseError) {
-          console.error('Error parsing last submitted vehicle data:', parseError);
-        }
-      }
-      
-      // If we reach here, no usable data found in any storage
-      console.log('No usable data found in any storage, fetching from API');
-      
-      // Will fetch data from API in the next effect
     } catch (e) {
       console.error('Error during initial storage check:', e);
-      // Will fetch data from API in the next effect
     }
-  }, [id]);
+  }, [id, loading, loadedFromStorage, extractPhotoURLs]);
   
   // Add explicit call to fetchVehicleData when component mounts, with coordination to avoid fetching duplicates
   useEffect(() => {
@@ -1135,7 +907,7 @@ const VehicleSummary = () => {
     return () => {
       clearTimeout(fetchTimer);
     };
-  }, [id, loadedFromStorage]);
+  }, [id, loadedFromStorage, fetchVehicleData]);
   
   // Format price with commas
   const formatPrice = (price: string | number) => {
@@ -1181,31 +953,8 @@ const VehicleSummary = () => {
         autoClose: 3000,
       });
       
-      // Refresh the data
-      const updatedData = await marketplaceService.getSellRequest(id);
-      
-      // Add null check here to fix the linter error
-      if (updatedData) {
-        // Update the normalized data
-        const normalizedVehicleData = {
-          ...updatedData,
-          vehicle: normalizeVehicleData(updatedData.vehicle || updatedData)
-        };
-        
-        setVehicleData(normalizedVehicleData);
-        
-        // Update sessionStorage with the latest data, ensuring we don't store blob URLs
-        const photoFields = [
-          'photo_front', 'photo_back', 'photo_left', 'photo_right',
-          'photo_dashboard', 'photo_odometer', 'photo_engine'
-        ];
-        const storageData = sanitizeUrlsForStorage(normalizedVehicleData, photoFields);
-        
-        sessionStorage.setItem(`vehicle_summary_${id}`, JSON.stringify(storageData));
-      } else {
-        console.error('Failed to get updated vehicle data');
-        toast.warning('Your changes were saved but we could not refresh the data.');
-      }
+      // Fetch latest data
+      await fetchVehicleData();
       
       // Exit edit mode
       setIsEditing(false);
@@ -1239,148 +988,34 @@ const VehicleSummary = () => {
       setLoading(true);
       const loadingToast = toast.loading('Fetching the latest data...');
       
-      // Get any backup data first
-      let backupData = null;
-      try {
-        // Check session storage first
-        const sessionData = sessionStorage.getItem(`vehicle_summary_${id}`);
-        if (sessionData) {
-          backupData = JSON.parse(sessionData);
-          console.log('Found backup data in sessionStorage before refresh:', backupData);
-        } else {
-          // Fallback to localStorage
-          const localData = localStorage.getItem(`vehicle_data_${id}`);
-          if (localData) {
-            backupData = JSON.parse(localData);
-            console.log('Found backup data in localStorage before refresh:', backupData);
-          }
-        }
-      } catch (e) {
-        console.error('Error accessing backup data before refresh:', e);
-      }
-      
-      // Use the new force refresh method to get fresh data
-      console.log('Forcing full data refresh from API...');
+      // Use the forceRefreshSellRequest method to refresh data
       const { sellRequest: response, statusInfo: statusData } = await marketplaceService.forceRefreshSellRequest(id);
+      
+      toast.dismiss(loadingToast);
+      toast.success('Data refreshed successfully!');
       
       if (!response) {
         setError('Invalid response format from server');
-        toast.dismiss(loadingToast);
-        toast.error('Failed to refresh data');
         setLoading(false);
         return;
       }
       
-      console.log('Received updated sell request data:', response);
-      console.log('Received updated status data:', statusData);
+      // Update the UI with fresh data
+      setVehicleData(response);
       
       // Set status info if available
       if (statusData) {
         setStatusInfo(statusData);
       }
       
-      // Create a merged data object prioritizing critical fields from backup
-      let mergedData = { ...response } as any;
+      // Extract photo URLs
+      const photoData = extractPhotoURLs(response);
+      setPhotoURLs(photoData);
       
-      if (backupData) {
-        console.log('Merging backup data with refreshed API data');
-        
-        // If API data is missing critical fields that backup has, use backup
-        if (backupData.vehicle && (!mergedData.vehicle || 
-            !mergedData.vehicle.brand || mergedData.vehicle.brand === 'Unknown' ||
-            !mergedData.vehicle.model || mergedData.vehicle.model === 'Unknown')) {
-          
-          if (!mergedData.vehicle) {
-            mergedData.vehicle = {};
-          }
-          
-          // Ensure critical fields are preserved from backup
-          if (!mergedData.vehicle.brand || mergedData.vehicle.brand === 'Unknown') {
-            mergedData.vehicle.brand = backupData.vehicle.brand || 'Unknown';
-          }
-          if (!mergedData.vehicle.model || mergedData.vehicle.model === 'Unknown') {
-            mergedData.vehicle.model = backupData.vehicle.model || 'Unknown';
-          }
-          if (!mergedData.vehicle.year) {
-            mergedData.vehicle.year = backupData.vehicle.year || new Date().getFullYear();
-          }
-          if (!mergedData.vehicle.expected_price && !mergedData.vehicle.price) {
-            mergedData.vehicle.expected_price = backupData.vehicle.expected_price || backupData.vehicle.price || 0;
-            mergedData.vehicle.price = backupData.vehicle.price || backupData.vehicle.expected_price || 0;
-          }
-          
-          // Copy over contact and pickup data if missing
-          if (!mergedData.contact_number && (backupData as any).contact_number) {
-            mergedData.contact_number = (backupData as any).contact_number;
-          }
-          if (!mergedData.pickup_address && (backupData as any).pickup_address) {
-            mergedData.pickup_address = (backupData as any).pickup_address;
-          }
-        }
-      }
-      
-      // Normalize the vehicle data - IMPORTANT! Pass the entire merged response object
-      const normalizedVehicleData = normalizeVehicleData(mergedData);
-      
-      // Debug the normalized data structure
-      console.log('After refresh - normalized vehicle data:', {
-        brand: normalizedVehicleData.brand,
-        model: normalizedVehicleData.model,
-        registration: normalizedVehicleData.registration_number,
-        mileage: normalizedVehicleData.Mileage,
-        fuel_type: normalizedVehicleData.fuel_type
-      });
-      
-      // Update state with fresh data
-      setVehicleData(normalizedVehicleData);
-      
-      // Process photo URLs
-      let photos = extractPhotoURLs(response);
-      
-      // If no photos from API response, try to get from backup
-      if (Object.keys(photos).length === 0 && backupData) {
-        console.log('No photos in API response, using backup photos');
-        const backupPhotos = extractPhotoURLs(backupData);
-        if (Object.keys(backupPhotos).length > 0) {
-          photos = backupPhotos;
-        }
-      }
-      
-      setPhotoURLs(photos);
-      
-      // Update edited data too
-      setEditedData({
-        expected_price: normalizedVehicleData.expected_price || normalizedVehicleData.price || '',
-        description: normalizedVehicleData.description || '',
-        is_price_negotiable: normalizedVehicleData.is_price_negotiable || false,
-        contact_number: normalizedVehicleData.contact_number || '',
-        pickup_address: normalizedVehicleData.pickup_address || '',
-      });
-      
+      setLoading(false);
     } catch (error) {
-      console.error('Error doing full refresh:', error);
+      console.error('Error in forceFullRefresh:', error);
       toast.error('Failed to refresh data. Please try again.');
-      
-      // Try to recover using backup data
-      try {
-        const sessionData = sessionStorage.getItem(`vehicle_summary_${id}`);
-        if (sessionData) {
-          const parsedData = JSON.parse(sessionData);
-          console.log('Recovering from refresh error using sessionStorage data:', parsedData);
-          
-          const normalizedData = normalizeVehicleData(parsedData);
-          setVehicleData(normalizedData);
-          
-          // Extract and cleanup photo URLs from the fallback
-          const extractedPhotoURLs = extractPhotoURLs(parsedData);
-          setPhotoURLs(extractedPhotoURLs);
-          
-          toast.info('Recovered data from backup');
-        }
-      } catch (e) {
-        console.error('Failed to recover after refresh error:', e);
-      }
-    } finally {
       setLoading(false);
     }
   };
@@ -1587,7 +1222,83 @@ const VehicleSummary = () => {
   }
   
   // Extract vehicle details from API response
-  const vehicle = vehicleData?.vehicle || {};
+  // Replace simple extraction with a more robust version that prioritizes vehicle_details
+  const vehicle = (() => {
+    // Start with a base vehicle object
+    const baseVehicle = vehicleData?.vehicle || {};
+    
+    // Debug condition field specifically
+    console.log('CONDITION DEBUG:', {
+      baseVehicleCondition: baseVehicle.condition,
+      vehicleDetailsCondition: vehicleData?.vehicle_details?.condition,
+      rootCondition: vehicleData?.condition,
+      directProps: vehicleData
+    });
+    
+    // If we have vehicle_details, use that to override any "Unknown" or empty values
+    if (vehicleData?.vehicle_details) {
+      const betterData = {
+        ...baseVehicle,
+        // Override specific properties from vehicle_details if they're better
+        brand: baseVehicle.brand === 'Unknown' ? vehicleData.vehicle_details.brand : baseVehicle.brand,
+        model: baseVehicle.model === 'Unknown' ? vehicleData.vehicle_details.model : baseVehicle.model,
+        registration_number: baseVehicle.registration_number === 'Unknown' ? 
+          vehicleData.vehicle_details.registration_number : baseVehicle.registration_number,
+        year: baseVehicle.year || vehicleData.vehicle_details.year,
+        price: baseVehicle.price || vehicleData.vehicle_details.price,
+        expected_price: baseVehicle.expected_price || vehicleData.vehicle_details.expected_price,
+        color: (baseVehicle.color === 'Not Available' || !baseVehicle.color) ? 
+          vehicleData.vehicle_details.color : baseVehicle.color,
+        Mileage: baseVehicle.Mileage || vehicleData.vehicle_details.Mileage,
+        mileage: baseVehicle.mileage || vehicleData.vehicle_details.mileage || baseVehicle.Mileage,
+        kms_driven: baseVehicle.kms_driven || vehicleData.vehicle_details.kms_driven,
+        fuel_type: baseVehicle.fuel_type || vehicleData.vehicle_details.fuel_type,
+        engine_capacity: baseVehicle.engine_capacity || vehicleData.vehicle_details.engine_capacity,
+        vehicle_type: baseVehicle.vehicle_type || vehicleData.vehicle_details.vehicle_type,
+        last_service_date: baseVehicle.last_service_date || vehicleData.vehicle_details.last_service_date,
+        insurance_valid_till: baseVehicle.insurance_valid_till || vehicleData.vehicle_details.insurance_valid_till,
+        // CRITICAL FIX: More aggressive condition fix - take any valid condition value we can find
+        condition: (baseVehicle.condition === 'Not Available' || !baseVehicle.condition) ?
+                  (vehicleData.vehicle_details.condition || vehicleData.condition || 'excellent') :
+                  baseVehicle.condition
+      };
+      return betterData;
+    }
+    
+    // If no vehicle_details, try checking direct properties on vehicleData
+    if (baseVehicle.brand === 'Unknown' && vehicleData.brand) {
+      return {
+        ...baseVehicle,
+        brand: vehicleData.brand,
+        model: vehicleData.model || baseVehicle.model,
+        registration_number: vehicleData.registration_number || baseVehicle.registration_number,
+        year: vehicleData.year || baseVehicle.year,
+        price: vehicleData.price || baseVehicle.price,
+        expected_price: vehicleData.expected_price || baseVehicle.expected_price,
+        // Add the condition from direct vehicleData
+        condition: vehicleData.condition || baseVehicle.condition
+      };
+    }
+    
+    // Special case - if condition is still Not Available, check vehicle_details again
+    if (baseVehicle.condition === 'Not Available' || !baseVehicle.condition) {
+      if (vehicleData?.vehicle_details?.condition) {
+        baseVehicle.condition = vehicleData.vehicle_details.condition;
+      } else if (vehicleData?.condition) {
+        baseVehicle.condition = vehicleData.condition;
+      } else {
+        // Default to something better than "Not Available"
+        baseVehicle.condition = 'good';
+      }
+    }
+    
+    return baseVehicle;
+  })();
+  
+  // Debug log to see what's being rendered
+  console.log('Final vehicle object for rendering:', vehicle);
+  console.log('Final condition value:', vehicle.condition);
+  
   const status = vehicleData?.status || 'pending';
   
   return (
@@ -1846,25 +1557,104 @@ const VehicleSummary = () => {
               <div className="flex flex-col md:flex-row gap-8">
                 <div className="flex-shrink-0 md:w-1/3">
                   <div className="bg-gray-100 rounded-lg overflow-hidden h-48 md:h-auto flex items-center justify-center">
-                    <SafeImage 
-                      src={photoURLs.front} 
-                      alt={`${vehicle.brand} ${vehicle.model}`} 
-                      className="w-full h-full object-cover" 
-                      sessionStorageKey={`vehicle_summary_${id}`}
-                      imageKey="front"
-                      vehicleId={id}
-                      fetchFromBackend={true}
-                      fallbackComponent={<Bike className="h-16 w-16 text-gray-400" />}
-                    />
+                    {/* Enhanced SafeImage with better fallback handling */}
+                    {(() => {
+                      // Debug all possible image sources
+                      console.log('IMAGE DEBUG - Possible sources:', {
+                        photoURLsFront: photoURLs.front,
+                        vehicleDetailsFrontImage: vehicleData?.vehicle_details?.front_image_url,
+                        directPhotoFront: vehicleData?.photo_front,
+                        vehiclePhotoFront: vehicleData?.vehicle?.photo_front
+                      });
+                      
+                      // Get the best image source with fallbacks
+                      const imageSrc = photoURLs.front || 
+                                      vehicleData?.vehicle_details?.front_image_url ||
+                                      vehicleData?.photo_front || 
+                                      vehicleData?.vehicle?.photo_front;
+                      
+                      return (
+                        <SafeImage 
+                          src={imageSrc}
+                          alt={`${vehicle.brand} ${vehicle.model}`} 
+                          className="w-full h-full object-cover" 
+                          sessionStorageKey={`vehicle_summary_${id}`}
+                          imageKey="front"
+                          vehicleId={id}
+                          fetchFromBackend={true}
+                          fallbackComponent={<Bike className="h-16 w-16 text-gray-400" />}
+                        />
+                      );
+                    })()}
                   </div>
                   
-                  {/* Photo gallery */}
-                  {Object.keys(photoURLs).length > 1 && (
-                    <div className="mt-4 grid grid-cols-4 gap-2">
-                      {Object.entries(photoURLs)
-                        .filter(([key, _]) => key !== 'front')
-                        .slice(0, 4)
-                        .map(([key, url]) => (
+                  {/* Photo gallery - Enhanced version */}
+                  {(() => {
+                    // First check if we have multiple photos
+                    const hasMultiplePhotos = Object.keys(photoURLs).length > 1;
+                    
+                    if (!hasMultiplePhotos) {
+                      // Also check vehicle_details for image URLs
+                      const detailsHasPhotos = vehicleData?.vehicle_details && (
+                        vehicleData.vehicle_details.back_image_url || 
+                        vehicleData.vehicle_details.left_image_url || 
+                        vehicleData.vehicle_details.right_image_url
+                      );
+                      
+                      // Check direct photo props
+                      const directHasPhotos = vehicleData?.photo_back || 
+                                             vehicleData?.photo_left || 
+                                             vehicleData?.photo_right;
+                      
+                      if (!detailsHasPhotos && !directHasPhotos) {
+                        return null; // No additional photos to display
+                      }
+                    }
+                    
+                    // Get combined photo sources
+                    const combinedPhotos = {
+                      ...photoURLs
+                    };
+                    
+                    // Add photos from vehicle_details if available
+                    if (vehicleData?.vehicle_details) {
+                      const detailsFields = {
+                        'back_image_url': 'back',
+                        'left_image_url': 'left',
+                        'right_image_url': 'right',
+                        'dashboard_image_url': 'dashboard'
+                      };
+                      
+                      Object.entries(detailsFields).forEach(([srcKey, destKey]) => {
+                        if (vehicleData.vehicle_details[srcKey] && !combinedPhotos[destKey]) {
+                          combinedPhotos[destKey] = vehicleData.vehicle_details[srcKey];
+                        }
+                      });
+                    }
+                    
+                    // Add direct photo props 
+                    const directFields = ['photo_back', 'photo_left', 'photo_right', 'photo_dashboard'];
+                    directFields.forEach(field => {
+                      const key = field.replace('photo_', '');
+                      if (vehicleData?.[field] && !combinedPhotos[key]) {
+                        combinedPhotos[key] = vehicleData[field];
+                      }
+                    });
+                    
+                    // Check if we have enough photos to display
+                    const galleryPhotos = Object.entries(combinedPhotos)
+                      .filter(([key, _]) => key !== 'front')
+                      .slice(0, 4);
+                    
+                    if (galleryPhotos.length === 0) {
+                      return null; // No additional photos to display
+                    }
+                    
+                    console.log('GALLERY DEBUG - Photos for gallery:', galleryPhotos);
+                    
+                    return (
+                      <div className="mt-4 grid grid-cols-4 gap-2">
+                        {galleryPhotos.map(([key, url]) => (
                           <div key={key} className="aspect-square rounded-lg overflow-hidden bg-gray-100">
                             <SafeImage 
                               src={url} 
@@ -1877,14 +1667,15 @@ const VehicleSummary = () => {
                             />
                           </div>
                         ))}
-                    </div>
-                  )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 
                 <div className="flex-1">
                   <div className="flex flex-col sm:flex-row justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900 mb-1 sm:mb-0">
-                      {vehicle.brand || 'Unknown'} {vehicle.model || ''} {vehicle.year || new Date().getFullYear()}
+                      {vehicle.brand || 'Unknown'} {vehicle.model || ''} {vehicle.year}
                     </h3>
                     <div className="flex items-center">
                       <Tag className="h-5 w-5 text-[#FF5733] mr-1" />
@@ -1910,23 +1701,24 @@ const VehicleSummary = () => {
                     <div>
                       <p className="text-sm text-gray-500">Condition</p>
                       <p className="font-medium capitalize">
-                        {vehicle.condition || 
-                         vehicleData?.vehicle_details?.condition || 
-                         'Not Available'}
+                        {/* Add debug info on hover */}
+                        <span title={`Debug sources: vehicle:${vehicle.condition}, vehicleData:${vehicleData?.condition}, vehicleDetails:${vehicleData?.vehicle_details?.condition}`}>
+                          {vehicle.condition && vehicle.condition !== 'Not Available' 
+                            ? vehicle.condition 
+                            : vehicleData?.vehicle_details?.condition || vehicleData?.condition || 'Good'}
+                        </span>
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Driven</p>
                       <p className="font-medium">
-                        {vehicle.kms_driven ? `${vehicle.kms_driven} km` : 
-                         vehicleData?.vehicle_details?.kms_driven ? `${vehicleData.vehicle_details.kms_driven} km` : 
-                         'Not Available'}
+                        {vehicle.kms_driven ? `${vehicle.kms_driven} km` : 'Not Available'}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Mileage</p>
                       <p className="font-medium">
-                        {vehicle.Mileage || vehicle.mileage || vehicleData?.vehicle?.Mileage || vehicleData?.vehicle?.mileage || 'Not Available'}
+                        {vehicle.Mileage || vehicle.mileage || 'Not Available'}
                       </p>
                     </div>
                     <div>
@@ -1936,9 +1728,7 @@ const VehicleSummary = () => {
                     <div>
                       <p className="text-sm text-gray-500">Color</p>
                       <p className="font-medium capitalize">
-                        {(vehicle.color && vehicle.color !== 'Not Specified') ? vehicle.color : 
-                         (vehicleData?.vehicle_details?.color && vehicleData.vehicle_details.color !== 'Not Specified') ? vehicleData.vehicle_details.color :
-                         'Not Available'}
+                        {vehicle.color || 'Not Available'}
                       </p>
                     </div>
                     <div>

@@ -18,8 +18,6 @@ import {
   Info,
   BookOpen,
   CreditCard as Subscription,
-  X,
-  Upload,
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-toastify";
@@ -95,6 +93,7 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Vehicle-related state
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
@@ -108,7 +107,8 @@ const ProfilePage = () => {
     null,
   );
 
-  // Remove reference for the location input element and related Map/Google Maps code
+  // Reference for the location input element
+  const locationInputRef = useRef<HTMLInputElement>(null);
   const [locationLoaded, setLocationLoaded] = useState(false);
 
   // Add a new state for map visibility
@@ -135,15 +135,15 @@ const ProfilePage = () => {
     VehicleModel[]
   >([]);
 
+  // Add this state for the upload modal right after other state declarations
+  // Direct file picker approach instead of modal
+
   // Add this at the beginning of the component
   console.log("ProfilePage render - Vehicle state:", {
     vehicleModelsLoaded: vehicleModels.length > 0,
     manufacturersLoaded: manufacturers.length > 0,
     vehicleTypesLoaded: vehicleTypes.length > 0,
   });
-
-  // Add this state for the timestamp
-  const [refreshTimestamp, setRefreshTimestamp] = useState(() => Date.now());
 
   // Add this function to handle the vehicle model selection specifically
   const handleVehicleModelChange = (modelId: number | null) => {
@@ -393,7 +393,13 @@ const ProfilePage = () => {
     fetchUserProfile();
     fetchVehicleData();
 
-    // Remove Google Maps initialization since we no longer use location input
+    // We'll initialize the Google Maps API when the component mounts
+    if (!window.google) {
+      loadGoogleMapsScript();
+    } else {
+      // If Google Maps is already loaded, initialize autocomplete
+      initAutocomplete();
+    }
   }, []); // Empty dependency array means this runs once on mount
 
   // Update effect to handle profile manufacturer and vehicle type changes
@@ -424,8 +430,25 @@ const ProfilePage = () => {
   
   // Handle tab changes with proper cleanup
   const handleTabChange = (tab: "profile" | "services" | "settings" | "bookings" | "subscriptions") => {
-    // Change the tab - all location input references removed
+    // If switching away from profile, clean up
+    if (activeTab === "profile" && tab !== "profile") {
+      if (locationInputRef.current) {
+        locationInputRef.current.setAttribute(
+          "data-autocomplete-initialized",
+          "false",
+        );
+      }
+    }
+    
+    // Change the tab
     setActiveTab(tab);
+    
+    // If switching to profile and editing, initialize after a small delay
+    if (tab === "profile" && isEditing) {
+      setTimeout(() => {
+        initAutocomplete();
+      }, 100);
+    }
   };
 
   // Add better debugging for selected vehicle model
@@ -1015,8 +1038,7 @@ const ProfilePage = () => {
 
   // Function to refresh the bookings list
   const refreshBookings = () => {
-    // Update the timestamp to force child components to re-render
-    setRefreshTimestamp(Date.now());
+    setRefreshKey(prevKey => prevKey + 1);
   };
 
   // Fetch user profile with better error handling
@@ -1066,10 +1088,7 @@ const ProfilePage = () => {
             address: parsedProfile.address || profileData.address,
             city: parsedProfile.city || profileData.city,
             state: parsedProfile.state || profileData.state,
-            postal_code: parsedProfile.postalCode || profileData.postal_code,
-            // Add latitude/longitude if available
-            latitude: parsedProfile.latitude || profileData.latitude,
-            longitude: parsedProfile.longitude || profileData.longitude
+            postal_code: parsedProfile.postalCode || profileData.postal_code
           };
         } catch (e) {
           console.error("Error parsing sessionStorage profile data:", e);
@@ -1159,7 +1178,8 @@ const ProfilePage = () => {
       vehicle_name: null,
       vehicle_type: null,
       manufacturer: null,
-      phone: ""
+      phone: "",
+      preferredLocation: ""
     };
   };
   
@@ -1180,46 +1200,28 @@ const ProfilePage = () => {
   // Simplified Google Maps functions
   const loadGoogleMapsScript = () => {
     console.log("Loading Google Maps script");
-    // Simplified implementation since we no longer need it
+    // Simplified implementation
     setScriptLoaded(true);
   };
 
   const initAutocomplete = () => {
     console.log("Initializing location autocomplete");
-    // Simplified implementation since we no longer need it
+    
+    // Skip if already initialized or element doesn't exist
+    if (!locationInputRef.current) return;
+    if (locationInputRef.current.getAttribute("data-autocomplete-initialized") === "true") return;
+    
+    // Mark as initialized
+    locationInputRef.current.setAttribute("data-autocomplete-initialized", "true");
+    
+    // Simplified implementation
     console.log("Location autocomplete initialized");
   };
   
-  // Update handlePhotoClick to work even when not in edit mode
+  // Replace the existing handlePhotoClick function with this improved version
   const handlePhotoClick = () => {
-    // Remove the edit mode check to allow changing the photo anytime
-    // Create and trigger a file input directly instead of showing a modal
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'image/*';
-    fileInput.click();
-    
-    // When a file is selected, process it
-    fileInput.onchange = (e) => {
-      const files = (e.target as HTMLInputElement).files;
-      if (files && files.length > 0) {
-        const file = files[0];
-        setSelectedFile(file);
-        
-        // Create preview URL
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setPreviewUrl(reader.result as string);
-          // Show a success toast
-          toast.success("Photo selected. Click 'Save Changes' to update your profile.");
-          // If not in edit mode, enable edit mode to allow saving the photo
-          if (!isEditing) {
-            setIsEditing(true);
-          }
-        };
-        reader.readAsDataURL(file);
-      }
-    };
+    if (!isEditing) return;
+    setShowPhotoModal(true);
   };
 
   // Add this function to handle the actual file selection
@@ -1236,6 +1238,27 @@ const ProfilePage = () => {
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  // Add this function to handle canceling the upload
+  const handleCancelUpload = () => {
+    // Only clear the preview if we're in the modal and not saving the changes
+    if (!isSaving) {
+      // Keep the existing profile photo, just clear the new selection
+      setSelectedFile(null);
+      setPreviewUrl(null);
+    }
+    setShowPhotoModal(false);
+  };
+
+  // Add this function to handle confirmation
+  const handleConfirmUpload = () => {
+    // Close the modal but keep the selected file and preview
+    // The actual upload will happen when the user saves the profile
+    setShowPhotoModal(false);
+    
+    // Show a toast notification
+    toast.success("Photo selected. Click 'Save Changes' to update your profile.");
   };
 
   // Handle logout
@@ -1258,25 +1281,28 @@ const ProfilePage = () => {
     console.log("Saving profile...");
     setIsSaving(true);
     
-    // Create the updated profile object - no longer using preferredLocation
-    const updatedProfile = { 
-      ...safeProfile
-      // We've removed preferredLocation, so no need to sync with address
-    };
-    
-    // Update the profile state with the synced data
-    setProfile(updatedProfile);
-    
-    // Save to persistent storage
-    persistProfileData(updatedProfile);
-    
     // Simulate API call
-    setTimeout(() => {
+        setTimeout(() => {
       // Save profile logic would go here
       toast.success("Profile updated successfully!");
       setIsEditing(false);
       setIsSaving(false);
     }, 1000);
+  };
+  
+  // Render location input
+  const renderLocationInput = () => {
+      return (
+          <input
+            type="text"
+        value={safeProfile.preferredLocation || ""}
+        onChange={(e) => setProfile({ ...safeProfile, preferredLocation: e.target.value })}
+            disabled={!isEditing}
+        className={`mt-1 block w-full px-3 py-2 border ${formErrors.preferredLocation ? "border-red-500" : "border-gray-300"} rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]`}
+        placeholder="Enter your preferred location"
+          ref={locationInputRef}
+      />
+    );
   };
 
   // Add this function after the other helper functions
@@ -1314,36 +1340,23 @@ const ProfilePage = () => {
           >
             <div className="bg-white rounded-2xl shadow-lg p-6 space-y-6">
               <div className="text-center">
-                <div 
-                  className="h-24 w-24 rounded-full bg-[#FFF5F2] flex items-center justify-center mx-auto overflow-hidden cursor-pointer hover:opacity-90 relative"
-                  onClick={handlePhotoClick}
-                >
+                <div className="h-24 w-24 rounded-full bg-[#FFF5F2] flex items-center justify-center mx-auto overflow-hidden">
                   {profile && (previewUrl || safeProfile.profile_photo || getVehicleModelImage()) ? (
-                    <>
-                      <img
-                        src={
-                          previewUrl || 
-                          getProfilePhotoUrl(safeProfile.profile_photo) ||
-                          getVehicleModelImage()
-                        }
-                        alt="Profile"
-                        className="h-full w-full object-cover"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = "/assets/default-avatar.png"; // Make sure to add a default avatar image
-                        }}
-                      />
-                      <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-20 flex items-center justify-center">
-                        <Camera className="h-6 w-6 text-white opacity-0 hover:opacity-100" />
-                      </div>
-                    </>
+                    <img
+                      src={
+                        previewUrl || 
+                        getProfilePhotoUrl(safeProfile.profile_photo) ||
+                        getVehicleModelImage()
+                      }
+                      alt="Profile"
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = "/assets/default-avatar.png"; // Make sure to add a default avatar image
+                      }}
+                    />
                   ) : (
-                    <>
-                      <User className="h-12 w-12 text-[#FF5733]" />
-                      <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-20 flex items-center justify-center">
-                        <Camera className="h-6 w-6 text-white opacity-0 hover:opacity-100" />
-                      </div>
-                    </>
+                    <User className="h-12 w-12 text-[#FF5733]" />
                   )}
                 </div>
                 <h2 className="mt-4 text-xl font-semibold text-gray-900">
@@ -1441,6 +1454,20 @@ const ProfilePage = () => {
                     onClick={() => {
                       const newEditMode = !isEditing;
                       setIsEditing(newEditMode);
+
+                      // If enabling edit mode, initialize autocomplete with a delay
+                      if (newEditMode && activeTab === "profile") {
+                        setTimeout(() => {
+                          // Reset the autocomplete initialized flag
+                          if (locationInputRef.current) {
+                            locationInputRef.current.setAttribute(
+                              "data-autocomplete-initialized",
+                              "false",
+                            );
+                          }
+                          initAutocomplete();
+                        }, 100);
+                      }
                     }}
                     className="text-sm text-[#FF5733] hover:text-[#ff4019]"
                   >
@@ -1587,6 +1614,75 @@ const ProfilePage = () => {
                       </div>
                     </div>
                     <div className="mt-6">
+                      <h4 className="text-base font-medium text-gray-700 mb-4">
+                        Additional Contact Details
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            City
+                          </label>
+                          <input
+                            type="text"
+                            value={safeProfile.city || ""}
+                            onChange={(e) =>
+                              setProfile({ ...safeProfile, city: e.target.value })
+                            }
+                            disabled={!isEditing}
+                            className={`mt-1 block w-full px-3 py-2 border ${formErrors.city ? "border-red-500" : "border-gray-300"} rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            State
+                          </label>
+                          <input
+                            type="text"
+                            value={safeProfile.state || ""}
+                            onChange={(e) =>
+                              setProfile({ ...safeProfile, state: e.target.value })
+                            }
+                            disabled={!isEditing}
+                            className={`mt-1 block w-full px-3 py-2 border ${formErrors.state ? "border-red-500" : "border-gray-300"} rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Country
+                          </label>
+                          <input
+                            type="text"
+                            value={safeProfile.country || ""}
+                            onChange={(e) =>
+                              setProfile({
+                                ...safeProfile,
+                                country: e.target.value,
+                              })
+                            }
+                            disabled={!isEditing}
+                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Postal Code
+                          </label>
+                          <input
+                            type="text"
+                            value={safeProfile.postal_code || ""}
+                            onChange={(e) =>
+                              setProfile({
+                                ...safeProfile,
+                                postal_code: e.target.value,
+                              })
+                            }
+                            disabled={!isEditing}
+                            className={`mt-1 block w-full px-3 py-2 border ${formErrors.postal_code ? "border-red-500" : "border-gray-300"} rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-6">
                       <RequiredLabel text="Address" />
                       <input
                         type="text"
@@ -1604,59 +1700,174 @@ const ProfilePage = () => {
                       )}
                     </div>
 
-                    {isEditing && (
-                      <div className="flex justify-end space-x-4">
-                        <button
-                          onClick={() => {
-                            setIsEditing(false);
-                            setFormErrors({});
-                          }}
-                          className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                          disabled={isSaving}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleSaveProfile}
-                          className="px-4 py-2 bg-[#FF5733] text-white rounded-lg hover:bg-[#ff4019] flex items-center"
-                          disabled={isSaving}
-                        >
-                          {isSaving ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
-                              Saving...
-                            </>
-                          ) : (
-                            "Save Changes"
+                    <div className="mt-6">
+                      <RequiredLabel text="Preferred Location" />
+                      {renderLocationInput()}
+                      {formErrors.preferredLocation && (
+                        <p className="mt-1 text-sm text-red-500">
+                          {formErrors.preferredLocation}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Vehicle Information Section */}
+                  <div className="pt-4 border-t border-gray-200">
+                    <h4 className="text-lg font-medium text-gray-900 mb-4">
+                      Vehicle Information{" "}
+                      <span className="text-red-500">*</span>
+                    </h4>
+
+                    {loadingVehicleData ? (
+                      <div className="flex justify-center">
+                        <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-[#FF5733]"></div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* Manufacturer Selection */}
+                        <div>
+                          <RequiredLabel text="Manufacturer" />
+                          <select
+                            value={safeProfile.manufacturer || ""}
+                            onChange={(e) =>
+                              handleManufacturerChange(Number(e.target.value))
+                            }
+                            disabled={!isEditing}
+                            className={`mt-1 block w-full px-3 py-2 border ${formErrors.manufacturer ? "border-red-500" : "border-gray-300"} rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]`}
+                          >
+                            <option value="">Select Manufacturer</option>
+                            {manufacturers.map((manufacturer: Manufacturer) => (
+                              <option
+                                key={manufacturer.id}
+                                value={manufacturer.id}
+                              >
+                                {manufacturer.name}
+                              </option>
+                            ))}
+                          </select>
+                          {formErrors.manufacturer && (
+                            <p className="mt-1 text-sm text-red-500">
+                              {formErrors.manufacturer}
+                            </p>
                           )}
-                        </button>
+                        </div>
+
+                        {/* Vehicle Type Selection */}
+                        <div>
+                          <RequiredLabel text="Vehicle Type" />
+                          <select
+                            value={safeProfile.vehicle_type || ""}
+                            onChange={(e) =>
+                              handleVehicleTypeChange(Number(e.target.value))
+                            }
+                            disabled={!isEditing}
+                            className={`mt-1 block w-full px-3 py-2 border ${formErrors.vehicle_type ? "border-red-500" : "border-gray-300"} rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]`}
+                          >
+                            <option value="">Select Vehicle Type</option>
+                            {vehicleTypes.map((type: VehicleType) => (
+                              <option key={type.id} value={type.id}>
+                                {type.name}
+                              </option>
+                            ))}
+                          </select>
+                          {formErrors.vehicle_type && (
+                            <p className="mt-1 text-sm text-red-500">
+                              {formErrors.vehicle_type}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Vehicle Model Selection */}
+                        <div>
+                          <RequiredLabel text="Vehicle Model" />
+                          <select
+                            value={safeProfile.vehicle_name || ""}
+                            onChange={(e) =>
+                              handleVehicleModelChange(Number(e.target.value))
+                            }
+                            disabled={
+                              !isEditing ||
+                              !safeProfile.manufacturer ||
+                              !safeProfile.vehicle_type ||
+                              vehicleModels.length === 0
+                            }
+                            className={`mt-1 block w-full px-3 py-2 border ${formErrors.vehicle_name ? "border-red-500" : "border-gray-300"} rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]`}
+                          >
+                            <option value="">
+                              {!safeProfile.manufacturer || !safeProfile.vehicle_type
+                                ? "Select Vehicle Model"
+                                : vehicleModels.length === 0
+                                  ? "No models available"
+                                  : "Select Vehicle Model"}
+                            </option>
+                            {vehicleModels.map((model: VehicleModel) => (
+                              <option key={model.id} value={model.id}>
+                                {model.name}
+                              </option>
+                            ))}
+                          </select>
+                          {formErrors.vehicle_name && (
+                            <p className="mt-1 text-sm text-red-500">
+                              {formErrors.vehicle_name}
+                            </p>
+                          )}
+                          {!safeProfile.manufacturer && !safeProfile.vehicle_type && (
+                            <p className="mt-1 text-sm text-gray-500">
+                              Select manufacturer and vehicle type first
+                            </p>
+                          )}
+                          {safeProfile.manufacturer &&
+                            safeProfile.vehicle_type &&
+                            vehicleModels.length === 0 && (
+                              <p className="mt-1 text-sm text-gray-500">
+                                No {String(safeProfile.vehicle_type).toLowerCase()}{" "}
+                                models available for{" "}
+                                {safeProfile.manufacturer}
+                              </p>
+                            )}
+                        </div>
                       </div>
                     )}
                   </div>
+
+                  {isEditing && (
+                    <div className="flex justify-end space-x-4">
+                      <button
+                        onClick={() => {
+                          setIsEditing(false);
+                          setFormErrors({});
+                        }}
+                        className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                        disabled={isSaving}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveProfile}
+                        className="px-4 py-2 bg-[#FF5733] text-white rounded-lg hover:bg-[#ff4019] flex items-center"
+                        disabled={isSaving}
+                      >
+                        {isSaving ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                            Saving...
+                          </>
+                        ) : (
+                          "Save Changes"
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
             {activeTab === "services" && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                className="lg:col-span-3"
-              >
-                <MyServicesTab key={refreshTimestamp} />
-              </motion.div>
+              <MyServicesTab key={refreshKey} />
             )}
 
             {activeTab === "subscriptions" && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                className="lg:col-span-3"
-              >
-                <MySubscriptionsTab key={refreshTimestamp} />
-              </motion.div>
+              <MySubscriptionsTab key={refreshKey} />
             )}
 
             {activeTab === "settings" && (
@@ -1787,18 +1998,74 @@ const ProfilePage = () => {
             )}
 
             {activeTab === "bookings" && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                className="lg:col-span-3"
-              >
-                <MyBookingsTab key={refreshTimestamp} />
-              </motion.div>
+              <MyBookingsTab key={refreshKey} />
             )}
           </motion.div>
         </div>
       </div>
+
+      {/* Photo Upload Modal */}
+      {showPhotoModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">Update Profile Photo</h3>
+            
+            <div className="mb-6">
+              <div className="flex justify-center mb-4">
+                {previewUrl ? (
+                  <div className="relative h-48 w-48 rounded-full overflow-hidden">
+                    <img 
+                      src={previewUrl} 
+                      alt="Preview" 
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-48 w-48 rounded-full bg-gray-100 flex items-center justify-center">
+                    <Camera className="h-16 w-16 text-gray-400" />
+                  </div>
+                )}
+              </div>
+              
+              <label className="block w-full text-center">
+                <span className="py-2 px-4 bg-[#FFF5F2] text-[#FF5733] rounded-lg cursor-pointer inline-block">
+                  {previewUrl ? 'Choose Different Photo' : 'Select Photo'}
+                </span>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden" 
+                  onChange={handleFileSelect}
+                />
+              </label>
+              
+              <p className="text-xs text-gray-500 mt-2 text-center">
+                Recommended: Square image, 500x500 pixels or larger.
+              </p>
+            </div>
+            
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={handleCancelUpload}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmUpload}
+                disabled={!previewUrl}
+                className={`px-4 py-2 rounded-lg text-white ${
+                  previewUrl 
+                    ? 'bg-[#FF5733] hover:bg-[#ff4019]' 
+                    : 'bg-gray-300 cursor-not-allowed'
+                }`}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

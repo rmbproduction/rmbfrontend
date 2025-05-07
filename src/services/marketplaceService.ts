@@ -1,27 +1,30 @@
 import axios from 'axios';
 import { safeRevokeUrl } from './imageUtils';
 import { API_CONFIG } from '../config/api.config';
+import persistentStorageService, { TTL } from './persistentStorageService';
 
 const API_URL = 'http://localhost:8000/api/marketplace/';
 
 // In-memory cache for sell requests with TTL support
 const sellRequestCache = {
-  data: new Map<string, { data: any, timestamp: number }>(),
+  data: new Map<string, { data: any, timestamp: number, etag?: string }>(),
   // Cache duration - 1 hour in milliseconds
   maxAge: 60 * 60 * 1000,
   
   // Add or update data in cache
-  set(key: string, data: any): void {
+  set(key: string, data: any, etag?: string): void {
     this.data.set(key, { 
       data, 
-      timestamp: Date.now() 
+      timestamp: Date.now(),
+      etag
     });
     
     // Also persist to localStorage as a backup
     try {
       localStorage.setItem(`sell_request_${key}`, JSON.stringify({
         data,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        etag
       }));
     } catch (e) {
       console.warn('Failed to save to localStorage:', e);
@@ -34,7 +37,7 @@ const sellRequestCache = {
     const cached = this.data.get(key);
     if (cached && Date.now() - cached.timestamp < this.maxAge) {
       console.log(`Using in-memory cache for sell request ${key}`);
-      return cached.data;
+      return cached;
     }
     
     // If not in memory, try localStorage
@@ -46,7 +49,7 @@ const sellRequestCache = {
           // If valid from localStorage, also update in-memory cache
           this.data.set(key, parsed);
           console.log(`Using localStorage cache for sell request ${key}`);
-          return parsed.data;
+          return parsed;
         }
       }
     } catch (e) {
@@ -78,59 +81,26 @@ const sellRequestCache = {
 const marketplaceService = {
   // Clear all user session data and cache when user logs out
   clearUserSession: () => {
-    console.log('Clearing all user session data and cache');
-    
     // Clear in-memory cache
     sellRequestCache.clearAll();
     
-    // Clear all sessionStorage items
-    try {
-      // Clear specific known keys
-      sessionStorage.removeItem('available_vehicles');
-      sessionStorage.removeItem('vehicle_filters');
-      
-      // Clear all vehicle_summary_* items
+    // Clear session storage selectively (only our entries)
       for (let i = sessionStorage.length - 1; i >= 0; i--) {
         const key = sessionStorage.key(i);
-        if (key && (
-          key.startsWith('vehicle_summary_') || 
-          key.startsWith('sell_request_') ||
-          key.includes('vehicle') ||
-          key.includes('marketplace')
-        )) {
-          console.log(`Clearing sessionStorage item: ${key}`);
+      if (key && (key.startsWith('vehicle_') || key.startsWith('sell_request_') || key === 'available_vehicles')) {
           sessionStorage.removeItem(key);
         }
       }
-    } catch (e) {
-      console.error('Error clearing sessionStorage:', e);
+    
+    // Clear localStorage selectively (only our entries)
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+      if (key && (key.startsWith('vehicle_') || key.startsWith('sell_request_'))) {
+        localStorage.removeItem(key);
+      }
     }
     
-    // Clear relevant localStorage items
-    try {
-      // Clear specific localStorage items that contain user-specific data
-      const keysToRemove = [];
-      
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && (
-          key.startsWith('vehicle_data_') || 
-          key.startsWith('sell_request_') ||
-          key.includes('vehicle') ||
-          key.includes('marketplace')
-        )) {
-          keysToRemove.push(key);
-        }
-      }
-      
-      // Remove the collected keys
-      keysToRemove.forEach(key => {
-        console.log(`Clearing localStorage item: ${key}`);
-        localStorage.removeItem(key);
-      });
-    } catch (e) {
-      console.error('Error clearing localStorage:', e);
-    }
+    console.log('Cleared all user session data and cache');
   },
 
   // Get all sell requests for the current user
@@ -139,6 +109,20 @@ const marketplaceService = {
       const token = localStorage.getItem('accessToken');
       if (!token) {
         throw new Error('Authentication required. Please log in to continue.');
+      }
+      
+      // Try to get from cache first
+      const cacheKey = 'user_sell_requests';
+      const cachedData = sessionStorage.getItem(cacheKey);
+      if (cachedData) {
+        const parsed = JSON.parse(cachedData);
+        const cacheAge = Date.now() - (parsed.timestamp || 0);
+        
+        // Use cache if less than 5 minutes old
+        if (cacheAge < 5 * 60 * 1000) {
+          console.log('Using cached sell requests data');
+          return parsed.data;
+        }
       }
       
       const response = await axios.get(`${API_URL}sell-requests/`, {
@@ -154,7 +138,22 @@ const marketplaceService = {
       }
       
       // Enrich each vehicle in the data
-      return response.data.map(vehicleData => marketplaceService.enrichVehicleData(vehicleData));
+      const enrichedData = response.data.map(vehicleData => marketplaceService.enrichVehicleData(vehicleData));
+      
+      // Cache the results
+      sessionStorage.setItem(cacheKey, JSON.stringify({
+        data: enrichedData,
+        timestamp: Date.now()
+      }));
+      
+      // Also store individual sell requests in persistent storage
+      enrichedData.forEach(vehicle => {
+        if (vehicle && vehicle.id) {
+          persistentStorageService.saveVehicleData(vehicle.id, vehicle);
+        }
+      });
+      
+      return enrichedData;
     } catch (error) {
       console.error('Error fetching sell requests:', error);
       throw error;
@@ -162,14 +161,50 @@ const marketplaceService = {
   },
 
   // Get a specific sell request by ID
-  getSellRequest: async (id: string) => {
+  getSellRequest: async (id: string, forceRefresh = false) => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await axios.get(`${API_URL}sell-requests/${id}/`, {
-        headers: {
-          Authorization: `Bearer ${token}`
+      // If not forcing refresh, check sessionStorage first directly
+      if (!forceRefresh) {
+        try {
+          const sessionData = sessionStorage.getItem(`vehicle_summary_${id}`);
+          if (sessionData) {
+            const parsedData = JSON.parse(sessionData);
+            console.log(`Using sessionStorage data for sell request ID ${id}`);
+            return marketplaceService.enrichVehicleData(parsedData);
+          }
+        } catch (e) {
+          console.warn('Error reading from sessionStorage:', e);
         }
-      });
+        
+        // Then check persistent storage
+        const storedData = await persistentStorageService.getVehicleData(id);
+        if (storedData) {
+          console.log(`Using stored data for sell request ID ${id}`);
+          return marketplaceService.enrichVehicleData(storedData);
+        }
+      }
+      
+      // Check in-memory cache
+      const cachedRequest = sellRequestCache.get(id);
+      if (!forceRefresh && cachedRequest) {
+        console.log(`Using cached data for sell request ID ${id}`);
+        return marketplaceService.enrichVehicleData(cachedRequest.data);
+      }
+      
+      // Fetch from API
+      const token = localStorage.getItem('accessToken');
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      
+      // Add ETag header if available
+      if (cachedRequest?.etag) {
+        headers['If-None-Match'] = cachedRequest.etag;
+      }
+      
+      try {
+        const response = await axios.get(`${API_URL}sell-requests/${id}/`, { headers });
+        
+        // Get ETag from response if available
+        const etag = response.headers.etag;
       
       // Ensure response.data is valid before enriching
       if (!response.data || typeof response.data !== 'object') {
@@ -177,8 +212,35 @@ const marketplaceService = {
         return null;
       }
       
-      // Enrich the data before returning
-      return marketplaceService.enrichVehicleData(response.data);
+        // Enrich the data
+        const enrichedData = marketplaceService.enrichVehicleData(response.data);
+        
+        // CRITICAL: Update sessionStorage directly for fastest UI access
+        try {
+          sessionStorage.setItem(`vehicle_summary_${id}`, JSON.stringify(enrichedData));
+          console.log(`Directly updated sessionStorage with API data for ID ${id}`);
+        } catch (sessionError) {
+          console.error('Failed to update sessionStorage:', sessionError);
+        }
+        
+        // Store in cache with ETag
+        sellRequestCache.set(id, enrichedData, etag);
+        
+        // Store in persistent storage
+        await persistentStorageService.saveVehicleData(id, enrichedData, etag);
+        
+        // Notify subscribers
+        persistentStorageService.notifyVehicleUpdated(id);
+        
+        return enrichedData;
+      } catch (err: any) {
+        // If we get a 304 Not Modified response, use cached data
+        if (err.response && err.response.status === 304 && cachedRequest) {
+          console.log(`Server says content not modified for ${id}, using cache`);
+          return marketplaceService.enrichVehicleData(cachedRequest.data);
+        }
+        throw err;
+      }
     } catch (error) {
       console.error('Error fetching sell request:', error);
       throw error;
@@ -193,7 +255,7 @@ const marketplaceService = {
       const cachedStatus = sellRequestCache.get(cacheKey);
       if (cachedStatus) {
         console.log(`Found cached status info for sell request ID ${sellRequestId}`);
-        return cachedStatus;
+        return cachedStatus.data;
       }
       
       // Check sessionStorage as backup
@@ -248,90 +310,49 @@ const marketplaceService = {
         // If we have the main sell request data cached, update its status too
         const mainData = sellRequestCache.get(sellRequestId);
         if (mainData) {
-          mainData.status = response.data.status;
+          mainData.data.status = response.data.status;
           if (response.data.status_display) {
-            mainData.status_display = response.data.status_display;
+            mainData.data.status_display = response.data.status_display;
           }
           if (response.data.title) {
-            mainData.status_title = response.data.title;
+            mainData.data.status_title = response.data.title;
           }
           if (response.data.message) {
-            mainData.status_message = response.data.message;
+            mainData.data.status_message = response.data.message;
           }
-          sellRequestCache.set(sellRequestId, mainData);
+          sellRequestCache.set(sellRequestId, mainData.data, mainData.etag);
         }
         
-        // Update in sessionStorage too
+        // Update in persistentStorage too
         try {
-          const sessionData = sessionStorage.getItem(`vehicle_summary_${sellRequestId}`);
-          if (sessionData) {
-            const parsedData = JSON.parse(sessionData);
-            parsedData.status = response.data.status;
+          const storedData = await persistentStorageService.getVehicleData(sellRequestId);
+          if (storedData) {
+            storedData.status = response.data.status;
             if (response.data.status_display) {
-              parsedData.status_display = response.data.status_display;
+              storedData.status_display = response.data.status_display;
             }
             if (response.data.title) {
-              parsedData.status_title = response.data.title;
+              storedData.status_title = response.data.title;
             }
             if (response.data.message) {
-              parsedData.status_message = response.data.message;
+              storedData.status_message = response.data.message;
             }
             
-            // Save updated data back to session storage
-            sessionStorage.setItem(`vehicle_summary_${sellRequestId}`, JSON.stringify(parsedData));
-            console.log('Session storage updated with new status:', response.data.status);
-          }
-        } catch (err) {
-          console.error('Error updating session storage with new status:', err);
-        }
-        
-        // Update localStorage backup if it exists
-        try {
-          const localData = localStorage.getItem(`vehicle_data_${sellRequestId}`);
-          if (localData) {
-            const parsedData = JSON.parse(localData);
-            parsedData.status = response.data.status;
+            // Save updated data
+            await persistentStorageService.saveVehicleData(sellRequestId, storedData);
             
-            localStorage.setItem(`vehicle_data_${sellRequestId}`, JSON.stringify(parsedData));
-            console.log('Local storage updated with new status:', response.data.status);
+            // Notify subscribers
+            persistentStorageService.notifyVehicleUpdated(sellRequestId);
           }
         } catch (err) {
-          console.error('Error updating local storage with new status:', err);
+          console.error('Error updating persistent storage with new status:', err);
         }
       }
       
       return response.data;
     } catch (error) {
-      console.error('Error fetching sell request status:', error);
-      
-      // Try to recover status from sessionStorage as fallback
-      try {
-        const sessionData = sessionStorage.getItem(`vehicle_summary_${sellRequestId}`);
-        if (sessionData) {
-          const parsedData = JSON.parse(sessionData);
-          if (parsedData.status) {
-            console.log('Recovering status from sessionStorage after API error');
-            
-            // Create minimal status object
-            return {
-              status: parsedData.status,
-              status_display: parsedData.status_display || parsedData.status,
-              title: parsedData.status_title || 'Status',
-              message: parsedData.status_message || 'Status information is available.'
-            };
-          }
-        }
-      } catch (e) {
-        console.error('Error recovering status from session after API error:', e);
-      }
-      
-      // Return a default pending status to prevent UI errors
-      return {
-        status: 'pending',
-        status_display: 'Pending',
-        title: 'Processing',
-        message: 'Your request is being processed.'
-      };
+      console.error(`Error fetching status for sell request ID ${sellRequestId}:`, error);
+      throw error;
     }
   },
 
@@ -1019,75 +1040,10 @@ const marketplaceService = {
       
       console.log('Successfully updated sell request:', updatedRequest);
       
-      // Update our various storage locations
+      // Fetch the complete data from the server
+      const refreshResult = await marketplaceService.forceRefreshSellRequest(id);
       
-      // 1. Update in-memory cache
-      const existingData = sellRequestCache.get(id);
-      if (existingData) {
-        console.log('Updating cache with new data');
-        // Deep merge the new data with existing data
-        const mergedData = {
-          ...existingData,
-          ...updatedRequest,
-          // Make sure vehicle properties are properly merged
-          vehicle: {
-            ...(existingData.vehicle || {}),
-            ...(updatedRequest.vehicle || {})
-          }
-        };
-        sellRequestCache.set(id, mergedData);
-        
-        // 2. Update localStorage backup
-        try {
-          const localStorageData = localStorage.getItem(`vehicle_data_${id}`);
-          if (localStorageData) {
-            const existingLocalData = JSON.parse(localStorageData);
-            // Merge with priority to new data
-            const mergedLocalData = {
-              ...existingLocalData,
-              ...(updatedRequest.vehicle || {}),
-              status: updatedRequest.status || existingLocalData.status,
-              // If expected_price was updated, also update price
-              price: updateData.expected_price || existingLocalData.price
-            };
-            localStorage.setItem(`vehicle_data_${id}`, JSON.stringify(mergedLocalData));
-          }
-        } catch (e) {
-          console.error('Error updating localStorage backup:', e);
-        }
-        
-        // 3. Update sessionStorage
-        try {
-          const sessionData = sessionStorage.getItem(`vehicle_summary_${id}`);
-          if (sessionData) {
-            const existingSessionData = JSON.parse(sessionData);
-            // Create updated session data
-            const updatedSessionData = {
-              ...existingSessionData,
-              ...updatedRequest,
-              // Carefully merge vehicle data
-              vehicle: {
-                ...(existingSessionData.vehicle || {}),
-                ...(updatedRequest.vehicle || {})
-              }
-            };
-            
-            // If expected_price was updated, also update price in vehicle
-            if (updateData.expected_price && updatedSessionData.vehicle) {
-              updatedSessionData.vehicle.price = updateData.expected_price;
-            }
-            
-            sessionStorage.setItem(`vehicle_summary_${id}`, JSON.stringify(updatedSessionData));
-            console.log('Updated sessionStorage with new data');
-          }
-        } catch (e) {
-          console.error('Error updating sessionStorage:', e);
-        }
-      } else {
-        console.log('No existing cache data found, will fetch fresh data on next access');
-      }
-      
-      return response.data;
+      return refreshResult.sellRequest;
     } catch (error) {
       console.error('Error updating sell request:', error);
       throw error;
@@ -1104,12 +1060,8 @@ const marketplaceService = {
       sellRequestCache.clear(id);
       sellRequestCache.clear(`${id}_status`);
       
-      // Clear localStorage data
-      localStorage.removeItem(`vehicle_data_${id}`);
-      localStorage.removeItem(`sell_request_${id}`);
-      
-      // Clear sessionStorage data
-      sessionStorage.removeItem(`vehicle_summary_${id}`);
+      // Clear from persistent storage
+      await persistentStorageService.clearVehicleData(id);
       
       const token = localStorage.getItem('accessToken');
       if (!token) {
@@ -1126,6 +1078,9 @@ const marketplaceService = {
           _t: Date.now()
         }
       });
+      
+      // Extract ETag if available
+      const etag = response.headers.etag;
       
       // Also refresh the status information
       let statusData = null;
@@ -1166,44 +1121,31 @@ const marketplaceService = {
       // If we have status data, update the status in the main response
       if (statusData) {
         enhancedData.status = statusData.status;
+        enhancedData.status_display = statusData.status_display;
+        enhancedData.status_title = statusData.title;
+        enhancedData.status_message = statusData.message;
         
         // Cache the status separately
         sellRequestCache.set(`${id}_status`, statusData);
       }
       
-      // Update cache with the fresh data
-      console.log(`Storing fresh sell request data for ID ${id}:`, enhancedData);
-      sellRequestCache.set(id, enhancedData);
-      
-      // Also directly store critical data in localStorage for redundancy
-      try {
-        localStorage.setItem(`vehicle_data_${id}`, JSON.stringify({
-          brand: enhancedData.vehicle.brand,
-          model: enhancedData.vehicle.model,
-          registration_number: enhancedData.vehicle.registration_number,
-          year: enhancedData.vehicle.year,
-          vehicle_type: enhancedData.vehicle.vehicle_type,
-          color: enhancedData.vehicle.color,
-          fuel_type: enhancedData.vehicle.fuel_type,
-          kms_driven: enhancedData.vehicle.kms_driven,
-          engine_capacity: enhancedData.vehicle.engine_capacity,
-          last_service_date: enhancedData.vehicle.last_service_date,
-          insurance_valid_till: enhancedData.vehicle.insurance_valid_till,
-          Mileage: enhancedData.vehicle.Mileage || enhancedData.vehicle.mileage,
-          price: enhancedData.vehicle.price || response.data.expected_price || 0,
-          status: enhancedData.status || 'pending',
-          condition: enhancedData.vehicle.condition || ''
-        }));
-      } catch (e) {
-        console.error('Failed to save backup vehicle data to localStorage:', e);
-      }
-      
-      // Also store in sessionStorage for fastest subsequent access
+      // CRITICAL: Update sessionStorage directly for fastest UI access
       try {
         sessionStorage.setItem(`vehicle_summary_${id}`, JSON.stringify(enhancedData));
-      } catch (e) {
-        console.error('Failed to save to sessionStorage:', e);
+        console.log(`Directly updated sessionStorage with fresh data for ID ${id}`);
+      } catch (sessionError) {
+        console.error('Failed to update sessionStorage:', sessionError);
       }
+      
+      // Update cache with the fresh data
+      console.log(`Storing fresh sell request data for ID ${id}:`, enhancedData);
+      sellRequestCache.set(id, enhancedData, etag);
+      
+      // Store in persistent storage
+      await persistentStorageService.saveVehicleData(id, enhancedData, etag);
+      
+      // Notify subscribers
+      persistentStorageService.notifyVehicleUpdated(id);
       
       return {
         sellRequest: enhancedData,
@@ -1855,9 +1797,15 @@ const marketplaceService = {
   enrichVehicleData: (vehicleData: Record<string, any>) => {
     if (!vehicleData) return null;
     
+    console.log('[DEBUG] enrichVehicleData input:', vehicleData);
+    console.log('[DEBUG] Has vehicle property?', !!vehicleData.vehicle);
+    console.log('[DEBUG] Original ID:', vehicleData.id);
+    
     // Create a properly formatted vehicle object with all possible properties
     const enriched = {
       ...vehicleData,
+      // Preserve the ID from the original data
+      id: vehicleData.id,
       // Ensure these fields are properly set with fallbacks
       vehicle: vehicleData.vehicle || vehicleData,
       status: vehicleData.status || vehicleData.vehicle?.status || 'pending',
@@ -1888,100 +1836,48 @@ const marketplaceService = {
                                  vehicleData.Mileage || vehicleData.mileage || 'Not Available';
       enriched.vehicle.mileage = enriched.vehicle.mileage || enriched.vehicle.Mileage || 
                                  vehicleData.mileage || vehicleData.Mileage || 'Not Available';
-                                 
-      // Try to populate from sessionStorage if available (for specific vehicle)
-      if (vehicleData.id) {
-        try {
-          const sessionData = sessionStorage.getItem(`vehicle_summary_${vehicleData.id}`);
-          if (sessionData) {
-            const parsedData = JSON.parse(sessionData);
-            if (parsedData.vehicle) {
-              // Use session data for any missing fields
-              enriched.vehicle.brand = enriched.vehicle.brand !== 'Unknown' ? 
-                enriched.vehicle.brand : parsedData.vehicle.brand || 'Unknown';
-              enriched.vehicle.model = enriched.vehicle.model !== 'Unknown' ? 
-                enriched.vehicle.model : parsedData.vehicle.model || 'Unknown';
-              enriched.vehicle.registration_number = enriched.vehicle.registration_number !== 'Unknown' ? 
-                enriched.vehicle.registration_number : parsedData.vehicle.registration_number || 'Unknown';
-              enriched.vehicle.year = enriched.vehicle.year || parsedData.vehicle.year || new Date().getFullYear();
-              enriched.vehicle.fuel_type = enriched.vehicle.fuel_type || parsedData.vehicle.fuel_type || 'Petrol';
-              enriched.vehicle.price = enriched.vehicle.price || parsedData.vehicle.price || 0;
-              enriched.vehicle.expected_price = enriched.vehicle.expected_price || parsedData.vehicle.expected_price || 0;
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to fetch backup data from sessionStorage:', e);
-        }
-      }
-      
-      // Also try the last submitted vehicle from localStorage as fallback
-      try {
-        const lastSubmittedVehicle = localStorage.getItem('last_submitted_vehicle');
-        if (lastSubmittedVehicle) {
-          const backupData = JSON.parse(lastSubmittedVehicle);
-          if (backupData.vehicle) {
-            // Only override default values
-            if (enriched.vehicle.brand === 'Unknown') {
-              enriched.vehicle.brand = backupData.vehicle.brand || 'Unknown';
-            }
-            if (enriched.vehicle.model === 'Unknown') {
-              enriched.vehicle.model = backupData.vehicle.model || 'Unknown';
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to retrieve backup from localStorage:', e);
-      }
-    } else {
-      // If vehicle is a primitive, create a proper vehicle object
-      const vehicleId = enriched.vehicle;
-      enriched.vehicle = {
-        id: vehicleId,
-        brand: vehicleData.brand || 'Unknown',
-        model: vehicleData.model || 'Unknown',
-        year: vehicleData.year || new Date().getFullYear(),
-        registration_number: vehicleData.registration_number || 'Unknown',
-        price: vehicleData.price || vehicleData.expected_price || 0,
-        expected_price: vehicleData.expected_price || vehicleData.price || 0,
-        fuel_type: vehicleData.fuel_type || 'Petrol',
-        color: vehicleData.color || 'Not Available',
-        kms_driven: vehicleData.kms_driven || 0,
-        Mileage: vehicleData.Mileage || vehicleData.mileage || 'Not Available',
-        mileage: vehicleData.mileage || vehicleData.Mileage || 'Not Available'
-      };
-      
-      // Try to populate from latest stored data
-      try {
-        // First try with ID
-        if (vehicleId && typeof vehicleId === 'string') {
-          const storedVehicleData = localStorage.getItem(`vehicle_data_${vehicleId}`);
-          if (storedVehicleData) {
-            const parsedData = JSON.parse(storedVehicleData);
-            Object.assign(enriched.vehicle, parsedData);
-          }
-        }
-        
-        // Then try latest submission as fallback
-        const lastSubmitted = localStorage.getItem('last_submitted_vehicle');
-        if (lastSubmitted) {
-          const parsedSubmission = JSON.parse(lastSubmitted);
-          if (parsedSubmission.vehicle) {
-            // Only override default values
-            if (enriched.vehicle.brand === 'Unknown') {
-              enriched.vehicle.brand = parsedSubmission.vehicle.brand || 'Unknown';
-            }
-            if (enriched.vehicle.model === 'Unknown') {
-              enriched.vehicle.model = parsedSubmission.vehicle.model || 'Unknown';
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to fetch stored vehicle data:', e);
-      }
     }
     
+    console.log('[DEBUG] Enriched data:', enriched);
+    console.log('[DEBUG] Enriched vehicle property:', enriched.vehicle);
+    console.log('[DEBUG] Enriched brand:', enriched.vehicle.brand);
+    console.log('[DEBUG] Enriched model:', enriched.vehicle.model);
+    console.log('[DEBUG] Enriched reg number:', enriched.vehicle.registration_number);
+    
     return enriched;
+  },
+
+  // Add method to subscribe to vehicle updates
+  subscribeToVehicleUpdates: (vehicleId: string, callback: () => void) => {
+    return persistentStorageService.subscribeToVehicle(vehicleId, callback);
+  },
+
+  // Add method to verify if data needs refresh
+  checkIfRefreshNeeded: async (vehicleId: string): Promise<boolean> => {
+    try {
+      // Check timestamp in persistent storage
+      const storedData = await persistentStorageService.getVehicleData(vehicleId);
+      if (!storedData) {
+        return true; // No data, definitely need refresh
+      }
+      
+      // Check if data is expired
+      const lastUpdated = storedData.last_updated || 0;
+      const now = Date.now();
+      const age = now - lastUpdated;
+      
+      // Status data should refresh more frequently than full vehicle data
+      const isStatusCheck = window.location.pathname.includes('/status') || 
+                           window.location.pathname.includes('/track');
+      
+      const maxAge = isStatusCheck ? 5 * 60 * 1000 : TTL.VEHICLE; // 5 minutes for status, TTL.VEHICLE for vehicles
+      
+      return age > maxAge;
+    } catch (error) {
+      console.error('Error checking if refresh is needed:', error);
+      return true; // Refresh to be safe
   }
+  },
 };
 
 export default marketplaceService; 

@@ -20,7 +20,7 @@ const SellSuccess = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const params = new URLSearchParams(location.search);
-  const sellRequestId = params.get('id');
+  const sellRequestId = params.get('id') || id;
   
   const [isScheduled, setIsScheduled] = useState(false);
   const [vehicleData, setVehicleData] = useState<any>(null);
@@ -30,20 +30,55 @@ const SellSuccess = () => {
   const [statusInfo, setStatusInfo] = useState<StatusInfo | null>(null);
   const [sellRequest, setSellRequest] = useState<any>(null);
   
-  // Fetch vehicle data from backend
+  // Fetch vehicle data from backend or storage
   useEffect(() => {
     const fetchData = async () => {
-      if (!id) return;
+      if (!sellRequestId) return;
       
       setLoading(true);
       try {
-        // Fetch sell request details
-        const sellRequestData = await marketplaceService.getSellRequest(id);
-        setSellRequest(sellRequestData);
+        // DIRECT SESSION STORAGE CHECK FIRST
+        const sessionData = sessionStorage.getItem(`vehicle_summary_${sellRequestId}`);
+        let sellRequestData;
         
-        // Fetch status information
-        const statusData = await marketplaceService.getSellRequestStatus(id);
-        setStatusInfo(statusData);
+        if (sessionData) {
+          // Direct session storage hit
+          console.log(`Using direct sessionStorage data for sell request ID ${sellRequestId}`);
+          try {
+            sellRequestData = JSON.parse(sessionData);
+            console.log('[DEBUG] Session storage data structure:', sellRequestData);
+            
+            // Log nested vehicle structure if it exists
+            if (sellRequestData.vehicle) {
+              console.log('[DEBUG] Vehicle object in session data:', sellRequestData.vehicle);
+            }
+          } catch (parseError) {
+            console.error('Error parsing session data:', parseError);
+          }
+        }
+        
+        // If no session data or parsing failed, fetch from service
+        if (!sellRequestData) {
+          console.log('Fetching from marketplaceService...');
+          sellRequestData = await marketplaceService.getSellRequest(sellRequestId);
+          console.log('[DEBUG] Data from marketplaceService:', sellRequestData);
+        }
+        
+        // Still need to enrich to ensure consistency
+        sellRequestData = marketplaceService.enrichVehicleData(sellRequestData);
+        console.log('[DEBUG] Enriched vehicle data:', sellRequestData);
+        
+        // Set sell request data
+        setSellRequest(sellRequestData);
+        setVehicleData(sellRequestData);
+        
+        // Save to session storage for future use
+        try {
+          sessionStorage.setItem(`vehicle_summary_${sellRequestId}`, JSON.stringify(sellRequestData));
+          console.log('[DEBUG] Saved to session storage after fetch.');
+        } catch (storageError) {
+          console.error('Error saving to session storage:', storageError);
+        }
         
         // Set debug info
         setDebugInfo(JSON.stringify(sellRequestData, null, 2));
@@ -55,10 +90,12 @@ const SellSuccess = () => {
           return;
         }
         
-        setVehicleData(sellRequestData);
+        // Fetch status information
+        const statusData = await marketplaceService.getSellRequestStatus(sellRequestId);
+        setStatusInfo(statusData);
         
         // Check if inspection is already scheduled
-        if (sellRequestData.status === 'inspection_scheduled') {
+        if (sellRequestData.status === 'inspection_scheduled' || statusData?.status === 'inspection_scheduled') {
           setIsScheduled(true);
         }
       } catch (err: any) {
@@ -84,7 +121,7 @@ const SellSuccess = () => {
     };
     
     fetchData();
-  }, [id]);
+  }, [sellRequestId]);
 
   // Set up polling for status updates
   useEffect(() => {
@@ -150,9 +187,38 @@ const SellSuccess = () => {
     );
   }
 
-  const vehicle = sellRequest.vehicle || {};
-  const vehicle_details = sellRequest.vehicle_details || {};
-  const status = statusInfo?.status || sellRequest.status || 'unknown';
+  // Create safe references to avoid undefined errors
+  const vehicle = sellRequest.vehicle || sellRequest || {};
+  const brand = vehicle.brand || sellRequest.brand || 'Unknown';
+  const model = vehicle.model || sellRequest.model || '';
+  const year = vehicle.year || sellRequest.year || '';
+  const registration_number = vehicle.registration_number || sellRequest.registration_number || 'Unknown';
+  const photo_front = vehicle.photo_front || sellRequest.photo_front || null;
+  const pickup_address = sellRequest.pickup_address || vehicle.pickup_address || 'Not available';
+  const contact_number = sellRequest.contact_number || vehicle.contact_number || 'Not available';
+  const created_at = sellRequest.created_at || vehicle.created_at || new Date().toISOString();
+  
+  // Compute expected price from multiple possible sources
+  const expected_price = vehicle.expected_price || 
+                         sellRequest.expected_price || 
+                         vehicle.price || 
+                         sellRequest.price || 
+                         vehicleData?.expected_price || 
+                         0;
+  
+  // Get status information
+  const status = statusInfo?.status || sellRequest.status || vehicle.status || 'unknown';
+
+  // DEBUG: Log UI values vs stored values
+  console.log('[DEBUG] UI Display Values:', {
+    brand,
+    model,
+    year,
+    registration_number,
+    expected_price,
+    pickup_address,
+    status
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 py-12">
@@ -170,8 +236,8 @@ const SellSuccess = () => {
           <div className="mb-8">
             <StatusDisplay 
               status={status} 
-              statusDisplay={statusInfo?.status_display || sellRequest.status}
-              title={statusInfo?.title}
+              statusDisplay={statusInfo?.status_display || sellRequest.status_display || status}
+              title={statusInfo?.title || 'Processing'}
               message={statusInfo?.message || 'We have received your listing and will process it shortly.'} 
             />
           </div>
@@ -181,9 +247,9 @@ const SellSuccess = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <div className="mb-4">
-                  {vehicle.photo_front ? (
+                  {photo_front ? (
                     <SafeImage 
-                      src={vehicle.photo_front}
+                      src={photo_front}
                       alt="Vehicle" 
                       className="w-full h-40 object-cover rounded-lg"
                     />
@@ -194,29 +260,29 @@ const SellSuccess = () => {
                   )}
                 </div>
                 <h3 className="font-medium text-gray-800 text-lg">
-                  {vehicle.brand} {vehicle.model} {vehicle.year}
+                  {brand} {model} {year}
                 </h3>
                 <p className="text-gray-600">
-                  Registration: {vehicle.registration_number}
+                  Registration: {registration_number}
                 </p>
               </div>
               
               <div className="space-y-2">
                 <div>
                   <span className="text-gray-500 text-sm">Expected Price</span>
-                  <p className="font-bold text-lg text-[#FF5733]">₹{formatPrice(vehicle.expected_price || vehicle_details.expected_price || vehicleData.expected_price || 0)}</p>
+                  <p className="font-bold text-lg text-[#FF5733]">₹{formatPrice(expected_price)}</p>
                 </div>
                 <div>
                   <span className="text-gray-500 text-sm">Pickup Address</span>
-                  <p className="font-medium">{sellRequest.pickup_address}</p>
+                  <p className="font-medium">{pickup_address}</p>
                 </div>
                 <div>
                   <span className="text-gray-500 text-sm">Contact Number</span>
-                  <p className="font-medium">{sellRequest.contact_number}</p>
+                  <p className="font-medium">{contact_number}</p>
                 </div>
                 <div>
                   <span className="text-gray-500 text-sm">Submission Date</span>
-                  <p className="font-medium">{new Date(sellRequest.created_at).toLocaleDateString()}</p>
+                  <p className="font-medium">{new Date(created_at).toLocaleDateString()}</p>
                 </div>
               </div>
             </div>
