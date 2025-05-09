@@ -1724,4 +1724,32 @@ const marketplaceService = {
   // Share vehicle via native share API if available or copy link to clipboard
   shareVehicle: async (vehicleId: string, vehicleName: string) => {
     const shareUrl = `${window.location.origin}/vehicles/${vehicleId}`;
-    const shareTitle = `
+    const shareTitle = `Check out this ${vehicleName || 'vehicle'} on RepairMyBike`;
+    const shareText = `I found this great vehicle on RepairMyBike. Check it out!`;
+
+    // Use native share API if available
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+        return { success: true, method: 'native_share' };
+      } catch (err) {
+        console.error('Error sharing:', err);
+      }
+    }
+
+    // Fallback to copy to clipboard
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      return { success: true, method: 'clipboard', url: shareUrl };
+    } catch (err) {
+      console.error('Failed to copy URL to clipboard:', err);
+      return { success: false, error: 'Failed to copy URL' };
+    }
+  }
+};
+
+export default marketplaceService;
