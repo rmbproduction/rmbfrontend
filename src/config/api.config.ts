@@ -6,8 +6,8 @@
  */
 export const API_CONFIG = {
   // Base URLs for API and media content
-  BASE_URL: import.meta.env.VITE_API_URL || 'https://repairmybike.in/api',
-  MEDIA_URL: import.meta.env.VITE_MEDIA_URL || 'https://repairmybike.in',
+  BASE_URL: import.meta.env.VITE_API_URL || 'https://repairmybike.up.railway.app/api',
+  MEDIA_URL: import.meta.env.VITE_MEDIA_URL || 'https://repairmybike.up.railway.app',
   // Use BASE_URL for marketplace to avoid hardcoding
   get MARKETPLACE_URL() {
     return `${this.BASE_URL}/marketplace`;
