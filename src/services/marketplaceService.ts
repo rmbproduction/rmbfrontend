@@ -158,7 +158,7 @@ const marketplaceService = {
         }
       }
       
-      const response = await axios.get(`${API_CONFIG.BASE_URL}/sell-requests/`, {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/sell-requests/`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -234,7 +234,7 @@ const marketplaceService = {
       }
       
       try {
-        const response = await axios.get(`${API_CONFIG.BASE_URL}/sell-requests/${id}/`, { headers });
+        const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/sell-requests/${id}/`, { headers });
         
         // Get ETag from response if available
         const etag = response.headers.etag;
@@ -329,7 +329,7 @@ const marketplaceService = {
         throw new Error('Authentication required. Please log in to continue.');
       }
       
-      const response = await axios.get(`${API_CONFIG.BASE_URL}/sell-requests/${sellRequestId}/status_info/`, {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/sell-requests/${sellRequestId}/status_info/`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -498,7 +498,7 @@ const marketplaceService = {
       
       try {
         // Try to find an existing vehicle with this registration number
-        const checkResponse = await axios.get(`${API_CONFIG.BASE_URL}/api/vehicle/user-vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`, {
+        const checkResponse = await axios.get(`${API_CONFIG.BASE_URL}/vehicle/vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -511,7 +511,7 @@ const marketplaceService = {
           isExistingVehicle = true;
         } else {
           // No vehicle exists with this registration, create a new one
-          const vehicleResponse = await axios.post(`${API_CONFIG.BASE_URL}/api/vehicle/user-vehicles/`, vehicleData, {
+          const vehicleResponse = await axios.post(`${API_CONFIG.BASE_URL}/vehicle/vehicles/`, vehicleData, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
@@ -529,7 +529,7 @@ const marketplaceService = {
           console.log('Vehicle already exists (from error response), trying to find it by registration number');
           
           const findResponse = await axios.get(
-            `${API_CONFIG.BASE_URL}/api/vehicle/user-vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
+            `${API_CONFIG.BASE_URL}/vehicle/vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
             {
               headers: { 'Authorization': `Bearer ${token}` }
             }
@@ -628,7 +628,7 @@ const marketplaceService = {
         
         console.log('Sending multipart form data request for sell request with vehicle ID:', vehicleId);
         
-        const response = await axios.post(`${API_CONFIG.BASE_URL}/sell-requests/`, data, {
+        const response = await axios.post(`${API_CONFIG.BASE_URL}/marketplace/sell-requests/`, data, {
           headers: {
             'Content-Type': 'multipart/form-data',
             'Authorization': `Bearer ${token}`
@@ -701,7 +701,7 @@ const marketplaceService = {
           
           // Retry the request
           const retryResponse = await axios.post(
-            `${API_CONFIG.BASE_URL}/sell-requests/`,
+            `${API_CONFIG.BASE_URL}/marketplace/sell-requests/`,
             retryData,
             {
               headers: {
@@ -796,7 +796,7 @@ const marketplaceService = {
       
       try {
         // Create vehicle
-        const vehicleResponse = await axios.post(`${API_CONFIG.BASE_URL}/vehicles/`, vehicleData, {
+        const vehicleResponse = await axios.post(`${API_CONFIG.BASE_URL}/vehicle/vehicles/`, vehicleData, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
@@ -818,7 +818,7 @@ const marketplaceService = {
           
           // Try to find the vehicle by registration number
           const findResponse = await axios.get(
-            `${API_CONFIG.BASE_URL}/vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
+            `${API_CONFIG.BASE_URL}/vehicle/vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
             {
               headers: { 'Authorization': `Bearer ${token}` }
             }
@@ -922,7 +922,7 @@ const marketplaceService = {
       console.log('Creating sell request with vehicle ID:', vehicleId);
       
       const response = await axios.post(
-        `${API_CONFIG.BASE_URL}/sell-requests/`,
+        `${API_CONFIG.BASE_URL}/marketplace/sell-requests/`,
         basicData,
         {
           headers: {
@@ -954,7 +954,7 @@ const marketplaceService = {
           
           // Update the sell request with the photos
           await axios.patch(
-            `${API_CONFIG.BASE_URL}/sell-requests/${sellRequestId}/`,
+            `${API_CONFIG.BASE_URL}/marketplace/sell-requests/${sellRequestId}/`,
             photoData,
             {
               headers: {
@@ -1017,7 +1017,7 @@ const marketplaceService = {
     const isoDateTime = new Date(`${date.toDateString()} ${time}`).toISOString();
     
     const response = await axios.post(
-      `${API_CONFIG.BASE_URL}/sell-requests/${sellRequestId}/schedule/`, 
+      `${API_CONFIG.BASE_URL}/marketplace/sell-requests/${sellRequestId}/schedule/`, 
       { pickup_slot: isoDateTime },
       {
         headers: {
@@ -1031,7 +1031,7 @@ const marketplaceService = {
   
   // Get user's sell requests
   getUserSellRequests: async () => {
-    const response = await axios.get(`${API_CONFIG.BASE_URL}/sell-requests/`, {
+    const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/sell-requests/`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
       }
@@ -1058,7 +1058,7 @@ const marketplaceService = {
       }
       
       const response = await axios.patch(
-        `${API_CONFIG.BASE_URL}/sell-requests/${id}/`, 
+        `${API_CONFIG.BASE_URL}/marketplace/sell-requests/${id}/`, 
         updateData, 
         {
           headers: {
@@ -1102,7 +1102,7 @@ const marketplaceService = {
       }
       
       // Fetch fresh data from API
-      const response = await axios.get(`${API_CONFIG.BASE_URL}/sell-requests/${id}/`, {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/sell-requests/${id}/`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -1118,7 +1118,7 @@ const marketplaceService = {
       // Also refresh the status information
       let statusData = null;
       try {
-        const statusResponse = await axios.get(`${API_CONFIG.BASE_URL}/sell-requests/${id}/status_info/`, {
+        const statusResponse = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/sell-requests/${id}/status_info/`, {
           headers: {
             'Authorization': `Bearer ${token}`
           },
@@ -1664,23 +1664,67 @@ const marketplaceService = {
         throw new Error('Authentication required. Please log in to continue.');
       }
 
-      const response = await axios.get(`${API_CONFIG.BASE_URL}/bookings/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      // Store in sessionStorage for quick access
+      // First try to get bookings from sessionStorage
       try {
-        sessionStorage.setItem('user_vehicle_bookings', JSON.stringify(response.data));
+        const storedBookings = sessionStorage.getItem('user_vehicle_bookings');
+        if (storedBookings) {
+          console.log('Using bookings from sessionStorage');
+          return JSON.parse(storedBookings);
+        }
       } catch (e) {
-        console.error('Failed to store bookings in sessionStorage:', e);
+        console.warn('Error reading bookings from sessionStorage:', e);
+      }
+
+      // Add retry logic for API calls with exponential backoff
+      const maxRetries = 3;
+      let retryCount = 0;
+      let lastError;
+
+      while (retryCount < maxRetries) {
+        try {
+          console.log(`Attempt ${retryCount + 1} to fetch bookings from API`);
+          
+          const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/bookings/`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            // Add timeout to prevent hanging requests
+            timeout: 10000
+          });
+          
+          // Store in sessionStorage for quick access
+          try {
+            sessionStorage.setItem('user_vehicle_bookings', JSON.stringify(response.data));
+          } catch (e) {
+            console.error('Failed to store bookings in sessionStorage:', e);
+          }
+          
+          return response.data;
+        } catch (error: any) {
+          lastError = error;
+          retryCount++;
+          
+          // Log the error but don't throw yet if we have more retries
+          console.warn(`Error fetching bookings (attempt ${retryCount}/${maxRetries}):`, error.message);
+          
+          if (retryCount < maxRetries) {
+            // Exponential backoff: 1s, 2s, 4s, etc.
+            const delay = 1000 * Math.pow(2, retryCount - 1);
+            console.log(`Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
       }
       
-      return response.data;
+      // All retries failed, check if we should return an empty array instead of throwing
+      console.error('All attempts to fetch bookings failed:', lastError);
+      
+      // Return empty array as fallback instead of throwing
+      return [];
     } catch (error) {
-      console.error('Error fetching user bookings:', error);
-      throw error;
+      console.error('Error in getUserBookings:', error);
+      // Return empty array instead of throwing to prevent UI errors
+      return [];
     }
   },
   
