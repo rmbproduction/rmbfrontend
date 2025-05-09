@@ -12,10 +12,10 @@ const Footer = () => {
           <div>
             <h3 className="text-white text-lg font-semibold mb-4">Quick Links</h3>
             <ul className="space-y-2">
-              <li><a href="#services" className="text-gray-400 hover:text-white">Services</a></li>
-              <li><a href="#how-it-works" className="text-gray-400 hover:text-white">How It Works</a></li>
-              <li><a href="#pricing" className="text-gray-400 hover:text-white">Pricing</a></li>
-              <li><a href="#contact" className="text-gray-400 hover:text-white">Contact</a></li>
+              <li><a href="/services" className="text-gray-400 hover:text-white">Services</a></li>
+              {/* <li><a href="#how-it-works" className="text-gray-400 hover:text-white">How It Works</a></li> */}
+              <li><a href="/pricing" className="text-gray-400 hover:text-white">Pricing</a></li>
+              <li><a href="/contact" className="text-gray-400 hover:text-white">Contact</a></li>
             </ul>
           </div>
           <div>
@@ -23,11 +23,11 @@ const Footer = () => {
             <ul className="space-y-2">
               <li className="flex items-center text-gray-400">
                 <Phone className="h-5 w-5 mr-2" />
-                <span>PH:8168121711</span>
+                <span>+91 8168121711</span>
               </li>
               <li className="flex items-center text-gray-400">
                 <Mail className="h-5 w-5 mr-2" />
-                <span>support@repiarmybike.in</span>
+                <span>support@repairmybike.in</span>
               </li>
               <li className="flex items-center text-gray-400">
                 <MapPin className="h-5 w-5 mr-2" />
