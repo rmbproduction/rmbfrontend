@@ -10,7 +10,11 @@ export const API_CONFIG = {
   MEDIA_URL: import.meta.env.VITE_MEDIA_URL || 'https://repairmybike.up.railway.app',
   // Use BASE_URL for marketplace to avoid hardcoding
   get MARKETPLACE_URL() {
-    return `${this.BASE_URL}/marketplace`;
+    // Ensure the path includes /marketplace/ with proper slashes
+    const baseWithoutTrailingSlash = this.BASE_URL.endsWith('/') 
+      ? this.BASE_URL.slice(0, -1) 
+      : this.BASE_URL;
+    return `${baseWithoutTrailingSlash}/marketplace`;
   },
   
   /**

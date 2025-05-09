@@ -3,7 +3,8 @@ import { safeRevokeUrl } from './imageUtils';
 import { API_CONFIG } from '../config/api.config';
 import persistentStorageService, { TTL } from './persistentStorageService';
 
-const API_URL = API_CONFIG.MARKETPLACE_URL;
+// Add debug logging to verify the API URL
+console.log('[DEBUG] MARKETPLACE URL:', API_CONFIG.MARKETPLACE_URL);
 
 // In-memory cache for sell requests with TTL support
 const sellRequestCache = {
@@ -125,7 +126,7 @@ const marketplaceService = {
         }
       }
       
-      const response = await axios.get(`${API_URL}sell-requests/`, {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/sell-requests/`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -201,7 +202,7 @@ const marketplaceService = {
       }
       
       try {
-        const response = await axios.get(`${API_URL}sell-requests/${id}/`, { headers });
+        const response = await axios.get(`${API_CONFIG.BASE_URL}/sell-requests/${id}/`, { headers });
         
         // Get ETag from response if available
         const etag = response.headers.etag;
@@ -296,7 +297,7 @@ const marketplaceService = {
         throw new Error('Authentication required. Please log in to continue.');
       }
       
-      const response = await axios.get(`${API_URL}sell-requests/${sellRequestId}/status_info/`, {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/sell-requests/${sellRequestId}/status_info/`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -465,7 +466,7 @@ const marketplaceService = {
       
       try {
         // Try to find an existing vehicle with this registration number
-        const checkResponse = await axios.get(`${API_URL}vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`, {
+        const checkResponse = await axios.get(`${API_CONFIG.BASE_URL}/vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -478,7 +479,7 @@ const marketplaceService = {
           isExistingVehicle = true;
         } else {
           // No vehicle exists with this registration, create a new one
-          const vehicleResponse = await axios.post(`${API_URL}vehicles/`, vehicleData, {
+          const vehicleResponse = await axios.post(`${API_CONFIG.BASE_URL}/vehicles/`, vehicleData, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
@@ -496,7 +497,7 @@ const marketplaceService = {
           console.log('Vehicle already exists (from error response), trying to find it by registration number');
           
           const findResponse = await axios.get(
-            `${API_URL}vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
+            `${API_CONFIG.BASE_URL}/vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
             {
               headers: { 'Authorization': `Bearer ${token}` }
             }
@@ -595,7 +596,7 @@ const marketplaceService = {
         
         console.log('Sending multipart form data request for sell request with vehicle ID:', vehicleId);
         
-        const response = await axios.post(`${API_URL}sell-requests/`, data, {
+        const response = await axios.post(`${API_CONFIG.BASE_URL}/sell-requests/`, data, {
           headers: {
             'Content-Type': 'multipart/form-data',
             'Authorization': `Bearer ${token}`
@@ -668,7 +669,7 @@ const marketplaceService = {
           
           // Retry the request
           const retryResponse = await axios.post(
-            `${API_URL}sell-requests/`,
+            `${API_CONFIG.BASE_URL}/sell-requests/`,
             retryData,
             {
               headers: {
@@ -763,7 +764,7 @@ const marketplaceService = {
       
       try {
         // Create vehicle
-        const vehicleResponse = await axios.post(`${API_URL}vehicles/`, vehicleData, {
+        const vehicleResponse = await axios.post(`${API_CONFIG.BASE_URL}/vehicles/`, vehicleData, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
@@ -785,7 +786,7 @@ const marketplaceService = {
           
           // Try to find the vehicle by registration number
           const findResponse = await axios.get(
-            `${API_URL}vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
+            `${API_CONFIG.BASE_URL}/vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
             {
               headers: { 'Authorization': `Bearer ${token}` }
             }
@@ -889,7 +890,7 @@ const marketplaceService = {
       console.log('Creating sell request with vehicle ID:', vehicleId);
       
       const response = await axios.post(
-        `${API_URL}sell-requests/`,
+        `${API_CONFIG.BASE_URL}/sell-requests/`,
         basicData,
         {
           headers: {
@@ -921,7 +922,7 @@ const marketplaceService = {
           
           // Update the sell request with the photos
           await axios.patch(
-            `${API_URL}sell-requests/${sellRequestId}/`,
+            `${API_CONFIG.BASE_URL}/sell-requests/${sellRequestId}/`,
             photoData,
             {
               headers: {
@@ -984,7 +985,7 @@ const marketplaceService = {
     const isoDateTime = new Date(`${date.toDateString()} ${time}`).toISOString();
     
     const response = await axios.post(
-      `${API_URL}sell-requests/${sellRequestId}/schedule/`, 
+      `${API_CONFIG.BASE_URL}/sell-requests/${sellRequestId}/schedule/`, 
       { pickup_slot: isoDateTime },
       {
         headers: {
@@ -998,7 +999,7 @@ const marketplaceService = {
   
   // Get user's sell requests
   getUserSellRequests: async () => {
-    const response = await axios.get(`${API_URL}sell-requests/`, {
+    const response = await axios.get(`${API_CONFIG.BASE_URL}/sell-requests/`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
       }
@@ -1025,7 +1026,7 @@ const marketplaceService = {
       }
       
       const response = await axios.patch(
-        `${API_URL}sell-requests/${id}/`, 
+        `${API_CONFIG.BASE_URL}/sell-requests/${id}/`, 
         updateData, 
         {
           headers: {
@@ -1069,7 +1070,7 @@ const marketplaceService = {
       }
       
       // Fetch fresh data from API
-      const response = await axios.get(`${API_URL}sell-requests/${id}/`, {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/sell-requests/${id}/`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -1085,7 +1086,7 @@ const marketplaceService = {
       // Also refresh the status information
       let statusData = null;
       try {
-        const statusResponse = await axios.get(`${API_URL}sell-requests/${id}/status_info/`, {
+        const statusResponse = await axios.get(`${API_CONFIG.BASE_URL}/sell-requests/${id}/status_info/`, {
           headers: {
             'Authorization': `Bearer ${token}`
           },
@@ -1160,7 +1161,7 @@ const marketplaceService = {
   // Fetch all vehicles
   getAllVehicles: async () => {
     try {
-      const response = await axios.get(`${API_URL}vehicles/`);
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/vehicles/`);
       return response.data;
     } catch (error) {
       console.error('Error fetching all vehicles:', error);
@@ -1171,7 +1172,7 @@ const marketplaceService = {
   // Fetch specific vehicle details by ID
   getVehicleById: async (id: string) => {
     try {
-      const response = await axios.get(`${API_URL}vehicles/${id}/`);
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/vehicles/${id}/`);
       return response.data;
     } catch (error) {
       console.error(`Error fetching vehicle with ID ${id}:`, error);
@@ -1202,8 +1203,15 @@ const marketplaceService = {
         console.warn('Error accessing sessionStorage:', e);
       }
       
+      // Debug: Log the marketplace URL
+      console.log('[DEBUG] Marketplace URL:', API_CONFIG.MARKETPLACE_URL);
+      
+      // Fix: Use full marketplace URL
+      const url = `${API_CONFIG.BASE_URL}/marketplace/vehicles/`;
+      console.log('[DEBUG] Request URL:', url);
+      
       // Fetch from API if no cache or cache expired
-      const response = await axios.get(`${API_URL}vehicles/`, {
+      const response = await axios.get(url, {
         headers: {
           'Authorization': token ? `Bearer ${token}` : ''
         }
@@ -1302,7 +1310,7 @@ const marketplaceService = {
       // Get authentication token
       const token = localStorage.getItem('accessToken');
       
-      const response = await axios.get(`${API_URL}vehicles/${vehicleId}/`, {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/vehicles/${vehicleId}/`, {
         headers: {
           'Authorization': token ? `Bearer ${token}` : ''
         }
@@ -1320,7 +1328,7 @@ const marketplaceService = {
       // Get authentication token
       const token = localStorage.getItem('accessToken');
       
-      const response = await axios.get(`${API_URL}vehicles/${vehicleId}/similar/`, {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/vehicles/${vehicleId}/similar/`, {
         headers: {
           'Authorization': token ? `Bearer ${token}` : ''
         }
@@ -1339,7 +1347,7 @@ const marketplaceService = {
       // Get authentication token
       const token = localStorage.getItem('accessToken');
       
-      const response = await axios.get(`${API_URL}vehicles/popular/?limit=${limit}`, {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/vehicles/popular/?limit=${limit}`, {
         headers: {
           'Authorization': token ? `Bearer ${token}` : ''
         }
@@ -1375,9 +1383,13 @@ const marketplaceService = {
         console.warn('Error accessing sessionStorage for filters:', e);
       }
       
+      // Fix: Use full marketplace URL
+      const url = `${API_CONFIG.BASE_URL}/marketplace/vehicles/`;
+      console.log('[DEBUG] Filter Request URL:', url);
+      
       // Since there's no specific /vehicles/filters/ endpoint,
       // extract filter data from the vehicles list
-      const response = await axios.get(`${API_URL}vehicles/`, {
+      const response = await axios.get(url, {
         headers: {
           'Authorization': token ? `Bearer ${token}` : ''
         }
@@ -1449,7 +1461,7 @@ const marketplaceService = {
         throw new Error('Authentication required. Please log in to continue.');
       }
 
-      const response = await axios.post(`${API_URL}vehicles/${vehicleId}/purchase/`, purchaseData, {
+      const response = await axios.post(`${API_CONFIG.BASE_URL}/vehicles/${vehicleId}/purchase/`, purchaseData, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -1488,7 +1500,7 @@ const marketplaceService = {
 
       console.log('Booking payload:', payload);
 
-      const response = await axios.post(`${API_URL}vehicles/${vehicleId}/book/`, payload, {
+      const response = await axios.post(`${API_CONFIG.BASE_URL}/vehicles/${vehicleId}/book/`, payload, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -1597,7 +1609,7 @@ const marketplaceService = {
         throw new Error('Authentication required. Please log in to continue.');
       }
 
-      const response = await axios.get(`${API_URL}bookings/`, {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/bookings/`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -1640,7 +1652,7 @@ const marketplaceService = {
         
         // Call the API to add to favorites if an endpoint exists
         try {
-          await axios.post(`${API_URL}user/favorites/`, { vehicle_id: vehicleId }, {
+          await axios.post(`${API_CONFIG.BASE_URL}/user/favorites/`, { vehicle_id: vehicleId }, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
@@ -1679,7 +1691,7 @@ const marketplaceService = {
       
       // Call the API to remove from favorites if an endpoint exists
       try {
-        await axios.delete(`${API_URL}user/favorites/${vehicleId}/`, {
+        await axios.delete(`${API_CONFIG.BASE_URL}/user/favorites/${vehicleId}/`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -1712,172 +1724,4 @@ const marketplaceService = {
   // Share vehicle via native share API if available or copy link to clipboard
   shareVehicle: async (vehicleId: string, vehicleName: string) => {
     const shareUrl = `${window.location.origin}/vehicles/${vehicleId}`;
-    const shareTitle = `Check out this ${vehicleName} on RepairMyBike!`;
-    const shareText = `I found this amazing ${vehicleName} on RepairMyBike. Check it out!`;
-    
-    // Use Web Share API if available
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: shareTitle,
-          text: shareText,
-          url: shareUrl,
-        });
-        return { success: true, method: 'navigator.share' };
-      } catch (error) {
-        console.error('Error sharing:', error);
-        // Fall back to clipboard if sharing fails
-      }
-    }
-    
-    // Fallback to clipboard
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      return { success: true, method: 'clipboard' };
-    } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
-      
-      // Last resort fallback (create temporary input element and copy)
-      try {
-        const tempInput = document.createElement('input');
-        tempInput.value = shareUrl;
-        document.body.appendChild(tempInput);
-        tempInput.select();
-        document.execCommand('copy');
-        document.body.removeChild(tempInput);
-        return { success: true, method: 'execCommand' };
-      } catch (e) {
-        console.error('All sharing methods failed:', e);
-        return { success: false, error: 'Failed to share' };
-      }
-    }
-  },
-  
-  // Cancel a vehicle booking
-  cancelBooking: async (bookingId: string | number) => {
-    try {
-      // Get authentication token
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        throw new Error('Authentication required. Please log in to continue.');
-      }
-
-      const response = await axios.post(`${API_URL}bookings/${bookingId}/cancel/`, {}, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      // Update cached bookings
-      try {
-        const cachedBookingsJson = sessionStorage.getItem('user_vehicle_bookings');
-        if (cachedBookingsJson) {
-          const cachedBookings = JSON.parse(cachedBookingsJson);
-          const updatedBookings = cachedBookings.map((booking: any) => {
-            if (String(booking.id) === String(bookingId)) {
-              return { ...booking, status: 'cancelled', status_display: 'Cancelled' };
-            }
-            return booking;
-          });
-          sessionStorage.setItem('user_vehicle_bookings', JSON.stringify(updatedBookings));
-        }
-      } catch (e) {
-        console.error('Failed to update booking in sessionStorage:', e);
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('Error cancelling booking:', error);
-      throw error;
-    }
-  },
-
-  // Ensure vehicle data is properly formatted when retrieving
-  enrichVehicleData: (vehicleData: Record<string, any>) => {
-    if (!vehicleData) return null;
-    
-    console.log('[DEBUG] enrichVehicleData input:', vehicleData);
-    console.log('[DEBUG] Has vehicle property?', !!vehicleData.vehicle);
-    console.log('[DEBUG] Original ID:', vehicleData.id);
-    
-    // Create a properly formatted vehicle object with all possible properties
-    const enriched = {
-      ...vehicleData,
-      // Preserve the ID from the original data
-      id: vehicleData.id,
-      // Ensure these fields are properly set with fallbacks
-      vehicle: vehicleData.vehicle || vehicleData,
-      status: vehicleData.status || vehicleData.vehicle?.status || 'pending',
-      expected_price: vehicleData.expected_price || vehicleData.vehicle?.expected_price || vehicleData.price || 0,
-      // Ensure price is always available for safe fallback
-      price: vehicleData.price || vehicleData.expected_price || 0
-    };
-    
-    // Check if vehicle is an object before trying to set properties on it
-    if (enriched.vehicle && typeof enriched.vehicle === 'object') {
-      // Make sure vehicle data has essential fields for display
-      enriched.vehicle.expected_price = enriched.vehicle.expected_price || 
-                                        enriched.vehicle.price || 
-                                        enriched.expected_price || 
-                                        enriched.price || 
-                                        0;
-      
-      // Ensure other critical fields have values
-      enriched.vehicle.brand = enriched.vehicle.brand || vehicleData.brand || 'Unknown';
-      enriched.vehicle.model = enriched.vehicle.model || vehicleData.model || 'Unknown';
-      enriched.vehicle.year = enriched.vehicle.year || vehicleData.year || new Date().getFullYear();
-      enriched.vehicle.registration_number = enriched.vehicle.registration_number || 
-                                            vehicleData.registration_number || 'Unknown';
-      enriched.vehicle.fuel_type = enriched.vehicle.fuel_type || vehicleData.fuel_type || 'Petrol';
-      enriched.vehicle.color = enriched.vehicle.color || vehicleData.color || 'Not Available';
-      enriched.vehicle.kms_driven = enriched.vehicle.kms_driven || vehicleData.kms_driven || 0;
-      enriched.vehicle.Mileage = enriched.vehicle.Mileage || enriched.vehicle.mileage || 
-                                 vehicleData.Mileage || vehicleData.mileage || 'Not Available';
-      enriched.vehicle.mileage = enriched.vehicle.mileage || enriched.vehicle.Mileage || 
-                                 vehicleData.mileage || vehicleData.Mileage || 'Not Available';
-    }
-    
-    console.log('[DEBUG] Enriched data:', enriched);
-    console.log('[DEBUG] Enriched vehicle property:', enriched.vehicle);
-    console.log('[DEBUG] Enriched brand:', enriched.vehicle.brand);
-    console.log('[DEBUG] Enriched model:', enriched.vehicle.model);
-    console.log('[DEBUG] Enriched reg number:', enriched.vehicle.registration_number);
-    
-    return enriched;
-  },
-
-  // Add method to subscribe to vehicle updates
-  subscribeToVehicleUpdates: (vehicleId: string, callback: () => void) => {
-    return persistentStorageService.subscribeToVehicle(vehicleId, callback);
-  },
-
-  // Add method to verify if data needs refresh
-  checkIfRefreshNeeded: async (vehicleId: string): Promise<boolean> => {
-    try {
-      // Check timestamp in persistent storage
-      const storedData = await persistentStorageService.getVehicleData(vehicleId);
-      if (!storedData) {
-        return true; // No data, definitely need refresh
-      }
-      
-      // Check if data is expired
-      const lastUpdated = storedData.last_updated || 0;
-      const now = Date.now();
-      const age = now - lastUpdated;
-      
-      // Status data should refresh more frequently than full vehicle data
-      const isStatusCheck = window.location.pathname.includes('/status') || 
-                           window.location.pathname.includes('/track');
-      
-      const maxAge = isStatusCheck ? 5 * 60 * 1000 : TTL.VEHICLE; // 5 minutes for status, TTL.VEHICLE for vehicles
-      
-      return age > maxAge;
-    } catch (error) {
-      console.error('Error checking if refresh is needed:', error);
-      return true; // Refresh to be safe
-  }
-  },
-};
-
-export default marketplaceService; 
+    const shareTitle = `
