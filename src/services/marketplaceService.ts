@@ -6,6 +6,38 @@ import persistentStorageService, { TTL } from './persistentStorageService';
 // Add debug logging to verify the API URL
 console.log('[DEBUG] MARKETPLACE URL:', API_CONFIG.MARKETPLACE_URL);
 
+// Add type for vehicle data
+interface VehicleData {
+  id?: string;
+  vehicle?: {
+    id?: string;
+    brand?: string;
+    model?: string;
+    registration_number?: string;
+    year?: number;
+    fuel_type?: string;
+    color?: string;
+    kms_driven?: number;
+    engine_capacity?: number;
+    expected_price?: number;
+    price?: number;
+    condition?: string;
+    mileage?: string;
+    Mileage?: string;
+    last_updated?: number;
+    vehicle_type?: string;
+    features?: string[];
+    highlights?: string[];
+    emi_available?: boolean;
+    [key: string]: any;
+  };
+  status?: string;
+  status_display?: string;
+  status_title?: string;
+  status_message?: string;
+  [key: string]: any;
+}
+
 // In-memory cache for sell requests with TTL support
 const sellRequestCache = {
   data: new Map<string, { data: any, timestamp: number, etag?: string }>(),
@@ -33,7 +65,7 @@ const sellRequestCache = {
   },
   
   // Get data from cache if not expired
-  get(key: string): any | null {
+  get(key: string): { data: any, timestamp: number, etag?: string } | null {
     // First try in-memory cache
     const cached = this.data.get(key);
     if (cached && Date.now() - cached.timestamp < this.maxAge) {
@@ -105,7 +137,7 @@ const marketplaceService = {
   },
 
   // Get all sell requests for the current user
-  getSellRequests: async () => {
+  getSellRequests: async (): Promise<VehicleData[]> => {
     try {
       const token = localStorage.getItem('accessToken');
       if (!token) {
@@ -139,7 +171,7 @@ const marketplaceService = {
       }
       
       // Enrich each vehicle in the data
-      const enrichedData = response.data.map(vehicleData => marketplaceService.enrichVehicleData(vehicleData));
+      const enrichedData: VehicleData[] = response.data.map((vehicleData: VehicleData) => marketplaceService.enrichVehicleData(vehicleData));
       
       // Cache the results
       sessionStorage.setItem(cacheKey, JSON.stringify({
@@ -162,7 +194,7 @@ const marketplaceService = {
   },
 
   // Get a specific sell request by ID
-  getSellRequest: async (id: string, forceRefresh = false) => {
+  getSellRequest: async (id: string, forceRefresh = false): Promise<VehicleData | null> => {
     try {
       // If not forcing refresh, check sessionStorage first directly
       if (!forceRefresh) {
@@ -214,7 +246,7 @@ const marketplaceService = {
       }
       
         // Enrich the data
-        const enrichedData = marketplaceService.enrichVehicleData(response.data);
+        const enrichedData: VehicleData = marketplaceService.enrichVehicleData(response.data);
         
         // CRITICAL: Update sessionStorage directly for fastest UI access
         try {
@@ -1749,6 +1781,65 @@ const marketplaceService = {
       console.error('Failed to copy URL to clipboard:', err);
       return { success: false, error: 'Failed to copy URL' };
     }
+  },
+
+  // Helper function to enrich vehicle data
+  enrichVehicleData: (data: VehicleData): VehicleData => {
+    // If data is null or undefined, return empty object
+    if (data == null) return {};
+    
+    // Make a deep copy to avoid modifying the original
+    const enriched: VehicleData = JSON.parse(JSON.stringify(data));
+    
+    // Ensure ID exists
+    if (!enriched.id && enriched.vehicle?.id) {
+      enriched.id = enriched.vehicle.id;
+    }
+    
+    // Ensure vehicle object exists
+    if (!enriched.vehicle) {
+      enriched.vehicle = {};
+    }
+    
+    // Ensure critical properties have values
+    if (enriched.vehicle) {
+      enriched.vehicle.brand = enriched.vehicle.brand || 'Unknown';
+      enriched.vehicle.model = enriched.vehicle.model || 'Unknown';
+      enriched.vehicle.registration_number = enriched.vehicle.registration_number || 'Unknown';
+      enriched.vehicle.year = enriched.vehicle.year || new Date().getFullYear();
+      enriched.vehicle.fuel_type = enriched.vehicle.fuel_type || 'Petrol';
+      enriched.vehicle.color = enriched.vehicle.color || 'Not Available';
+      enriched.vehicle.kms_driven = enriched.vehicle.kms_driven || 0;
+      enriched.vehicle.engine_capacity = enriched.vehicle.engine_capacity || 0;
+      
+      // Ensure we have both price and expected_price
+      if (enriched.vehicle.price && !enriched.vehicle.expected_price) {
+        enriched.vehicle.expected_price = enriched.vehicle.price;
+      } else if (enriched.vehicle.expected_price && !enriched.vehicle.price) {
+        enriched.vehicle.price = enriched.vehicle.expected_price;
+      }
+      
+      // Ensure we have both mileage and Mileage
+      enriched.vehicle.mileage = enriched.vehicle.mileage || enriched.vehicle.Mileage || 'Not Available';
+      enriched.vehicle.Mileage = enriched.vehicle.Mileage || enriched.vehicle.mileage || 'Not Available';
+    }
+    
+    return enriched;
+  },
+
+  // Helper function to process vehicle data consistently
+  processVehicleData: (vehicle: any): VehicleData => {
+    // If vehicle is not provided or not an object, return minimal object
+    if (!vehicle || typeof vehicle !== 'object') {
+      return { 
+        vehicle: {
+          brand: 'Unknown',
+          model: 'Unknown'
+        } 
+      };
+    }
+    
+    return marketplaceService.enrichVehicleData(vehicle);
   }
 };
 
