@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { API_CONFIG } from '../config/api.config';
 
 const EmailConfirmation = () => {
   const { key } = useParams();
@@ -11,7 +12,7 @@ const EmailConfirmation = () => {
   useEffect(() => {
     const verifyEmail = async () => {
       try {
-        const response = await axios.get(`http://localhost:8000/api/accounts/verify-email/${key}/`);
+        const response = await axios.get(API_CONFIG.getApiUrl(`/accounts/verify-email/${key}/`));
         
         if (response.data.status === 'success') {
           toast.success(response.data.message, {

@@ -44,68 +44,106 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Check if a URL is an API URL (works with any domain)
+function isApiUrl(url) {
+  return url.pathname.includes('/api/');
+}
+
+// Check if a URL is an image
+function isImageUrl(url) {
+  return url.pathname.match(/\.(jpe?g|png|gif|webp|avif|svg)$/i);
+}
+
 // Fetch event
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  // Handle API requests
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      caches.open(API_CACHE).then((cache) => {
-        return cache.match(event.request).then((cachedResponse) => {
-          const fetchPromise = fetch(event.request)
-            .then((networkResponse) => {
-              if (networkResponse.ok) {
-                cache.put(event.request, networkResponse.clone());
-              }
-              return networkResponse;
-            })
-            .catch(error => {
-              console.warn(`Failed to fetch ${url.pathname}:`, error);
-              throw error;
-            });
-          return cachedResponse || fetchPromise;
-        });
-      }).catch(error => {
-        console.error('Cache error:', error);
-        return fetch(event.request);
-      })
-    );
+  // Skip non-GET requests
+  if (event.request.method !== 'GET') {
     return;
   }
 
-  // Handle image requests
-  if (url.pathname.match(/\.(jpe?g|png|gif|webp|avif|svg)$/i)) {
-    event.respondWith(
-      caches.open(IMAGE_CACHE).then((cache) => {
-        return cache.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) {
-            return cachedResponse;
-          }
-          return fetch(event.request)
-            .then((networkResponse) => {
-              if (networkResponse.ok) {
-                cache.put(event.request, networkResponse.clone());
-              }
-              return networkResponse;
-            })
-            .catch(error => {
-              console.warn(`Failed to fetch image ${url.pathname}:`, error);
-              throw error;
+  try {
+    const url = new URL(event.request.url);
+    
+    // Handle API requests - using the path pattern instead of hardcoded origins
+    if (isApiUrl(url)) {
+      event.respondWith(
+        caches.open(API_CACHE).then((cache) => {
+          return cache.match(event.request).then((cachedResponse) => {
+            const fetchPromise = fetch(event.request, { credentials: 'include' })
+              .then((networkResponse) => {
+                if (networkResponse.ok) {
+                  cache.put(event.request, networkResponse.clone());
+                }
+                return networkResponse;
+              })
+              .catch(error => {
+                console.warn(`Failed to fetch ${url.pathname}:`, error);
+                // Return cached response or throw the error
+                return cachedResponse || Promise.reject(error);
+              });
+              
+            // Use cached response if available, otherwise try network
+            return cachedResponse || fetchPromise;
+          });
+        }).catch(error => {
+          console.error('Cache error:', error);
+          // Fall back to network
+          return fetch(event.request, { credentials: 'include' })
+            .catch(err => {
+              console.error('Network fetch also failed:', err);
+              // If both cache and network fail, show a meaningful error
+              return new Response(
+                JSON.stringify({ error: 'Network and cache fetch failed' }),
+                { status: 503, headers: { 'Content-Type': 'application/json' } }
+              );
             });
-        });
-      }).catch(error => {
-        console.error('Image cache error:', error);
-        return fetch(event.request);
+        })
+      );
+      return;
+    }
+
+    // Handle image requests
+    if (isImageUrl(url)) {
+      event.respondWith(
+        caches.open(IMAGE_CACHE).then((cache) => {
+          return cache.match(event.request).then((cachedResponse) => {
+            if (cachedResponse) {
+              return cachedResponse;
+            }
+            
+            return fetch(event.request)
+              .then((networkResponse) => {
+                if (networkResponse.ok) {
+                  cache.put(event.request, networkResponse.clone());
+                }
+                return networkResponse;
+              })
+              .catch(error => {
+                console.warn(`Failed to fetch image ${url.pathname}:`, error);
+                // Return a placeholder image or error response
+                return new Response(
+                  'Image not available',
+                  { status: 404, headers: { 'Content-Type': 'text/plain' } }
+                );
+              });
+          });
+        }).catch(error => {
+          console.error('Image cache error:', error);
+          return fetch(event.request);
+        })
+      );
+      return;
+    }
+
+    // Handle other requests
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return caches.match(event.request);
       })
     );
-    return;
+  } catch (error) {
+    console.error('Service worker error:', error);
+    // Fall back to network for any errors in our service worker logic
+    event.respondWith(fetch(event.request));
   }
-
-  // Handle other requests
-  event.respondWith(
-    fetch(event.request).catch(() => {
-      return caches.match(event.request);
-    })
-  );
 }); 

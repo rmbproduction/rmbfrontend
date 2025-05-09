@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { API_CONFIG } from '../config/api.config';
 
 const PasswordResetConfirmation = () => {
   const [password, setPassword] = useState('');
@@ -25,7 +26,7 @@ const PasswordResetConfirmation = () => {
 
     try {
       const response = await axios.post(
-        `http://localhost:8000/api/accounts/password-reset/${token}/`,
+        API_CONFIG.getApiUrl(`/accounts/password-reset/${token}/`),
         { password }
       );
 

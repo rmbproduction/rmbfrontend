@@ -178,3 +178,10 @@ export const API_CONFIG = {
   // Debug mode
   debugMode: process.env.NODE_ENV === 'development',
 };
+
+// Google Maps API configuration
+export const googleMapsConfig = {
+  apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
+  region: 'IN',
+  language: 'en'
+};

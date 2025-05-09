@@ -225,13 +225,11 @@ const ProfilePage = () => {
   // Add this function before fetchVehicleModels
   const fetchAllModels = async () => {
     try {
-      const baseUrl =
-        import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/";
       const accessToken = localStorage.getItem("accessToken");
 
       console.log("Fetching all vehicle models for debugging");
 
-      const response = await axios.get(`${baseUrl}vehicle/vehicle-models/`, {
+      const response = await axios.get(API_CONFIG.getApiUrl('vehicle/vehicle-models/'), {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -515,9 +513,7 @@ const ProfilePage = () => {
       const accessToken = localStorage.getItem("accessToken");
       if (!accessToken) throw new Error("No access token found");
 
-      const baseUrl =
-        import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/";
-      const url = `${baseUrl}vehicle/vehicle-models/?manufacturer=${manufacturerId}&vehicle_type=${vehicleTypeId}`;
+      const url = API_CONFIG.getApiUrl(`vehicle/vehicle-models/?manufacturer=${manufacturerId}&vehicle_type=${vehicleTypeId}`);
       console.log("Vehicle Models API URL:", url);
 
       const response = await axios.get(url, {
@@ -1353,7 +1349,7 @@ const ProfilePage = () => {
         return;
       }
 
-      await axios.post("http://localhost:8000/api/accounts/logout/", {
+      await axios.post(API_CONFIG.getApiUrl('accounts/logout/'), {
         refresh: refreshToken,
       });
 

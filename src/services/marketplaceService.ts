@@ -3,7 +3,7 @@ import { safeRevokeUrl } from './imageUtils';
 import { API_CONFIG } from '../config/api.config';
 import persistentStorageService, { TTL } from './persistentStorageService';
 
-const API_URL = 'http://localhost:8000/api/marketplace/';
+const API_URL = API_CONFIG.MARKETPLACE_URL;
 
 // In-memory cache for sell requests with TTL support
 const sellRequestCache = {

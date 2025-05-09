@@ -4,6 +4,7 @@ import type { ServiceData } from '../data/services';
 import { getServiceIcon } from '../data/services';
 import { Clock, Shield, CheckCircle2, Car, MessageCircle, Bike } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { API_CONFIG } from '../config/api.config';
 
 interface ApiServiceData {
   uuid: string;
@@ -40,7 +41,7 @@ const Services = () => {
         setLoading(true);
         setError(null);
 
-        const url = 'http://127.0.0.1:8000/api/repairing_service/service-categories/';
+        const url = API_CONFIG.getApiUrl('/repairing_service/service-categories/');
         if (!url) {
           throw new Error('Service categories URL is not configured');
         }

@@ -8,6 +8,7 @@
    VITE_API_BASE_URL=http://localhost:8000/api
    VITE_MEDIA_BASE_URL=http://localhost:8000
    VITE_AUTH_ENABLED=true
+   VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
    ```
 
 ### Vercel Deployment
@@ -16,6 +17,7 @@
    VITE_API_BASE_URL=https://repairmybike.up.railway.app/api
    VITE_MEDIA_BASE_URL=https://repairmybike.up.railway.app
    VITE_AUTH_ENABLED=true
+   VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
    ```
 
 2. Ensure your build command is set to `npm run build`
@@ -42,4 +44,11 @@ If you encounter CORS issues:
 
 1. Ensure the backend's CORS settings include your frontend domain
 2. Check that `CORS_ALLOW_CREDENTIALS` is set to `true` on the backend
-3. Verify that the request includes proper headers 
+3. Verify that the request includes proper headers
+
+### Service Worker 
+
+If you encounter service worker issues:
+1. Clear your browser cache 
+2. Unregister existing service workers
+3. Reload the page 

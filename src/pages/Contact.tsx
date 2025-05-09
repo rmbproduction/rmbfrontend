@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Phone, Mail, MapPin, Clock, CheckCircle } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { API_CONFIG } from '../config/api.config';
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -49,14 +50,14 @@ const Contact = () => {
     try {
       setLoading(true);
       
-      // Get the API base URL from environment variables or use default
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/';
+      // Use API_CONFIG to get the base URL
+      const apiUrl = API_CONFIG.getApiUrl('/accounts/contact/');
       
       // Log the data being sent for debugging
       console.log('Sending contact form data:', formData);
       
       // Send the form data to the contact API endpoint
-      const response = await axios.post(`${baseUrl}accounts/contact/`, formData);
+      const response = await axios.post(apiUrl, formData);
       
       // Show success message
       toast.success(response.data.message || 'Your message has been sent successfully!');

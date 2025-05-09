@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CheckCircle2, XCircle, RefreshCw, Mail } from 'lucide-react';
 import axios from 'axios';
+import { API_CONFIG } from '../config/api.config';
 
 const EmailVerification = () => {
   const [searchParams] = useSearchParams();
@@ -17,7 +18,7 @@ const EmailVerification = () => {
     const verifyEmail = async () => {
       try {
         const response = await axios.post(
-          `http://127.0.0.1:8000/api/auth/registration/account-confirm-email/${token}/`
+          API_CONFIG.getApiUrl(`/auth/registration/account-confirm-email/${token}/`)
         );
 
         if (response.status === 200) {
@@ -49,7 +50,7 @@ const EmailVerification = () => {
 
   const handleResendVerification = async () => {
     try {
-      await axios.post('http://localhost:8000/api/auth/resend-email/', { email });
+      await axios.post(API_CONFIG.getApiUrl('/auth/resend-email/'), { email });
       setCountdown(60);
     } catch (error) {
       console.error('Failed to resend verification email');
