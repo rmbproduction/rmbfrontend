@@ -6,7 +6,17 @@ const Hero = () => {
   const navigate = useNavigate();
 
   const handleBookNow = () => {
-    navigate('/login');
+    // Find the services section by ID and scroll to it
+    const servicesSection = document.getElementById('services');
+    if (servicesSection) {
+      servicesSection.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'start'
+      });
+    } else {
+      // Fallback if element not found
+      navigate('/login');
+    }
   };
 
   return (
