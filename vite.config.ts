@@ -21,13 +21,8 @@ export default defineConfig({
     },
     sourcemap: false,
     chunkSizeWarningLimit: 1000,
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-      },
-    },
+    minify: 'esbuild',
+    target: 'es2018',
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom'],

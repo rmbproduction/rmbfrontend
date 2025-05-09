@@ -10,8 +10,8 @@ import {
 } from '../models/subscription-plan'; // Added new types
 
 // Base API configuration
-const BASE_URL = 'http://localhost:8000/api';
-const MARKETPLACE_URL = `${BASE_URL}/marketplace`;
+const BASE_URL = API_CONFIG.BASE_URL;
+const MARKETPLACE_URL = API_CONFIG.MARKETPLACE_URL;
 
 // Add subscription API URL
 const SUBSCRIPTION_URL = `${BASE_URL}/subscription`;
