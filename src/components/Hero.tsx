@@ -92,6 +92,7 @@ const Hero = () => {
                   <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent"></div>
                 </div>
                 
+                {/* Commented out "Available Now" notification
                 <motion.div
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -108,6 +109,7 @@ const Hero = () => {
                     </div>
                   </div>
                 </motion.div>
+                */}
               </motion.div>
             </div>
           </motion.div>
