@@ -20,9 +20,19 @@ const EmailConfirmation = () => {
             autoClose: 5000,
           });
           
-          // Wait for 3 seconds before redirecting to login
+          // Wait for 3 seconds before redirecting
           setTimeout(() => {
-            navigate('/login-signup');
+            // Use the redirect_url from the backend if available, otherwise default to login page
+            if (response.data.redirect_url) {
+              // Use full URL if it's a complete URL, otherwise navigate internally
+              if (response.data.redirect_url.startsWith('http')) {
+                window.location.href = response.data.redirect_url;
+              } else {
+                navigate(response.data.redirect_url);
+              }
+            } else {
+              navigate('/login-signup');
+            }
           }, 3000);
         }
       } catch (error: any) {

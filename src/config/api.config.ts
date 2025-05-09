@@ -4,10 +4,34 @@
  * This file contains the central configuration for all API endpoints used in the application.
  * It defines base URLs, helper functions, and commonly used endpoints.
  */
+
+// Helper to determine if running in production
+const isProduction = () => {
+  const prodDomain = window.location.hostname === 'repairmybike.in' || 
+                     window.location.hostname === 'www.repairmybike.in';
+  const prodEnv = import.meta.env.MODE === 'production';
+  return prodDomain || prodEnv;
+};
+
+// Force production URLs if in production environment
+const getApiBaseUrl = () => {
+  if (isProduction()) {
+    return 'https://repairmybike.up.railway.app/api';
+  }
+  return import.meta.env.VITE_API_URL || 'https://repairmybike.up.railway.app/api';
+};
+
+const getMediaBaseUrl = () => {
+  if (isProduction()) {
+    return 'https://repairmybike.up.railway.app';
+  }
+  return import.meta.env.VITE_MEDIA_URL || 'https://repairmybike.up.railway.app';
+};
+
 export const API_CONFIG = {
   // Base URLs for API and media content
-  BASE_URL: import.meta.env.VITE_API_URL || 'https://repairmybike.up.railway.app/api',
-  MEDIA_URL: import.meta.env.VITE_MEDIA_URL || 'https://repairmybike.up.railway.app',
+  BASE_URL: getApiBaseUrl(),
+  MEDIA_URL: getMediaBaseUrl(),
   // Use BASE_URL for marketplace to avoid hardcoding
   get MARKETPLACE_URL() {
     // Ensure the path includes /marketplace/ with proper slashes
@@ -15,6 +39,14 @@ export const API_CONFIG = {
       ? this.BASE_URL.slice(0, -1) 
       : this.BASE_URL;
     return `${baseWithoutTrailingSlash}/marketplace`;
+  },
+  
+  // Get the frontend base URL for links
+  get FRONTEND_URL() {
+    if (isProduction()) {
+      return 'https://repairmybike.in';
+    }
+    return window.location.origin;
   },
   
   /**
@@ -47,7 +79,7 @@ export const API_CONFIG = {
     const formattedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const url = `${API_CONFIG.BASE_URL}${formattedEndpoint}`;
     
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.log(`[API] Request URL: ${url}`);
     }
     
@@ -180,7 +212,7 @@ export const API_CONFIG = {
   timeout: 30000, // 30 seconds
   
   // Debug mode
-  debugMode: process.env.NODE_ENV === 'development',
+  debugMode: import.meta.env.DEV,
 };
 
 // Google Maps API configuration

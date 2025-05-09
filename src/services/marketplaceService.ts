@@ -1781,7 +1781,7 @@ const marketplaceService = {
     const shareUrl = `${window.location.origin}/vehicles/${vehicleId}`;
     const shareTitle = `Check out this ${vehicleName || 'vehicle'} on RepairMyBike`;
     const shareText = `I found this great vehicle on RepairMyBike. Check it out!`;
-
+    
     // Use native share API if available
     if (navigator.share) {
       try {
@@ -1866,4 +1866,4 @@ const marketplaceService = {
   }
 };
 
-export default marketplaceService;
+export default marketplaceService; 
