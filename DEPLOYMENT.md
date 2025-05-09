@@ -68,3 +68,15 @@ If you encounter service worker issues:
 1. Clear your browser cache 
 2. Unregister existing service workers
 3. Reload the page 
+
+# Email Verification Configuration
+
+When deploying to production, ensure you set the correct `FRONTEND_URL` environment variable in your Django backend:
+
+```
+FRONTEND_URL=https://repairmybike.in
+```
+
+This ensures that verification emails sent to users contain the correct URL for your production site rather than localhost development URLs.
+
+# Host Configuration 
