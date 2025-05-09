@@ -24,6 +24,8 @@ interface Booking {
   contact_number: string;
   notes: string;
   referrer?: string | null; // Optional referrer path to redirect back to the original page
+  schedule_date?: string;
+  schedule_time?: string;
 }
 
 const MyBookingsTab: React.FC = () => {
@@ -116,14 +118,27 @@ const MyBookingsTab: React.FC = () => {
     const { vehicle } = booking;
     
     // Always use the original front_image_url exactly as it comes from the vehicle detail page
-    if (vehicle.front_image_url) {
+    if (vehicle && vehicle.front_image_url) {
       // Use the URL directly without any transformation
       return vehicle.front_image_url;
     }
     
+    // Try to construct an image URL from the API config if vehicle data exists
+    if (vehicle && vehicle.id) {
+      try {
+        // Try to get an image URL from the API config
+        const apiImageUrl = API_CONFIG.getVehicleImageUrl(vehicle.id);
+        if (apiImageUrl) {
+          return apiImageUrl;
+        }
+      } catch (e) {
+        console.warn('Failed to get vehicle image URL from API config:', e);
+      }
+    }
+    
     // Only use placeholder as last resort if no image exists
-    const brandInitial = vehicle.brand?.charAt(0) || '';
-    const modelInitial = vehicle.model?.charAt(0) || '';
+    const brandInitial = vehicle?.brand?.charAt(0) || 'V';
+    const modelInitial = vehicle?.model?.charAt(0) || '';
     const initials = brandInitial + modelInitial;
     
     return `https://via.placeholder.com/640x480/FF5733/FFFFFF?text=${initials}`;
@@ -208,13 +223,14 @@ const MyBookingsTab: React.FC = () => {
               <div className="w-full md:w-2/5 lg:w-1/3 h-60 md:h-auto relative">
                 <img
                   src={getVehicleImage(booking)}
-                  alt={`${booking.vehicle.brand} ${booking.vehicle.model}`}
+                  alt={`${booking.vehicle?.brand || 'Vehicle'} ${booking.vehicle?.model || ''}`}
                   className="w-full h-full object-cover"
                   onError={(e) => {
                     // Use the same default image used in the vehicle detail page
-                    const defaultImage = API_CONFIG.getDefaultVehicleImage();
+                    const defaultImage = API_CONFIG.getDefaultVehicleImage?.() || 
+                      'https://via.placeholder.com/640x480/FF5733/FFFFFF?text=RMB';
                     (e.target as HTMLImageElement).src = defaultImage;
-                    console.log('Using default vehicle image for', booking.vehicle.brand, booking.vehicle.model);
+                    console.log('Using default vehicle image due to error');
                   }}
                 />
                 {/* Status Badge */}
@@ -229,11 +245,11 @@ const MyBookingsTab: React.FC = () => {
                 {/* Vehicle Caption */}
                 <div className="absolute bottom-0 left-0 w-full p-3 text-white">
                   <div className="text-lg font-bold drop-shadow-md">
-                    {booking.vehicle.brand} {booking.vehicle.model}
+                    {booking.vehicle?.brand || 'Unknown'} {booking.vehicle?.model || 'Model'}
                   </div>
                   <div className="text-sm font-medium drop-shadow-md">
-                    {booking.vehicle.year}
-                    {booking.vehicle.color && ` · ${booking.vehicle.color}`}
+                    {booking.vehicle?.year || ''}
+                    {booking.vehicle?.color && ` · ${booking.vehicle.color}`}
                   </div>
                 </div>
               </div>
@@ -241,117 +257,53 @@ const MyBookingsTab: React.FC = () => {
               {/* Booking Details */}
               <div className="p-4 flex-grow">
                 <div className="flex flex-col h-full">
-                  {/* Vehicle Info */}
-                  <div className="mb-4 pb-4 border-b border-gray-100">
-                    <h3 className="text-xl font-bold text-gray-900 mb-1">
-                      {booking.vehicle.brand} {booking.vehicle.model}
-                    </h3>
-                    
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {booking.vehicle.year && (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                          {booking.vehicle.year}
-                        </span>
-                      )}
-                      {booking.vehicle.vehicle_type && (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 capitalize">
-                          {booking.vehicle.vehicle_type}
-                        </span>
-                      )}
-                      {booking.vehicle.color && (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                          <div className="h-2 w-2 rounded-full mr-1" style={{ backgroundColor: booking.vehicle.color.toLowerCase() === 'white' ? '#fff' : booking.vehicle.color, border: booking.vehicle.color.toLowerCase() === 'white' ? '1px solid #ddd' : 'none' }}></div>
-                          {booking.vehicle.color}
-                        </span>
-                      )}
+                  {/* Booking Info Section */}
+                  <div>
+                    <div className="flex items-center mb-2">
+                      <CalendarClock className="h-4 w-4 text-[#FF5733] mr-1" />
+                      <span className="text-sm text-gray-600 font-medium">
+                        {booking.booking_date_display || new Date(booking.booking_date || Date.now()).toLocaleDateString()}
+                      </span>
                     </div>
                     
-                    <div className="flex items-center">
-                      <p className="text-sm text-gray-500">
-                        Booking ID: <span className="font-medium">{String(booking.id)?.substring(0, 8) || index + 1}</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Booking Details Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                    <div className="space-y-2">
-                      <div className="flex items-start">
-                        <Clock className="h-5 w-5 text-[#FF5733] mr-2 mt-0.5" />
-                        <div>
-                          <p className="text-sm text-gray-600">Booking Date</p>
-                          <p className="text-sm font-medium">{booking.booking_date_display || new Date(booking.booking_date).toLocaleString()}</p>
-                        </div>
+                    {/* If schedule date exists, show it */}
+                    {booking.schedule_date && (
+                      <div className="flex items-center mb-2 text-green-700">
+                        <Clock className="h-4 w-4 mr-1" />
+                        <span className="text-sm font-medium">
+                          Scheduled: {new Date(booking.schedule_date).toLocaleDateString()} 
+                          {booking.schedule_time && ` at ${booking.schedule_time}`}
+                        </span>
                       </div>
-
-                      <div className="flex items-start">
-                        <Phone className="h-5 w-5 text-[#FF5733] mr-2 mt-0.5" />
-                        <div>
-                          <p className="text-sm text-gray-600">Contact Number</p>
-                          <p className="text-sm font-medium">{booking.contact_number}</p>
-                        </div>
-                      </div>
-
-                      {booking.notes && (
-                        <div className="flex items-start">
-                          <Info className="h-5 w-5 text-[#FF5733] mr-2 mt-0.5" />
-                          <div>
-                            <p className="text-sm text-gray-600">Notes</p>
-                            <p className="text-sm">{booking.notes}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      {booking.vehicle.registration_number && (
-                        <div className="flex items-start">
-                          <Info className="h-5 w-5 text-[#FF5733] mr-2 mt-0.5" />
-                          <div>
-                            <p className="text-sm text-gray-600">Registration Number</p>
-                            <p className="text-sm font-medium">{booking.vehicle.registration_number}</p>
-                          </div>
-                        </div>
-                      )}
-
-                      {booking.vehicle.vehicle_type && (
-                        <div className="flex items-start">
-                          <Bike className="h-5 w-5 text-[#FF5733] mr-2 mt-0.5" />
-                          <div>
-                            <p className="text-sm text-gray-600">Vehicle Type</p>
-                            <p className="text-sm font-medium capitalize">{booking.vehicle.vehicle_type}</p>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {booking.vehicle.color && (
-                        <div className="flex items-start">
-                          <div className="h-5 w-5 mr-2 mt-1 rounded-full border border-gray-300" style={{ backgroundColor: booking.vehicle.color.toLowerCase() === 'white' ? '#fff' : booking.vehicle.color }}></div>
-                          <div>
-                            <p className="text-sm text-gray-600">Color</p>
-                            <p className="text-sm font-medium">{booking.vehicle.color}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
-
-                  <div className="mt-auto flex gap-2">
-                    <Link 
-                      to={booking.referrer || `/vehicles/${booking.vehicle.id}`}
-                      className="px-4 py-2 bg-[#FF5733] text-white rounded-md hover:bg-opacity-90 transition-colors flex items-center"
-                    >
-                      View Vehicle Details
-                      <ExternalLink className="h-4 w-4 ml-1" />
-                    </Link>
-                    
-                    {booking.status === 'pending' && (
+                  
+                  {/* Add a booking ID */}
+                  <div className="mt-1 mb-3">
+                    <span className="text-xs text-gray-500">Booking ID: {booking.id || "undefined"}</span>
+                  </div>
+                  
+                  {/* Contact Number */}
+                  {booking.contact_number && (
+                    <div className="mb-3 flex items-center">
+                      <Phone className="h-4 w-4 text-[#FF5733] mr-1" />
+                      <a 
+                        href={`tel:${booking.contact_number}`}
+                        className="text-sm text-blue-600 hover:underline"
+                      >
+                        {booking.contact_number}
+                      </a>
+                    </div>
+                  )}
+                  
+                  <div className="mb-4 flex justify-end">
+                    {booking.status !== 'cancelled' && booking.status !== 'completed' && (
                       <button
                         onClick={() => handleCancelBooking(booking.id)}
-                        className="flex items-center px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50 transition-colors text-sm font-medium"
+                        className="px-3 py-1 text-sm bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors flex items-center"
                       >
-                        Cancel Booking
-                        <X className="h-4 w-4 ml-1" />
+                        <X className="h-4 w-4 mr-1" />
+                        Cancel
                       </button>
                     )}
                   </div>

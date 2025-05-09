@@ -1684,7 +1684,7 @@ const marketplaceService = {
         try {
           console.log(`Attempt ${retryCount + 1} to fetch bookings from API`);
           
-          const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/bookings/`, {
+          const response = await axios.get(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.BOOKINGS}`, {
             headers: {
               'Authorization': `Bearer ${token}`
             },
@@ -1692,14 +1692,49 @@ const marketplaceService = {
             timeout: 10000
           });
           
+          // Transform the data to ensure all required fields are present
+          const transformedBookings = response.data.map((booking: any) => {
+            // Create a properly structured vehicle object
+            const vehicle = {
+              id: booking.vehicle?.id || `vehicle-${booking.id}`,
+              brand: booking.vehicle?.manufacturer_name || 'Unknown',
+              model: booking.vehicle?.model_name || 'Unknown',
+              year: booking.vehicle?.year || new Date().getFullYear(),
+              vehicle_type: booking.vehicle?.vehicle_type_name || 'Unknown',
+              // Ensure front_image_url exists
+              front_image_url: booking.vehicle?.image_url || null,
+              registration_number: booking.vehicle?.registration_number || '',
+              color: booking.vehicle?.color || '',
+            };
+
+            // Ensure all required fields exist
+            return {
+              id: booking.id,
+              vehicle: vehicle,
+              status: booking.status || 'pending',
+              status_display: booking.status_display || 'Pending',
+              // Format booking date properly
+              booking_date: booking.created_at || new Date().toISOString(),
+              booking_date_display: new Date(booking.created_at || Date.now()).toLocaleDateString(),
+              // Ensure contact_number is present
+              contact_number: booking.contact_number || booking.phone || '',
+              // Ensure notes field exists
+              notes: booking.notes || booking.address || '',
+              // Add schedule date and time if available
+              schedule_date: booking.schedule_date,
+              schedule_time: booking.schedule_time,
+              referrer: booking.referrer || null
+            };
+          });
+          
           // Store in sessionStorage for quick access
           try {
-            sessionStorage.setItem('user_vehicle_bookings', JSON.stringify(response.data));
+            sessionStorage.setItem('user_vehicle_bookings', JSON.stringify(transformedBookings));
           } catch (e) {
             console.error('Failed to store bookings in sessionStorage:', e);
           }
           
-          return response.data;
+          return transformedBookings;
         } catch (error: any) {
           lastError = error;
           retryCount++;
@@ -1725,6 +1760,55 @@ const marketplaceService = {
       console.error('Error in getUserBookings:', error);
       // Return empty array instead of throwing to prevent UI errors
       return [];
+    }
+  },
+  
+  // Cancel a user booking
+  cancelBooking: async (bookingId: string) => {
+    try {
+      // Get authentication token
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        throw new Error('Authentication required. Please log in to continue.');
+      }
+      
+      // Make API call to cancel booking
+      const response = await axios.post(
+        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.BOOKING_CANCEL(bookingId)}`,
+        {}, // Empty request body
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      // If successful, update cached bookings
+      try {
+        const cachedBookingsJson = sessionStorage.getItem('user_vehicle_bookings');
+        if (cachedBookingsJson) {
+          const cachedBookings = JSON.parse(cachedBookingsJson);
+          const updatedBookings = cachedBookings.map((booking: any) => {
+            if (booking.id === bookingId || booking.id === Number(bookingId)) {
+              return {
+                ...booking,
+                status: 'cancelled',
+                status_display: 'Cancelled'
+              };
+            }
+            return booking;
+          });
+          
+          sessionStorage.setItem('user_vehicle_bookings', JSON.stringify(updatedBookings));
+        }
+      } catch (e) {
+        console.error('Failed to update cached bookings:', e);
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error cancelling booking:', error);
+      throw error;
     }
   },
   

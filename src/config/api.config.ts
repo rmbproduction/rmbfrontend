@@ -164,6 +164,11 @@ export const API_CONFIG = {
     // Marketplace endpoints
     SELL_REQUESTS: '/marketplace/sell-requests',
     
+    // Booking endpoints
+    BOOKINGS: '/marketplace/bookings/',
+    USER_BOOKINGS: '/marketplace/bookings/user/',
+    BOOKING_CANCEL: (bookingId: string) => `/repairing_service/bookings/${bookingId}/cancel/`,
+    
     /**
      * Get endpoint for filtered vehicle models by manufacturer and vehicle type
      * @param manufacturerId - The manufacturer ID
@@ -213,6 +218,12 @@ export const API_CONFIG = {
   
   // Debug mode
   debugMode: import.meta.env.DEV,
+  
+  // Vehicle image helper functions
+  getVehicleImageUrl(vehicleId: string | number): string {
+    if (!vehicleId) return this.getDefaultVehicleImage();
+    return `${this.MEDIA_URL}/vehicles/${vehicleId}/image.jpg`;
+  },
 };
 
 // Google Maps API configuration
