@@ -8,6 +8,7 @@ import {
   LifeBuoy,
   Settings
 } from 'lucide-react';
+import { API_CONFIG } from '../config/api.config';
 
 // Define icon type and map
 type IconType = typeof Tool;
@@ -64,7 +65,7 @@ export const getServiceIcon = (iconName: string): IconType => {
 // Fetch services function
 export const fetchServices = async (): Promise<ServiceData[]> => {
   try {
-    const response = await fetch('http://localhost:3001/services');
+    const response = await fetch(`${API_CONFIG.BASE_URL}/repairing_service/services/`);
     if (!response.ok) {
       throw new Error('Network response was not ok');
     }

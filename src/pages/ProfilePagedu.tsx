@@ -2355,7 +2355,7 @@ const ProfilePage = () => {
 
         // Fetch manufacturers
         const manufacturersResponse = await axios.get(
-          "http://127.0.0.1:8000/api/repairing_service/manufacturers/",
+          `${API_CONFIG.BASE_URL}/repairing_service/manufacturers/`,
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,
@@ -2367,7 +2367,7 @@ const ProfilePage = () => {
 
         // Fetch vehicle types
         const vehicleTypesResponse = await axios.get(
-          "http://127.0.0.1:8000/api/vehicle/vehicle-types/",
+          `${API_CONFIG.BASE_URL}/vehicle/vehicle-types/`,
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,

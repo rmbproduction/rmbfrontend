@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from './supabaseClient';
+import { API_CONFIG } from '../config/api.config';
 
 export default function Auth() {
   const [loading, setLoading] = useState(false);
@@ -11,7 +12,7 @@ export default function Auth() {
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { redirectTo: 'http://127.0.0.1:8000/auth/callback/' }
+      options: { redirectTo: `${API_CONFIG.FRONTEND_URL}/auth/callback/` }
     });
 
     if (error) {

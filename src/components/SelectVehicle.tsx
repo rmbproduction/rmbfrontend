@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { API_CONFIG } from '../config/api.config';
 
 // -----------------------------
 // Data Types
@@ -96,7 +97,7 @@ const MultiStepVehicleSelector: React.FC<MultiStepVehicleSelectorProps> = ({ onV
       try {
         setLoading(true);
         setError(null);
-        const url = import.meta.env.VITE_VEHICLE_TYPES_URL || 'http://127.0.0.1:8000/api/service/vehicle-types/';
+        const url = import.meta.env.VITE_VEHICLE_TYPES_URL || `${API_CONFIG.BASE_URL}/vehicle/vehicle-types/`;
         if (!url) {
           throw new Error('Vehicle types URL is not configured');
         }
@@ -148,7 +149,7 @@ const MultiStepVehicleSelector: React.FC<MultiStepVehicleSelectorProps> = ({ onV
     try {
       setLoading(true);
       setError(null);
-      const url = import.meta.env.VITE_MANUFACTURERS_URL || 'http://127.0.0.1:8000/api/service/manufacturers/';
+      const url = import.meta.env.VITE_MANUFACTURERS_URL || `${API_CONFIG.BASE_URL}/vehicle/manufacturers/`;
       if (!url) {
         throw new Error('Manufacturers URL is not configured');
       }
@@ -201,7 +202,7 @@ const MultiStepVehicleSelector: React.FC<MultiStepVehicleSelectorProps> = ({ onV
     try {
       setLoading(true);
       setError(null);
-      const baseUrl = import.meta.env.VITE_VEHICLE_MODELS_URL || 'http://127.0.0.1:8000/api/service/vehicle-models/';
+      const baseUrl = import.meta.env.VITE_VEHICLE_MODELS_URL || `${API_CONFIG.BASE_URL}/vehicle/vehicle-models/`;
       if (!baseUrl) {
         throw new Error('Vehicle models URL is not configured');
       }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, Suspense, useRef } fr
 import { Bike, Calendar, Clock, MapPin, Check, X, AlertTriangle, ExternalLink, AlertCircle, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Link, useNavigate } from 'react-router-dom';
+import { API_CONFIG } from '../config/api.config';
 
 // Add proper typing for service item
 interface ServiceItem {
@@ -205,7 +206,7 @@ const MyServicesTab: React.FC = () => {
           }
           
           // Make API call to backend to clear cancelled bookings
-          const response = await safeFetch('http://127.0.0.1:8000/api/repairing_service/bookings/clear-cancelled/', {
+          const response = await safeFetch(`${API_CONFIG.BASE_URL}/repairing_service/bookings/clear-cancelled/`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -334,7 +335,7 @@ const MyServicesTab: React.FC = () => {
         if (accessToken) {
           try {
             console.log('[DEBUG] Fetching bookings from API');
-            const response = await fetchWithRetry('http://127.0.0.1:8000/api/repairing_service/bookings/', {
+            const response = await fetchWithRetry(`${API_CONFIG.BASE_URL}/repairing_service/bookings/`, {
               headers: {
                 'Authorization': `Bearer ${accessToken}`,
                 'Content-Type': 'application/json'
@@ -479,7 +480,7 @@ const MyServicesTab: React.FC = () => {
       }
       
       // Make API call to cancel the booking
-      const response = await fetchWithRetry(`http://127.0.0.1:8000/api/repairing_service/bookings/${cancelBookingId}/cancel/`, {
+      const response = await fetchWithRetry(`${API_CONFIG.BASE_URL}/repairing_service/bookings/${cancelBookingId}/cancel/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
