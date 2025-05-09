@@ -498,7 +498,7 @@ const marketplaceService = {
       
       try {
         // Try to find an existing vehicle with this registration number
-        const checkResponse = await axios.get(`${API_CONFIG.BASE_URL}/vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`, {
+        const checkResponse = await axios.get(`${API_CONFIG.BASE_URL}/api/vehicle/user-vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -511,7 +511,7 @@ const marketplaceService = {
           isExistingVehicle = true;
         } else {
           // No vehicle exists with this registration, create a new one
-          const vehicleResponse = await axios.post(`${API_CONFIG.BASE_URL}/vehicles/`, vehicleData, {
+          const vehicleResponse = await axios.post(`${API_CONFIG.BASE_URL}/api/vehicle/user-vehicles/`, vehicleData, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
@@ -529,7 +529,7 @@ const marketplaceService = {
           console.log('Vehicle already exists (from error response), trying to find it by registration number');
           
           const findResponse = await axios.get(
-            `${API_CONFIG.BASE_URL}/vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
+            `${API_CONFIG.BASE_URL}/api/vehicle/user-vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
             {
               headers: { 'Authorization': `Bearer ${token}` }
             }
