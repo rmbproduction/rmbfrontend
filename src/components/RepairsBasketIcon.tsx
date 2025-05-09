@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ShoppingBag, Plus, Minus, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { API_CONFIG } from '../config/api.config';
 
 interface CartItem {
   id: number;
@@ -33,7 +34,7 @@ const RepairsBasketIcon: React.FC = () => {
         // If we have a cart ID, try to load from server
         if (cartId) {
           try {
-            const response = await fetch(`http://127.0.0.1:8000/api/repairing_service/cart/${cartId}/`, {
+            const response = await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${cartId}/`), {
               credentials: 'omit'
             });
             
@@ -74,7 +75,7 @@ const RepairsBasketIcon: React.FC = () => {
             // If we don't have a cart yet, create one
             if (!cartId) {
               try {
-                const createResponse = await fetch('http://127.0.0.1:8000/api/repairing_service/cart/create/', {
+                const createResponse = await fetch(API_CONFIG.getApiUrl('/repairing_service/cart/create/'), {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   credentials: 'omit'
@@ -86,7 +87,7 @@ const RepairsBasketIcon: React.FC = () => {
                   sessionStorage.setItem('cartId', newCart.id.toString());
                   
                   // Add the service to the new cart
-                  await fetch(`http://127.0.0.1:8000/api/repairing_service/cart/${newCart.id}/add/`, {
+                  await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${newCart.id}/add/`), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -179,7 +180,7 @@ const RepairsBasketIcon: React.FC = () => {
       }
 
       // For regular items, call the API
-      const response = await fetch(`http://127.0.0.1:8000/api/repairing_service/cart/items/${itemId}/`, {
+      const response = await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/items/${itemId}/`), {
         method: 'DELETE',
         credentials: 'omit'
       });
@@ -239,7 +240,7 @@ const RepairsBasketIcon: React.FC = () => {
       }
       
       // Then send update to server
-      const response = await fetch(`http://127.0.0.1:8000/api/repairing_service/cart/${cartId}/update-item/`, {
+      const response = await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${cartId}/update-item/`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -287,7 +288,7 @@ const RepairsBasketIcon: React.FC = () => {
         return;
       }
       
-      const response = await fetch(`http://127.0.0.1:8000/api/repairing_service/cart/${cartId}/clear/`, {
+      const response = await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${cartId}/clear/`), {
         method: 'DELETE',
         credentials: 'omit'
       });

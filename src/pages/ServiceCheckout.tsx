@@ -7,6 +7,7 @@ import { checkUserAuthentication } from '../utils/auth';
 import ThankYouModal from '../components/ThankYouModal';
 import { SubscriptionPlan } from '../models/subscription-plan';
 import { apiService } from '../services/api.service';
+import { API_CONFIG } from '../config/api.config';
 
 // Declare google maps and initMap on the window object
 declare global {
@@ -124,7 +125,7 @@ const ServiceCheckout: React.FC = () => {
     
     setLoadingModels(true);
     try {
-      const url = `http://127.0.0.1:8000/api/repairing_service/vehicle-models/?manufacturer_id=${manufacturerId}`;
+      const url = API_CONFIG.getApiUrl(`/repairing_service/vehicle-models/?manufacturer_id=${manufacturerId}`);
       console.log(`[DEBUG] Fetching models from: ${url}`);
       
       const modelsResponse = await fetch(url, {
@@ -156,7 +157,7 @@ const ServiceCheckout: React.FC = () => {
       console.log('[DEBUG] Loading vehicle options...');
       
       // Fetch vehicle types
-      const typesResponse = await fetch('http://127.0.0.1:8000/api/vehicle/vehicle-types/', {
+      const typesResponse = await fetch(API_CONFIG.getApiUrl('/vehicle/vehicle-types/'), {
         credentials: 'omit'
       });
       
@@ -170,7 +171,7 @@ const ServiceCheckout: React.FC = () => {
       }
       
       // Fetch manufacturers
-      const mfgResponse = await fetch('http://127.0.0.1:8000/api/repairing_service/manufacturers/', {
+      const mfgResponse = await fetch(API_CONFIG.getApiUrl('/repairing_service/manufacturers/'), {
         credentials: 'omit'
       });
       
@@ -184,7 +185,7 @@ const ServiceCheckout: React.FC = () => {
       }
       
       // Fetch all vehicle models (as a backup)
-      const modelsResponse = await fetch('http://127.0.0.1:8000/api/repairing_service/vehicle-models/', {
+      const modelsResponse = await fetch(API_CONFIG.getApiUrl('/repairing_service/vehicle-models/'), {
         credentials: 'omit'
       });
       
@@ -344,7 +345,7 @@ const ServiceCheckout: React.FC = () => {
       if (token) {
         try {
           // Fetch user profile data
-          const profileResponse = await fetch('http://127.0.0.1:8000/api/accounts/profile/', {
+          const profileResponse = await fetch(API_CONFIG.getApiUrl('/accounts/profile/'), {
             headers: {
               'Authorization': `Bearer ${token}`
             }
@@ -370,7 +371,7 @@ const ServiceCheckout: React.FC = () => {
           }
           
           // Fetch user's vehicles
-          const vehiclesResponse = await fetch('http://127.0.0.1:8000/api/vehicle/user-vehicles/', {
+          const vehiclesResponse = await fetch(API_CONFIG.getApiUrl('/vehicle/user-vehicles/'), {
             headers: {
               'Authorization': `Bearer ${token}`
             }
@@ -387,7 +388,7 @@ const ServiceCheckout: React.FC = () => {
               // Need to fetch names for the vehicle data
               try {
                 // Fetch vehicle type name
-                const typeResponse = await fetch(`http://127.0.0.1:8000/api/vehicle/vehicle-types/${latestVehicle.vehicle_type}/`, {
+                const typeResponse = await fetch(API_CONFIG.getApiUrl(`/vehicle/vehicle-types/${latestVehicle.vehicle_type}/`), {
                   credentials: 'omit'
                 });
                 
@@ -398,7 +399,7 @@ const ServiceCheckout: React.FC = () => {
                 }
                 
                 // Fetch manufacturer name
-                const mfgResponse = await fetch(`http://127.0.0.1:8000/api/repairing_service/manufacturers/`, {
+                const mfgResponse = await fetch(API_CONFIG.getApiUrl('/repairing_service/manufacturers/'), {
                   credentials: 'omit'
                 });
                 
@@ -412,7 +413,7 @@ const ServiceCheckout: React.FC = () => {
                 }
                 
                 // Fetch model name
-                const modelResponse = await fetch(`http://127.0.0.1:8000/api/repairing_service/vehicle-models/?manufacturer_id=${latestVehicle.manufacturer}`, {
+                const modelResponse = await fetch(API_CONFIG.getApiUrl(`/repairing_service/vehicle-models/?manufacturer_id=${latestVehicle.manufacturer}`), {
                   credentials: 'omit'
                 });
                 
@@ -539,7 +540,7 @@ const ServiceCheckout: React.FC = () => {
             
             // Fetch vehicle type name if needed
             try {
-              const typeResponse = await fetch(`http://127.0.0.1:8000/api/vehicle/vehicle-types/${parsedVehicle.vehicle_type}/`, {
+              const typeResponse = await fetch(API_CONFIG.getApiUrl(`/vehicle/vehicle-types/${parsedVehicle.vehicle_type}/`), {
                 credentials: 'omit'
               });
               
@@ -553,7 +554,7 @@ const ServiceCheckout: React.FC = () => {
             
             // Fetch manufacturer name if needed
             try {
-              const mfgResponse = await fetch(`http://127.0.0.1:8000/api/repairing_service/manufacturers/`, {
+              const mfgResponse = await fetch(API_CONFIG.getApiUrl('/repairing_service/manufacturers/'), {
                 credentials: 'omit'
               });
               
@@ -570,7 +571,7 @@ const ServiceCheckout: React.FC = () => {
             
             // Fetch model name if needed
             try {
-              const modelResponse = await fetch(`http://127.0.0.1:8000/api/repairing_service/vehicle-models/?manufacturer_id=${parsedVehicle.manufacturer}`, {
+              const modelResponse = await fetch(API_CONFIG.getApiUrl(`/repairing_service/vehicle-models/?manufacturer_id=${parsedVehicle.manufacturer}`), {
                 credentials: 'omit'
               });
               
@@ -623,7 +624,7 @@ const ServiceCheckout: React.FC = () => {
               // Create a new cart with the pending service
               const createCartAndAddPendingService = async () => {
                 try {
-              const createCartResponse = await fetch('http://127.0.0.1:8000/api/repairing_service/cart/create/', {
+              const createCartResponse = await fetch(API_CONFIG.getApiUrl('/repairing_service/cart/create/'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'omit'
@@ -634,7 +635,7 @@ const ServiceCheckout: React.FC = () => {
               const newCartId = cartData.id;
               sessionStorage.setItem('cartId', newCartId.toString());
               
-              await fetch(`http://127.0.0.1:8000/api/repairing_service/cart/${newCartId}/add/`, {
+              await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${newCartId}/add/`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -669,7 +670,7 @@ const ServiceCheckout: React.FC = () => {
         // Fetch cart items from API
         console.log(`[DEBUG] Fetching cart data for cart ID: ${cartId}`);
         // Change from /cart/{id}/items/ to /cart/{id}/ to match backend
-        const response = await fetch(`http://127.0.0.1:8000/api/repairing_service/cart/${cartId}/`, {
+        const response = await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${cartId}/`), {
           credentials: 'omit'
         });
         
@@ -702,7 +703,7 @@ const ServiceCheckout: React.FC = () => {
               setTimeout(() => {
                 const createCartAndAddPendingService = async () => {
                   try {
-                    await fetch(`http://127.0.0.1:8000/api/repairing_service/cart/${cartId}/add/`, {
+                    await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${cartId}/add/`), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -953,7 +954,7 @@ const ServiceCheckout: React.FC = () => {
       };
 
       // Update user profile
-      await fetch('http://127.0.0.1:8000/api/accounts/profile/', {
+      await fetch(API_CONFIG.getApiUrl('/accounts/profile/'), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -971,7 +972,7 @@ const ServiceCheckout: React.FC = () => {
         };
 
         // Save or update vehicle data
-        await fetch('http://127.0.0.1:8000/api/vehicle/user-vehicles/', {
+        await fetch(API_CONFIG.getApiUrl('/vehicle/user-vehicles/'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1205,7 +1206,7 @@ const ServiceCheckout: React.FC = () => {
     if (token) {
       try {
         // Fire and forget - don't wait for response
-        fetch('http://127.0.0.1:8000/api/vehicle/user-vehicles/', {
+        fetch(API_CONFIG.getApiUrl('/vehicle/user-vehicles/'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1411,7 +1412,7 @@ const ServiceCheckout: React.FC = () => {
           };
           
           // Call legacy API endpoint
-          const response = await fetch('http://127.0.0.1:8000/api/repairing_service/subscriptions/create/', {
+          const response = await fetch(API_CONFIG.getApiUrl('/repairing_service/subscriptions/create/'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1574,7 +1575,7 @@ const ServiceCheckout: React.FC = () => {
       };
       
       // Call API to create booking
-      const response = await fetch('http://127.0.0.1:8000/api/repairing_service/bookings/create/', {
+      const response = await fetch(API_CONFIG.getApiUrl('/repairing_service/bookings/create/'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1687,7 +1688,7 @@ const ServiceCheckout: React.FC = () => {
         return;
       }
       
-      const response = await fetch(`http://127.0.0.1:8000/api/repairing_service/cart/${cartId}/clear/`, {
+      const response = await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${cartId}/clear/`), {
         method: 'DELETE',
         credentials: 'omit'
       });

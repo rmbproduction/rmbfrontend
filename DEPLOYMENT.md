@@ -1,12 +1,17 @@
 # Deployment Guide for Repair My Bike Frontend
 
-## Environment Configuration
+## Environment Configuration - New Simplified Approach
 
 ### Local Development
 1. Create a `.env` file in the root directory with the following variables:
    ```
-   VITE_API_BASE_URL=http://localhost:8000/api
-   VITE_MEDIA_BASE_URL=http://localhost:8000
+   # Just set these two variables for your environment
+   HOST_DOMAIN=localhost:8000
+   HOST_PROTOCOL=http
+   
+   # The rest are derived automatically
+   VITE_API_URL=${HOST_PROTOCOL}://${HOST_DOMAIN}/api
+   VITE_MEDIA_URL=${HOST_PROTOCOL}://${HOST_DOMAIN}
    VITE_AUTH_ENABLED=true
    VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
    ```
@@ -14,11 +19,22 @@
 ### Vercel Deployment
 1. Set the following environment variables in your Vercel project settings:
    ```
-   VITE_API_BASE_URL=https://repairmybike.up.railway.app/api
-   VITE_MEDIA_BASE_URL=https://repairmybike.up.railway.app
+   # Just set these two variables for your environment
+   HOST_DOMAIN=repairmybike.up.railway.app
+   HOST_PROTOCOL=https
+   
+   # The rest are derived automatically
+   VITE_API_URL=${HOST_PROTOCOL}://${HOST_DOMAIN}/api
+   VITE_MEDIA_URL=${HOST_PROTOCOL}://${HOST_DOMAIN}
    VITE_AUTH_ENABLED=true
    VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
    ```
+
+   > NOTE: Some deployment platforms may not support variable interpolation. In that case, set the full URLs directly:
+   > ```
+   > VITE_API_URL=https://repairmybike.up.railway.app/api
+   > VITE_MEDIA_URL=https://repairmybike.up.railway.app
+   > ```
 
 2. Ensure your build command is set to `npm run build`
 

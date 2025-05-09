@@ -1,6 +1,8 @@
 // API Service - Centralized API endpoints for RepairMyBike
+import { API_CONFIG } from '../config/api.config';
 
-const API_BASE = 'http://127.0.0.1:8000/api/repairing_service';
+// Use the API_CONFIG for base URL
+const API_BASE = API_CONFIG.getApiUrl('/repairing_service');
 
 // Common request options for consistency
 const defaultOptions = {
