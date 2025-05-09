@@ -145,6 +145,11 @@ const ProfilePage = () => {
   // Add this state for the timestamp
   const [refreshTimestamp, setRefreshTimestamp] = useState(() => Date.now());
 
+  // Function to refresh bookings
+  const refreshBookings = () => {
+    setRefreshTimestamp(Date.now());
+  };
+
   // Add this function to handle the vehicle model selection specifically
   const handleVehicleModelChange = (modelId: number | null) => {
     if (!profile) return;
@@ -900,123 +905,46 @@ const ProfilePage = () => {
     return errors;
   };
 
+  // Function to persist profile data to storage
   const persistProfileData = (data: any) => {
     try {
-      // 1. Save to localStorage for faster retrieval on page reload
-      localStorage.setItem("userProfile", JSON.stringify(data));
-
-      // 2. Also save to sessionStorage as backup
-      sessionStorage.setItem("userProfile", JSON.stringify(data));
+      // Save to local storage with the new key
+      localStorage.setItem('userData', JSON.stringify(data));
       
-      // 3. Save in the app's specific sessionStorage format
-      if (data.name || data.email || data.phone || data.address || data.city || data.state || data.postal_code) {
-        const profileData: {
-          name: string;
-          email: string;
-          phone: string;
-          address: string;
-          city: string;
-          state: string;
-          postalCode: string;
-          [key: string]: string; // Add index signature to allow string indexing
-        } = {
-          name: data.name || "",
-          email: data.email || "",
-          phone: data.phone || "",
-          address: data.address || "",
-          city: data.city || "",
-          state: data.state || "",
-          postalCode: data.postal_code || ""
+      // Also save to original userProfile key for backward compatibility
+      localStorage.setItem('userProfile', JSON.stringify(data));
+      
+      // Save individual fields to separate storage keys for broader app usage
+      if (data.phone) {
+        localStorage.setItem('userPhone', data.phone);
+      }
+      
+      if (data.email) {
+        localStorage.setItem('userEmail', data.email);
+      }
+      
+      if (data.name) {
+        localStorage.setItem('userName', data.name);
+      }
+      
+      if (data.address) {
+        localStorage.setItem('userAddress', data.address);
+      }
+      
+      // Save location data if available
+      if (data.latitude && data.longitude && data.preferredLocation) {
+        const locationData = {
+          latitude: data.latitude,
+          longitude: data.longitude,
+          address: data.preferredLocation
         };
-        
-        // If we already have saved data, merge with it
-        try {
-          const existingData = sessionStorage.getItem("savedProfileData");
-          if (existingData) {
-            const parsedExisting = JSON.parse(existingData);
-            Object.keys(profileData).forEach(key => {
-              if (!profileData[key] && parsedExisting[key]) {
-                profileData[key] = parsedExisting[key];
-              }
-            });
-          }
-        } catch (e) {
-          console.error("Error merging with existing profile data:", e);
-        }
-        
-        sessionStorage.setItem("savedProfileData", JSON.stringify(profileData));
+        localStorage.setItem('userLocation', JSON.stringify(locationData));
       }
       
-      // Save vehicle information in app's format
-      if (data.manufacturer) {
-        const manufacturerObj = manufacturers.find(m => m.id === Number(data.manufacturer));
-        if (manufacturerObj) {
-          sessionStorage.setItem("selectedManufacturer", JSON.stringify({
-            id: manufacturerObj.id,
-            name: manufacturerObj.name,
-            image: manufacturerObj.image || null
-          }));
-        }
-      }
-      
-      if (data.vehicle_type) {
-        const typeObj = vehicleTypes.find(t => t.id === Number(data.vehicle_type));
-        if (typeObj) {
-          sessionStorage.setItem("selectedVehicleType", JSON.stringify({
-            id: typeObj.id,
-            name: typeObj.name,
-            image: typeObj.image || null
-          }));
-        }
-      }
-      
-      if (data.vehicle_name) {
-        const modelObj = vehicleModels.find(m => m.id === Number(data.vehicle_name));
-        if (modelObj) {
-          sessionStorage.setItem("selectedModel", JSON.stringify({
-            id: modelObj.id,
-            name: modelObj.name,
-            manufacturer: Number(data.manufacturer),
-            manufacturer_name: manufacturers.find(m => m.id === Number(data.manufacturer))?.name || "",
-            vehicle_type: Number(data.vehicle_type),
-            vehicle_type_name: vehicleTypes.find(t => t.id === Number(data.vehicle_type))?.name || "",
-            image: modelObj.image || null
-          }));
-        }
-      }
-
-      // 3. Try to save to IndexedDB for longer-term storage
-      try {
-        const request = indexedDB.open("RepairMyBikeDB", 1);
-
-        request.onupgradeneeded = (event) => {
-          const db = request.result;
-          if (!db.objectStoreNames.contains("userProfiles")) {
-            db.createObjectStore("userProfiles", { keyPath: "email" });
-          }
-        };
-
-        request.onsuccess = (event) => {
-          const db = request.result;
-          const transaction = db.transaction(["userProfiles"], "readwrite");
-          const store = transaction.objectStore("userProfiles");
-          store.put({ ...data, lastUpdated: new Date().toISOString() });
-        };
-      } catch (dbError) {
-        console.error("IndexedDB storage failed:", dbError);
-        // Not critical, as we already saved to localStorage and sessionStorage
-      }
-
-      console.log("Profile data successfully cached");
+      console.log('Profile data saved to storage:', data);
     } catch (error) {
-      console.error("Error saving profile data to storage:", error);
+      console.error('Error saving profile data to storage:', error);
     }
-  };
-
-  // Function to refresh the bookings list
-  const refreshBookings = () => {
-    // Update the timestamp to force child components to re-render
-    setRefreshTimestamp(Date.now());
   };
 
   // Fetch user profile with better error handling
@@ -1025,126 +953,150 @@ const ProfilePage = () => {
     setError(null);
     
     try {
-      // Try to load from sessionStorage first using standard app keys
-      const sessionManufacturer = sessionStorage.getItem("selectedManufacturer");
-      const sessionVehicleType = sessionStorage.getItem("selectedVehicleType");
-      const sessionModel = sessionStorage.getItem("selectedModel");
-      const sessionProfileData = sessionStorage.getItem("savedProfileData");
+      // First try to get from local cached data
+      const userDataStr = localStorage.getItem('userData');
+      const localUserData = userDataStr ? JSON.parse(userDataStr) : null;
       
-      // Create initial profile with proper type
-      let profileData: UserProfile = {
-        email: "",
-        name: "",
-        username: "",
-        address: "",
-        profile_photo: null,
-        vehicle_name: null,
-        vehicle_type: null,
-        manufacturer: null
-      };
-      
-      // Add data from localStorage (original approach)
-      const storedProfile = localStorage.getItem("userProfile");
-      if (storedProfile) {
-        try {
-          const parsed = JSON.parse(storedProfile);
-          profileData = { ...profileData, ...parsed };
-        } catch (e) {
-          console.error("Error parsing stored profile:", e);
+      // Get authentication token
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        console.warn('No authentication token found');
+        // If no token but we have local data, use that
+        if (localUserData) {
+          setProfile(prevProfile => ({
+            ...createDefaultProfile(),
+            ...localUserData
+          }));
+          setLoading(false);
+          return;
         }
-      }
-      
-      // Merge in data from sessionStorage if available
-      if (sessionProfileData) {
-        try {
-          const parsedProfile = JSON.parse(sessionProfileData);
-          profileData = {
-            ...profileData,
-            name: parsedProfile.name || profileData.name,
-            email: parsedProfile.email || profileData.email,
-            phone: parsedProfile.phone || profileData.phone,
-            address: parsedProfile.address || profileData.address,
-            city: parsedProfile.city || profileData.city,
-            state: parsedProfile.state || profileData.state,
-            postal_code: parsedProfile.postalCode || profileData.postal_code,
-            // Add latitude/longitude if available
-            latitude: parsedProfile.latitude || profileData.latitude,
-            longitude: parsedProfile.longitude || profileData.longitude
-          };
-        } catch (e) {
-          console.error("Error parsing sessionStorage profile data:", e);
-        }
-      }
-      
-      // Add vehicle data from sessionStorage
-      if (sessionManufacturer) {
-        try {
-          const parsedManu = JSON.parse(sessionManufacturer);
-          profileData.manufacturer = parsedManu.id;
-        } catch (e) {
-          console.error("Error parsing manufacturer:", e);
-        }
-      }
-      
-      if (sessionVehicleType) {
-        try {
-          const parsedType = JSON.parse(sessionVehicleType);
-          profileData.vehicle_type = parsedType.id;
-        } catch (e) {
-          console.error("Error parsing vehicle type:", e);
-        }
-      }
-      
-      if (sessionModel) {
-        try {
-          const parsedModel = JSON.parse(sessionModel);
-          profileData.vehicle_name = parsedModel.id;
-        } catch (e) {
-          console.error("Error parsing vehicle model:", e);
-        }
-      }
-      
-      if (Object.keys(profileData).length > 0) {
-        setProfile(profileData);
-      }
-      
-      // Continue with API fetch
-      const accessToken = localStorage.getItem("accessToken");
-      if (!accessToken) {
-        console.warn("No access token found, using stored profile only");
-        setLoading(false);
-        return;
-      }
-      
-      // Now try to fetch from API
-      try {
-        const response = await axios.get(API_CONFIG.getApiUrl("accounts/profile/"), {
-          headers: { Authorization: `Bearer ${accessToken}` },
-          timeout: 5000
-        });
         
-        if (response.data) {
-          console.log("Profile data fetched:", response.data);
-          setProfile(response.data);
-          localStorage.setItem("userProfile", JSON.stringify(response.data));
-        }
-      } catch (apiError) {
-        console.error("API error fetching profile:", apiError);
-        // We already loaded from cache, so just continue
+        throw new Error('Authentication required');
       }
-    } catch (error) {
-      console.error("Error in profile fetch:", error);
-      setError("Failed to load profile data");
       
-      // Ensure we have at least an empty profile object
-      if (!profile) {
+      // Try to fetch from API
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/accounts/profile/`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      console.log('Profile data from API:', response.data);
+      
+      // Merge with any existing data
+      const apiUserData = response.data;
+
+      // Try to get address and phone from checkout data in sessionStorage/localStorage
+      const checkoutData = getCheckoutDataFromStorage();
+      console.log('Found checkout data:', checkoutData);
+      
+      // Use API data as base, enrich with cached checkout data if available
+      const enrichedUserData = {
+        ...apiUserData,
+        phone: apiUserData.phone || localUserData?.phone || checkoutData.phone || '',
+        address: apiUserData.address || localUserData?.address || checkoutData.address || '',
+        preferredLocation: apiUserData.preferredLocation || localUserData?.preferredLocation || checkoutData.location || '',
+        city: apiUserData.city || localUserData?.city || checkoutData.city || '',
+        state: apiUserData.state || localUserData?.state || checkoutData.state || '',
+        postal_code: apiUserData.postal_code || localUserData?.postal_code || checkoutData.pincode || '',
+      };
+
+      // Store the enriched data for future use
+      localStorage.setItem('userData', JSON.stringify(enrichedUserData));
+      
+      // Set profile state with merged data
+      setProfile(enrichedUserData);
+      
+      // Initialize the vehicle dropdown
+      if (enrichedUserData.manufacturer && enrichedUserData.vehicle_type) {
+        handleManufacturerChange(enrichedUserData.manufacturer);
+        handleVehicleTypeChange(enrichedUserData.vehicle_type);
+      }
+
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      setError('Failed to load profile data');
+      
+      // If we have data in localStorage, use that as fallback
+      const userDataStr = localStorage.getItem('userData');
+      if (userDataStr) {
+        try {
+          const userData = JSON.parse(userDataStr);
+          setProfile(userData);
+        } catch (parseError) {
+          console.error('Error parsing user data from localStorage:', parseError);
+          setProfile(createDefaultProfile());
+        }
+      } else {
+        // Otherwise create a default profile
         setProfile(createDefaultProfile());
       }
-    } finally {
+      
       setLoading(false);
     }
   };
-  
+
+  // Helper function to extract checkout data from storage
+  const getCheckoutDataFromStorage = () => {
+    // Check various storage keys where user data might be stored
+    const result: any = {};
+    
+    // Try to get phone number from various sources
+    try {
+      // Check booking data
+      const bookingData = sessionStorage.getItem('latest_booking_data');
+      if (bookingData) {
+        const parsed = JSON.parse(bookingData);
+        result.phone = parsed.contact_number || parsed.phoneNumber || parsed.phone || '';
+      }
+      
+      // Check last_submitted_vehicle (used in sell flows)
+      const vehicleData = localStorage.getItem('last_submitted_vehicle');
+      if (vehicleData) {
+        const parsed = JSON.parse(vehicleData);
+        result.phone = result.phone || parsed.contact_number || '';
+        result.address = result.address || parsed.pickup_address || '';
+      }
+      
+      // Check userPhone direct storage
+      const userPhone = localStorage.getItem('userPhone');
+      if (userPhone) {
+        result.phone = result.phone || userPhone;
+      }
+      
+      // Check for address info
+      const userAddress = localStorage.getItem('userAddress');
+      if (userAddress) {
+        result.address = result.address || userAddress;
+      }
+      
+      // Check cart or checkout data
+      const checkoutData = sessionStorage.getItem('checkout_data');
+      if (checkoutData) {
+        const parsed = JSON.parse(checkoutData);
+        result.phone = result.phone || parsed.phone || parsed.phoneNumber || '';
+        result.address = result.address || parsed.address || '';
+        result.pincode = result.pincode || parsed.pincode || parsed.postalCode || '';
+        result.city = result.city || parsed.city || '';
+        result.state = result.state || parsed.state || '';
+      }
+      
+      // Check service request data
+      const serviceRequest = sessionStorage.getItem('service_request_data');
+      if (serviceRequest) {
+        const parsed = JSON.parse(serviceRequest);
+        result.phone = result.phone || parsed.phone || parsed.phoneNumber || '';
+        result.address = result.address || parsed.address || '';
+        result.pincode = result.pincode || parsed.pincode || '';
+      }
+    } catch (error) {
+      console.error('Error extracting checkout data:', error);
+    }
+    
+    return result;
+  };
+
   // Function to create a default profile when all else fails
   const createDefaultProfile = (): UserProfile => {
     const userEmail = localStorage.getItem("userEmail") || sessionStorage.getItem("userEmail") || "";
@@ -1162,7 +1114,7 @@ const ProfilePage = () => {
       phone: ""
     };
   };
-  
+
   // Helper function to get profile photo URL
   const getProfilePhotoUrl = (photoPath: string | null): string => {
     if (!photoPath) return "https://via.placeholder.com/150?text=Profile";
@@ -1174,7 +1126,14 @@ const ProfilePage = () => {
     return `${API_CONFIG.BASE_URL}${photoPath}`;
   };
 
-  // Helper to safely access profile properties
+  // Register effect to initialize the map after the DOM is ready
+  useEffect(() => {
+    // Load profile data
+    refreshBookings();
+    fetchUserProfile();
+  }, [refreshTimestamp]);
+
+  // Create a safe profile object for use in the render section
   const safeProfile = profile || createDefaultProfile();
   
   // Simplified Google Maps functions
@@ -1242,6 +1201,7 @@ const ProfilePage = () => {
   const handleLogout = () => {
     localStorage.removeItem("accessToken");
     localStorage.removeItem("userProfile");
+    localStorage.removeItem("userData");
     sessionStorage.removeItem("userProfile");
     window.location.href = "/login";
   };
@@ -1252,31 +1212,114 @@ const ProfilePage = () => {
     // Implementation or navigate to password change page
     navigate("/change-password");
   };
-  
+
   // Handle save profile
   const handleSaveProfile = () => {
-    console.log("Saving profile...");
+    if (!profile) return;
+    
     setIsSaving(true);
     
-    // Create the updated profile object - no longer using preferredLocation
-    const updatedProfile = { 
-      ...safeProfile
-      // We've removed preferredLocation, so no need to sync with address
-    };
+    // Validate required fields
+    const errors: { [key: string]: string } = {};
+    if (!profile.name) errors.name = "Name is required";
+    if (!profile.email) errors.email = "Email is required";
     
-    // Update the profile state with the synced data
-    setProfile(updatedProfile);
-    
-    // Save to persistent storage
-    persistProfileData(updatedProfile);
-    
-    // Simulate API call
-    setTimeout(() => {
-      // Save profile logic would go here
-      toast.success("Profile updated successfully!");
-      setIsEditing(false);
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
       setIsSaving(false);
-    }, 1000);
+      return;
+    }
+    
+    const accessToken = localStorage.getItem("accessToken");
+    if (!accessToken) {
+      toast.error("You must be logged in to update your profile");
+      setIsSaving(false);
+      return;
+    }
+    
+    // Save to API
+    axios
+      .patch(
+        API_CONFIG.getApiUrl("accounts/profile/"),
+        {
+          name: profile.name,
+          email: profile.email,
+          username: profile.username,
+          address: profile.address,
+          phone: profile.phone,
+          city: profile.city,
+          state: profile.state,
+          postal_code: profile.postal_code,
+          preferredLocation: profile.preferredLocation,
+          latitude: profile.latitude,
+          longitude: profile.longitude,
+          vehicle_name: profile.vehicle_name,
+          vehicle_type: profile.vehicle_type,
+          manufacturer: profile.manufacturer,
+        },
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      )
+      .then((response) => {
+        console.log("Profile updated successfully:", response.data);
+        
+        // Save to userData in localStorage
+        localStorage.setItem("userData", JSON.stringify(profile));
+        
+        // Also save to individual keys for broader app usage
+        if (profile.phone) {
+          localStorage.setItem("userPhone", profile.phone);
+        }
+        
+        if (profile.address) {
+          localStorage.setItem("userAddress", profile.address);
+        }
+        
+        if (profile.name) {
+          localStorage.setItem("userName", profile.name);
+        }
+        
+        if (profile.email) {
+          localStorage.setItem("userEmail", profile.email);
+        }
+        
+        // Save location data if available
+        if (profile.latitude && profile.longitude && profile.preferredLocation) {
+          const locationData = {
+            latitude: profile.latitude,
+            longitude: profile.longitude, 
+            address: profile.preferredLocation
+          };
+          localStorage.setItem("userLocation", JSON.stringify(locationData));
+        }
+        
+        // Update session storage for checkout data if it exists
+        try {
+          const checkoutData = sessionStorage.getItem("checkout_data");
+          if (checkoutData) {
+            const parsedData = JSON.parse(checkoutData);
+            parsedData.phone = profile.phone || parsedData.phone;
+            parsedData.address = profile.address || parsedData.address;
+            parsedData.city = profile.city || parsedData.city;
+            parsedData.state = profile.state || parsedData.state;
+            parsedData.pincode = profile.postal_code || parsedData.pincode;
+            
+            sessionStorage.setItem("checkout_data", JSON.stringify(parsedData));
+          }
+        } catch (e) {
+          console.warn("Error updating checkout data:", e);
+        }
+        
+        setIsEditing(false);
+        setIsSaving(false);
+        toast.success("Profile updated successfully");
+      })
+      .catch((error) => {
+        console.error("Error updating profile:", error);
+        toast.error("Failed to update profile. Please try again.");
+        setIsSaving(false);
+      });
   };
 
   // Add this function after the other helper functions
@@ -1300,7 +1343,8 @@ const ProfilePage = () => {
     
     return null;
   };
-
+  
+  // Render the profile page
   return (
     <div className="min-h-screen bg-gray-50 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
