@@ -341,17 +341,63 @@ class ApiService {
   // Subscription plans
   async getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        throw new Error('Authentication required');
-      }
-      
-      const response = await apiClient.get('/repairing_service/subscription-plans/', {
-        headers: {
-          'Authorization': `Bearer ${token}`
+      // Try the new API without requiring authentication first
+      try {
+        // Get plans and variants from the new API
+        const plans = await this.getPlans();
+        const variants = await this.getPlanVariants();
+        
+        // Map the new model to the old one for backward compatibility
+        return plans.map(plan => {
+          // Find variants for this plan
+          const planVariants = variants.filter(v => v.plan === plan.id);
+          
+          // Map variants to options
+          const options = planVariants.map(variant => ({
+            id: variant.id,
+            duration: variant.duration_display,
+            price: variant.discounted_price?.toString() || variant.price.toString(),
+            original_price: variant.discounted_price ? variant.price.toString() : undefined,
+            max_services: variant.max_visits,
+            discount_percent: variant.discounted_price ? 
+              Math.round(((variant.price - Number(variant.discounted_price)) / variant.price) * 100) : 
+              undefined,
+            services: []  // No direct mapping for services
+          }));
+          
+          return {
+            id: plan.id,
+            name: plan.name,
+            description: plan.description,
+            recommended: plan.plan_type === 'premium',
+            labour_discount_percent: 10, // Default value
+            options: options,
+            // New API fields
+            plan_type: plan.plan_type,
+            features: plan.features
+          };
+        });
+      } catch (err) {
+        console.warn('Failed to convert new API data to legacy format:', err);
+        
+        // If the new API conversion fails, try the legacy endpoint as fallback
+        try {
+          const token = localStorage.getItem('accessToken');
+          if (!token) {
+            throw new Error('Authentication required');
+          }
+          
+          const response = await apiClient.get('/repairing_service/subscription-plans/', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          return response.data;
+        } catch (legacyError) {
+          console.error('Legacy API also failed:', legacyError);
+          throw legacyError;
         }
-      });
-      return response.data;
+      }
     } catch (error) {
       console.error('Error fetching subscription plans:', error);
       throw error;
@@ -380,18 +426,45 @@ class ApiService {
 
   // Get all plans
   async getPlans(): Promise<Plan[]> {
-    const response = await apiClient.get(`${SUBSCRIPTION_URL}/plans/`);
-    return response.data;
+    try {
+      // Try with auth token if available
+      const token = localStorage.getItem('accessToken');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await apiClient.get(`${SUBSCRIPTION_URL}/plans/`, { headers });
+      return response.data;
+    } catch (error) {
+      console.warn('Error fetching plans:', error);
+      // Return empty array on error
+      return [];
+    }
   }
   
   // Get all plan variants
   async getPlanVariants(planId?: number): Promise<PlanVariant[]> {
-    let url = `${SUBSCRIPTION_URL}/plan-variants/`;
-    if (planId) {
-      url += `?plan=${planId}`;
+    try {
+      let url = `${SUBSCRIPTION_URL}/plan-variants/`;
+      if (planId) {
+        url += `?plan=${planId}`;
+      }
+
+      // Try with auth token if available
+      const token = localStorage.getItem('accessToken');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await apiClient.get(url, { headers });
+      return response.data;
+    } catch (error) {
+      console.warn('Error fetching plan variants:', error);
+      // Return empty array on error
+      return [];
     }
-    const response = await apiClient.get(url);
-    return response.data;
   }
 
   // Get variants for a specific plan

@@ -1,7 +1,14 @@
 import { MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 
 const Hero = () => {
+  const navigate = useNavigate();
+
+  const handleBookNow = () => {
+    navigate('/login');
+  };
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-white to-gray-50">
       <div className="absolute inset-0 hero-gradient"></div>
@@ -45,13 +52,18 @@ const Hero = () => {
                   transition={{ delay: 0.9, duration: 0.8 }}
                   className="mt-10 flex flex-col sm:flex-row gap-4 lg:justify-start justify-center"
                 >
-                  <button className="transform hover:scale-105 transition-transform px-8 py-4 bg-[#FF5733] text-white rounded-xl shadow-lg hover:shadow-xl font-semibold text-lg">
-                    Book  Now
+                  <button 
+                    onClick={handleBookNow}
+                    className="transform hover:scale-105 transition-transform px-8 py-4 bg-[#FF5733] text-white rounded-xl shadow-lg hover:shadow-xl font-semibold text-lg"
+                  >
+                    Book Now
                   </button>
+                  {/* Commented out Track Your Mechanic button
                   <button className="transform hover:scale-105 transition-transform flex items-center justify-center px-8 py-4 border-2 border-[#FF5733] text-[#FF5733] rounded-xl font-semibold text-lg">
                     <MapPin className="w-5 h-5 mr-2" />
                     Track Your Mechanic
                   </button>
+                  */}
                 </motion.div>
               </motion.div>
               

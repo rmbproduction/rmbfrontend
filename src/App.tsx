@@ -2,8 +2,8 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import Services from './components/Services';
-import HowItWorks from './components/HowItWorks';
-import Testimonials from './components/Testimonials';
+// import HowItWorks from './components/HowItWorks';
+// import Testimonials from './components/Testimonials';
 import Footer from './components/Footer';
 import ServiceDetails from './pages/ServiceDetails';
 import ServicesPage from './pages/Services';
@@ -50,8 +50,8 @@ function App() {
                 <Hero />
                 <Services />
                 <AboutUsSection />
-                <HowItWorks />
-                <Testimonials />
+                {/* <HowItWorks /> */}
+                {/* <Testimonials /> */}
               </main>
             } 
           />

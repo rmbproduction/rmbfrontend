@@ -314,6 +314,21 @@ const Pricing = () => {
 
   // When using the new API, display plan variants
   const renderNewPlanVariants = () => {
+    if (plans.length === 0) {
+      return (
+        <div className="text-center py-10">
+          <h3 className="text-xl font-semibold text-gray-700 mb-4">No Subscription Plans Available</h3>
+          <p className="text-gray-600 mb-6">We're currently updating our subscription plans. Please check back later.</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="bg-[#FF5733] text-white py-2 px-4 rounded-lg hover:bg-[#ff4019]"
+          >
+            Refresh Page
+          </button>
+        </div>
+      );
+    }
+    
     const variantsByPlan = groupVariantsByPlan(planVariants);
     
     return (
@@ -406,6 +421,21 @@ const Pricing = () => {
   
   // Render function for legacy plans
   const renderLegacyPlans = () => {
+    if (subscriptionPlans.length === 0) {
+      return (
+        <div className="text-center py-10">
+          <h3 className="text-xl font-semibold text-gray-700 mb-4">No Subscription Plans Available</h3>
+          <p className="text-gray-600 mb-6">We're currently updating our subscription plans. Please check back later.</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="bg-[#FF5733] text-white py-2 px-4 rounded-lg hover:bg-[#ff4019]"
+          >
+            Refresh Page
+          </button>
+        </div>
+      );
+    }
+    
     return (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
         {subscriptionPlans.map((plan) => (
@@ -462,7 +492,7 @@ const Pricing = () => {
       </div>
     );
   };
-  
+
   return (
     <div className="py-20 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
