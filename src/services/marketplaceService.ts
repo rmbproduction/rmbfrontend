@@ -1193,7 +1193,7 @@ const marketplaceService = {
   // Fetch all vehicles
   getAllVehicles: async () => {
     try {
-      const response = await axios.get(`${API_CONFIG.BASE_URL}/vehicles/`);
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/vehicles/`);
       return response.data;
     } catch (error) {
       console.error('Error fetching all vehicles:', error);
@@ -1204,7 +1204,8 @@ const marketplaceService = {
   // Fetch specific vehicle details by ID
   getVehicleById: async (id: string) => {
     try {
-      const response = await axios.get(`${API_CONFIG.BASE_URL}/vehicles/${id}/`);
+      // Use the marketplace prefix for vehicle endpoints
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/vehicles/${id}/`);
       return response.data;
     } catch (error) {
       console.error(`Error fetching vehicle with ID ${id}:`, error);
@@ -1266,8 +1267,26 @@ const marketplaceService = {
         return API_CONFIG.getMediaUrl(path);
       };
       
+      // Add a helper function to check if an image exists
+      const imageExists = async (url: string | null): Promise<string | null> => {
+        if (!url) return null;
+        
+        try {
+          // Attempt to check if the image exists using a HEAD request
+          const response = await fetch(url, { method: 'HEAD' });
+          if (response.ok) {
+            return url;
+          }
+          console.warn(`Image not found: ${url}`);
+          return API_CONFIG.getDefaultVehicleImage();
+        } catch (error) {
+          console.warn(`Error checking image: ${url}`, error);
+          return API_CONFIG.getDefaultVehicleImage();
+        }
+      };
+      
       // Process response to normalize data
-      const vehicles = vehiclesData.map((vehicle: any) => {
+      const vehicles = await Promise.all(vehiclesData.map(async (vehicle: any) => {
         if (!vehicle) return null;
         
         // Ensure we have at least minimal required data
@@ -1277,10 +1296,13 @@ const marketplaceService = {
         // Get image URL (handle multiple possible formats)
         let imageUrl = null;
         try {
-          imageUrl = getAbsoluteUrl(vehicle.front_image_url) || 
+          // Try various image sources
+          const potentialImageUrl = getAbsoluteUrl(vehicle.front_image_url) || 
                    getAbsoluteUrl(vehicle.photo_front) || 
-                   (vehicle.images?.front ? getAbsoluteUrl(vehicle.images.front) : null) ||
-                   API_CONFIG.getDefaultVehicleImage();
+                   (vehicle.images?.front ? getAbsoluteUrl(vehicle.images.front) : null);
+          
+          // Check if the image exists
+          imageUrl = await imageExists(potentialImageUrl) || API_CONFIG.getDefaultVehicleImage();
         } catch (e) {
           console.warn(`Error processing image for vehicle ${vehicle.id}:`, e);
           imageUrl = API_CONFIG.getDefaultVehicleImage();
@@ -1316,7 +1338,7 @@ const marketplaceService = {
           price: price,
           formatted_price: vehicle.display_price?.formatted || `₹${(price).toLocaleString()}`
         };
-      }).filter(Boolean); // Remove any null entries
+      }).filter(Boolean)); // Remove any null entries
       
       // Store in session for quick access
       try {
@@ -1342,7 +1364,8 @@ const marketplaceService = {
       // Get authentication token
       const token = localStorage.getItem('accessToken');
       
-      const response = await axios.get(`${API_CONFIG.BASE_URL}/vehicles/${vehicleId}/`, {
+      // Use the marketplace prefix for vehicle endpoints
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/vehicles/${vehicleId}/`, {
         headers: {
           'Authorization': token ? `Bearer ${token}` : ''
         }
@@ -1360,7 +1383,7 @@ const marketplaceService = {
       // Get authentication token
       const token = localStorage.getItem('accessToken');
       
-      const response = await axios.get(`${API_CONFIG.BASE_URL}/vehicles/${vehicleId}/similar/`, {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/vehicles/${vehicleId}/similar/`, {
         headers: {
           'Authorization': token ? `Bearer ${token}` : ''
         }
@@ -1379,7 +1402,7 @@ const marketplaceService = {
       // Get authentication token
       const token = localStorage.getItem('accessToken');
       
-      const response = await axios.get(`${API_CONFIG.BASE_URL}/vehicles/popular/?limit=${limit}`, {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/vehicles/popular/?limit=${limit}`, {
         headers: {
           'Authorization': token ? `Bearer ${token}` : ''
         }
@@ -1493,7 +1516,7 @@ const marketplaceService = {
         throw new Error('Authentication required. Please log in to continue.');
       }
 
-      const response = await axios.post(`${API_CONFIG.BASE_URL}/vehicles/${vehicleId}/purchase/`, purchaseData, {
+      const response = await axios.post(`${API_CONFIG.BASE_URL}/marketplace/vehicles/${vehicleId}/purchase/`, purchaseData, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -1532,7 +1555,7 @@ const marketplaceService = {
 
       console.log('Booking payload:', payload);
 
-      const response = await axios.post(`${API_CONFIG.BASE_URL}/vehicles/${vehicleId}/book/`, payload, {
+      const response = await axios.post(`${API_CONFIG.BASE_URL}/marketplace/vehicles/${vehicleId}/book/`, payload, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
