@@ -238,7 +238,7 @@ const Pricing = () => {
           // Check if authentication is required
           if (error.message === 'Authentication required') {
             // Redirect to login page
-            navigate('/login', { state: { from: location.pathname } });
+            navigate('/login-signup', { state: { from: location.pathname } });
             toast.error('Please login to subscribe to a plan');
           } else {
             toast.error('Failed to create subscription request. Please try again.');
@@ -256,7 +256,7 @@ const Pricing = () => {
           // Check if authentication is required
           if (error.message === 'Authentication required') {
             // Redirect to login page
-            navigate('/login', { state: { from: location.pathname } });
+            navigate('/login-signup', { state: { from: location.pathname } });
             toast.error('Please login to subscribe to a plan');
           } else {
             toast.error('Failed to create subscription request. Please try again.');

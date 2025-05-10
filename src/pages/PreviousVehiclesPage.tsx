@@ -198,6 +198,15 @@ const PreviousVehiclesPage = () => {
     return Array.from(new Set(statuses));
   };
 
+  // New helper function to determine if vehicle is completed or inactive
+  const canSellSimilarVehicle = (vehicle: any) => {
+    // Check if vehicle has a status that indicates the process is complete
+    const completedStatuses = ['sold', 'completed', 'cancelled', 'rejected'];
+    const currentStatus = vehicle.status?.toLowerCase() || '';
+    
+    return completedStatuses.includes(currentStatus);
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       <div className="flex items-center mb-6">
@@ -209,6 +218,13 @@ const PreviousVehiclesPage = () => {
           <span>Back</span>
         </button>
         <h1 className="text-2xl font-bold flex-1">Your Vehicles</h1>
+        <button
+          onClick={() => navigate('/sell-vehicle')}
+          className="flex items-center bg-[#FF5733] text-white px-4 py-2 rounded-md mr-3 hover:bg-[#e04b29] transition-colors"
+        >
+          <Tag className="w-4 h-4 mr-2" />
+          Sell New Vehicle
+        </button>
         <button
           onClick={refreshAll}
           disabled={isRefreshing}
@@ -368,13 +384,24 @@ const PreviousVehiclesPage = () => {
                         <span className="font-bold text-lg text-[#FF5733]">₹{formatPrice(expectedPrice)}</span>
                       </div>
                       
-                      <Link 
-                        to={`/sell-vehicle/${id}/summary`}
-                        className="flex items-center bg-[#FF5733] text-white px-3 py-1.5 rounded-md hover:bg-[#ff4019] transition-colors text-sm font-medium"
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        View Details
-                      </Link>
+                      <div className="flex space-x-2">
+                        {canSellSimilarVehicle(vehicle) && (
+                          <button
+                            onClick={() => navigate('/sell-vehicle')}
+                            className="flex items-center bg-gray-100 text-gray-700 px-3 py-1.5 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium"
+                          >
+                            <Tag className="w-4 h-4 mr-1" />
+                            Sell Similar
+                          </button>
+                        )}
+                        <Link 
+                          to={`/sell-vehicle/${id}/summary`}
+                          className="flex items-center bg-[#FF5733] text-white px-3 py-1.5 rounded-md hover:bg-[#ff4019] transition-colors text-sm font-medium"
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          View Details
+                        </Link>
+                      </div>
                     </div>
                   </div>
                 </div>

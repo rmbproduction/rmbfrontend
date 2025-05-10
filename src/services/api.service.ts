@@ -32,10 +32,10 @@ export const handleApiError = (error: any): Error => {
       // Only redirect to login from browser environment
       if (typeof window !== 'undefined') {
         // Don't redirect if already on login page to avoid redirect loops
-        if (!window.location.pathname.includes('/login')) {
+        if (!window.location.pathname.includes('/login-signup')) {
           // Use setTimeout to ensure this happens outside of current call stack
           setTimeout(() => {
-            window.location.href = '/login';
+            window.location.href = '/login-signup';
           }, 100);
         }
       }

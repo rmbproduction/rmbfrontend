@@ -44,7 +44,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Handle token refresh or logout
       localStorage.removeItem('accessToken');
-      window.location.href = '/login';
+      window.location.href = '/login-signup';
     }
     return Promise.reject(error);
   }

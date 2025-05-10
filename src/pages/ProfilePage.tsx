@@ -1203,7 +1203,7 @@ const ProfilePage = () => {
     localStorage.removeItem("userProfile");
     localStorage.removeItem("userData");
     sessionStorage.removeItem("userProfile");
-    window.location.href = "/login";
+    window.location.href = "/login-signup";
   };
   
   // Handle password change

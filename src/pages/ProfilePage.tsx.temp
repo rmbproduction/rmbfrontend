@@ -1266,7 +1266,7 @@ const ProfilePage = () => {
     localStorage.removeItem("accessToken");
     localStorage.removeItem("userProfile");
     sessionStorage.removeItem("userProfile");
-    window.location.href = "/login";
+    window.location.href = "/login-signup";
   };
   
   // Handle password change

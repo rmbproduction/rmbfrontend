@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { toast } from 'react-toastify';
+import { toast } from '../utils/noToast';
 import { ArrowLeft, User, MapPin, Phone, Clock, CheckCircle, AlertTriangle, Navigation, Trash2, ShoppingCart, X, Calendar, Info } from 'lucide-react';
 import { checkUserAuthentication } from '../utils/auth';
 import ThankYouModal from '../components/ThankYouModal';
@@ -1380,7 +1380,7 @@ const ServiceCheckout: React.FC = () => {
             }));
             
             // Redirect to login
-            navigate('/login', { 
+            navigate('/login-signup', { 
               state: { 
                 redirectTo: '/service-checkout',
                 subscriptionPlanId: subscriptionPlan.id
@@ -1630,7 +1630,7 @@ const ServiceCheckout: React.FC = () => {
         }));
         
         // Redirect to login
-        navigate('/login', { 
+        navigate('/login-signup', { 
           state: { redirectTo: '/service-checkout' } 
         });
         return;

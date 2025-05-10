@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import Services from './components/Services';
@@ -55,6 +55,9 @@ function App() {
               </main>
             } 
           />
+
+          {/* Redirect from /login to /login-signup */}
+          <Route path="/login" element={<Navigate to="/login-signup" replace />} />
 
           {/* Additional Pages */}
           <Route path="/about" element={<About />} />

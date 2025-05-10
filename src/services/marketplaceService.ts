@@ -38,6 +38,11 @@ interface VehicleData {
   [key: string]: any;
 }
 
+// Subscription management for vehicle updates
+const subscriptions = new Map<string, Array<() => void>>();
+let pollingInterval: ReturnType<typeof setInterval> | null = null;
+const POLLING_INTERVAL = 30000; // Poll every 30 seconds
+
 // In-memory cache for sell requests with TTL support
 const sellRequestCache = {
   data: new Map<string, { data: any, timestamp: number, etag?: string }>(),
@@ -112,6 +117,123 @@ const sellRequestCache = {
 };
 
 const marketplaceService = {
+  // Subscribe to vehicle updates
+  subscribeToVehicleUpdates: (vehicleId: string, callback: () => void): (() => void) => {
+    console.log(`Subscribing to updates for vehicle ${vehicleId}`);
+    
+    if (!subscriptions.has(vehicleId)) {
+      subscriptions.set(vehicleId, []);
+    }
+    
+    // Add this callback to the list of subscribers
+    subscriptions.get(vehicleId)?.push(callback);
+    
+    // Start the polling if not already started
+    if (!pollingInterval) {
+      console.log('Starting global polling for vehicle updates');
+      pollingInterval = setInterval(async () => {
+        // Check each vehicle with subscriptions for updates
+        for (const [id, callbacks] of subscriptions.entries()) {
+          try {
+            // Skip if no valid token (user not logged in)
+            const token = localStorage.getItem('accessToken');
+            if (!token) continue;
+            
+            // Get the ETag from cache if available
+            const cachedRequest = sellRequestCache.get(id);
+            const headers: Record<string, string> = { 
+              Authorization: `Bearer ${token}` 
+            };
+            
+            if (cachedRequest?.etag) {
+              headers['If-None-Match'] = cachedRequest.etag;
+            }
+            
+            // Make a HEAD request to check for changes (lighter than GET)
+            // Use a short timeout to avoid hanging requests
+            const response = await axios.head(
+              `${API_CONFIG.BASE_URL}/marketplace/sell-requests/${id}/`, 
+              { 
+                headers,
+                timeout: 5000
+              }
+            );
+            
+            // If we get here, there might be an update (no 304 response)
+            if (response.status !== 304) {
+              console.log(`Detected change for vehicle ${id}, notifying subscribers`);
+              // Notify all callbacks
+              callbacks.forEach(cb => {
+                try {
+                  cb();
+                } catch (callbackError) {
+                  console.error(`Error in callback for vehicle ${id}:`, callbackError);
+                }
+              });
+            }
+          } catch (error: any) {
+            // Handle specific error cases
+            if (error.response) {
+              // If we get a 304 Not Modified, there's no update
+              if (error.response.status === 304) {
+                console.log(`No changes for vehicle ${id}`);
+              } 
+              // If the request is unauthorized, the token might be invalid
+              else if (error.response.status === 401 || error.response.status === 403) {
+                console.warn(`Authentication error checking for updates on vehicle ${id}, removing subscription`);
+                // Remove this subscription to avoid repeated failed requests
+                subscriptions.delete(id);
+              }
+              // If the vehicle doesn't exist anymore
+              else if (error.response.status === 404) {
+                console.warn(`Vehicle ${id} not found, removing subscription`);
+                // Remove this subscription to avoid repeated failed requests
+                subscriptions.delete(id);
+              } 
+              else {
+                console.error(`Error checking for updates on vehicle ${id}:`, error.response.status, error.response.statusText);
+              }
+            } else if (error.code === 'ECONNABORTED') {
+              console.warn(`Timeout checking for updates on vehicle ${id}`);
+            } else {
+              console.error(`Error checking for updates on vehicle ${id}:`, error);
+            }
+          }
+        }
+        
+        // If no more subscriptions, clear the interval
+        if (subscriptions.size === 0 && pollingInterval !== null) {
+          console.log('No more subscriptions, stopping polling');
+          clearInterval(pollingInterval);
+          pollingInterval = null;
+        }
+      }, POLLING_INTERVAL);
+    }
+    
+    // Return an unsubscribe function
+    return () => {
+      console.log(`Unsubscribing from updates for vehicle ${vehicleId}`);
+      const vehicleSubscribers = subscriptions.get(vehicleId) || [];
+      const index = vehicleSubscribers.indexOf(callback);
+      
+      if (index !== -1) {
+        vehicleSubscribers.splice(index, 1);
+      }
+      
+      // If this was the last subscriber for this vehicle, remove it
+      if (vehicleSubscribers.length === 0) {
+        subscriptions.delete(vehicleId);
+      }
+      
+      // If no more subscriptions at all, clear the interval
+      if (subscriptions.size === 0 && pollingInterval !== null) {
+        console.log('Stopping global polling for vehicle updates');
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+      }
+    };
+  },
+  
   // Clear all user session data and cache when user logs out
   clearUserSession: () => {
     // Clear in-memory cache
@@ -498,7 +620,7 @@ const marketplaceService = {
       
       try {
         // Try to find an existing vehicle with this registration number
-        const checkResponse = await axios.get(`${API_CONFIG.BASE_URL}/vehicle/user-vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`, {
+        const checkResponse = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -511,7 +633,7 @@ const marketplaceService = {
           isExistingVehicle = true;
         } else {
           // No vehicle exists with this registration, create a new one
-          const vehicleResponse = await axios.post(`${API_CONFIG.BASE_URL}/vehicle/user-vehicles/`, vehicleData, {
+          const vehicleResponse = await axios.post(`${API_CONFIG.BASE_URL}/marketplace/vehicles/`, vehicleData, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
@@ -529,7 +651,7 @@ const marketplaceService = {
           console.log('Vehicle already exists (from error response), trying to find it by registration number');
           
           const findResponse = await axios.get(
-            `${API_CONFIG.BASE_URL}/vehicle/user-vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
+            `${API_CONFIG.BASE_URL}/marketplace/vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
             {
               headers: { 'Authorization': `Bearer ${token}` }
             }
@@ -549,6 +671,32 @@ const marketplaceService = {
       
       // STEP 2: Now create the sell request with the vehicle ID
       console.log('Step 2: Creating sell request with vehicle ID:', vehicleId);
+      
+      // First check if a sell request already exists for this vehicle
+      try {
+        console.log('Checking if a sell request already exists for this vehicle');
+        const existingRequestsResponse = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/sell-requests/`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (Array.isArray(existingRequestsResponse.data)) {
+          const existingRequest = existingRequestsResponse.data.find((request: any) => 
+            request.vehicle === vehicleId || 
+            request.vehicle?.id === vehicleId ||
+            (request.vehicle && request.vehicle.id && request.vehicle.id.toString() === vehicleId.toString())
+          );
+          
+          if (existingRequest) {
+            console.log('Found existing sell request for this vehicle:', existingRequest);
+            return existingRequest; // Return the existing request instead of creating a new one
+          }
+        }
+      } catch (checkError) {
+        console.warn('Error checking for existing sell requests:', checkError);
+        // Continue with creation attempt even if check fails
+      }
       
       // If creating a FormData-based request with file uploads
       if (photos.front || photos.back || photos.left || photos.right || 
@@ -718,6 +866,84 @@ const marketplaceService = {
         }
       }
       
+      // Check for duplicate vehicle error
+      if (error.response?.status === 400 && 
+          error.response?.data?.vehicle && 
+          (Array.isArray(error.response.data.vehicle) 
+            ? error.response.data.vehicle[0].includes('sell request with this vehicle already exists') 
+            : error.response.data.vehicle.includes('sell request with this vehicle already exists'))) {
+        
+        console.log('Duplicate sell request detected, trying to find existing one');
+        
+        // Try to find the existing sell request for this vehicle
+        try {
+          const existingRequestsResponse = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/sell-requests/`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (Array.isArray(existingRequestsResponse.data)) {
+            // Try to extract the vehicle ID from the error message if available
+            let vehicleIdFromError = null;
+            try {
+              // Extract ID from request body if using FormData
+              if (data && data.get) {
+                vehicleIdFromError = data.get('vehicle');
+              } 
+              
+              // Try to parse the error message
+              if (!vehicleIdFromError) {
+                const errorMessage = Array.isArray(error.response.data.vehicle) 
+                  ? error.response.data.vehicle[0] 
+                  : error.response.data.vehicle;
+                
+                // Try to extract id from the error message using regex
+                const match = errorMessage.match(/vehicle with id (\d+)/i);
+                if (match && match[1]) {
+                  vehicleIdFromError = match[1];
+                  console.log('Extracted vehicle ID from error message:', vehicleIdFromError);
+                }
+              }
+            } catch (e) {
+              console.warn('Could not extract vehicle ID from FormData or error message:', e);
+            }
+            
+            // Use vehicleIdFromError directly
+            const vehicleIdForSearch = vehicleIdFromError;
+            
+            if (vehicleIdForSearch) {
+              const existingRequest = existingRequestsResponse.data.find((request: any) => 
+                request.vehicle === vehicleIdForSearch || 
+                request.vehicle?.id === vehicleIdForSearch ||
+                (request.vehicle && request.vehicle.id && request.vehicle.id.toString() === vehicleIdForSearch.toString())
+              );
+              
+              if (existingRequest) {
+                console.log('Found existing sell request:', existingRequest);
+                
+                // Return the existing request with a flag indicating it was existing
+                return {
+                  ...existingRequest,
+                  _isExistingSellRequest: true
+                };
+              }
+            } else {
+              console.warn('Could not determine vehicle ID to look for existing sell request');
+            }
+          }
+        } catch (findError) {
+          console.warn('Error finding existing sell request:', findError);
+        }
+        
+        // If we couldn't find the existing request but know it exists,
+        // throw a special error that can be handled by the UI
+        const enhancedError = new Error('Vehicle: sell request with this vehicle already exists.');
+        (enhancedError as any).isDuplicateSellRequest = true;
+        (enhancedError as any).details = error.response.data;
+        throw enhancedError;
+      }
+      
       console.error('Error submitting vehicle:', error);
       
       // Format error message based on type
@@ -796,7 +1022,7 @@ const marketplaceService = {
       
       try {
         // Create vehicle
-        const vehicleResponse = await axios.post(`${API_CONFIG.BASE_URL}/vehicle/user-vehicles/`, vehicleData, {
+        const vehicleResponse = await axios.post(`${API_CONFIG.BASE_URL}/marketplace/vehicles/`, vehicleData, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
@@ -818,7 +1044,7 @@ const marketplaceService = {
           
           // Try to find the vehicle by registration number
           const findResponse = await axios.get(
-            `${API_CONFIG.BASE_URL}/vehicle/user-vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
+            `${API_CONFIG.BASE_URL}/marketplace/vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
             {
               headers: { 'Authorization': `Bearer ${token}` }
             }

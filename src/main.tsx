@@ -5,8 +5,6 @@ import './index.css';
 import ErrorBoundary from './components/ErrorBoundary';
 import axios from 'axios';
 import { initializeDB } from './services/persistentStorageService';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 
 // Initialize persistence layer
 initializeDB()
@@ -113,8 +111,7 @@ initializeDB()
   })
   .catch(error => {
     console.error('Failed to initialize persistence layer:', error);
-    // Still continue with the app, just show an error message
-    toast.error('Failed to initialize storage. Some features may not work properly.');
+    // Continue with the app without showing an error message
   });
 
 // Initialize axios with authentication token if available
@@ -145,7 +142,6 @@ createRoot(document.getElementById('root')!).render(
       }}
     >
       <App />
-      <ToastContainer position="top-right" autoClose={3000} />
     </ErrorBoundary>
   </StrictMode>
 );

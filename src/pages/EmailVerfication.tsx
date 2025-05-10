@@ -34,12 +34,12 @@ const EmailVerification = () => {
     if (token) {
       verifyEmail();
     } else {
-      setVerificationStatus('error');
+      setVerificationStatus('pending');
     }
   }, [token]);
 
   useEffect(() => {
-    if (verificationStatus === 'error' && countdown > 0) {
+    if ((verificationStatus === 'error' || verificationStatus === 'pending') && countdown > 0) {
       const timer = setInterval(() => {
         setCountdown((prev) => prev - 1);
       }, 1000);
@@ -58,7 +58,7 @@ const EmailVerification = () => {
   };
 
   const handleContinue = () => {
-    navigate('/');
+    navigate('/login-signup');
   };
 
   return (
@@ -79,8 +79,10 @@ const EmailVerification = () => {
               'Verifying your email address...'
             ) : verificationStatus === 'success' ? (
               'Your email has been verified successfully!'
-            ) : (
+            ) : verificationStatus === 'pending' ? (
               `We sent a verification link to ${email}`
+            ) : (
+              'There was an error verifying your email.'
             )}
           </p>
         </div>
@@ -99,8 +101,30 @@ const EmailVerification = () => {
                 onClick={handleContinue}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-[#FF5733] hover:bg-[#ff4019] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FF5733]"
               >
-                Continue to Homepage
+                Continue to Login
               </button>
+            </div>
+          ) : verificationStatus === 'pending' ? (
+            <div className="space-y-6">
+              <div className="flex justify-center">
+                <Mail className="h-16 w-16 text-[#FF5733]" />
+              </div>
+              <div className="text-center text-sm text-gray-600">
+                <p>Please check your email inbox for the verification link</p>
+                <button
+                  onClick={handleResendVerification}
+                  disabled={countdown > 0}
+                  className={`mt-2 font-medium ${
+                    countdown > 0
+                      ? 'text-gray-400 cursor-not-allowed'
+                      : 'text-[#FF5733] hover:text-[#ff4019]'
+                  }`}
+                >
+                  {countdown > 0
+                    ? `Resend email in ${countdown}s`
+                    : 'Click to resend verification email'}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-6">
@@ -108,7 +132,7 @@ const EmailVerification = () => {
                 <XCircle className="h-16 w-16 text-red-500" />
               </div>
               <div className="text-center text-sm text-gray-600">
-                <p>Didn't receive the email? Check your spam folder or</p>
+                <p>There was an error verifying your email.</p>
                 <button
                   onClick={handleResendVerification}
                   disabled={countdown > 0}

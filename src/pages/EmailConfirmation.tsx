@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { toast } from 'react-toastify';
+import { toast } from '../utils/noToast';
 import { API_CONFIG } from '../config/api.config';
 
 const EmailConfirmation = () => {
@@ -15,10 +15,7 @@ const EmailConfirmation = () => {
         const response = await axios.get(API_CONFIG.getApiUrl(`/accounts/verify-email/${key}/`));
         
         if (response.data.status === 'success') {
-          toast.success(response.data.message, {
-            position: "top-right",
-            autoClose: 5000,
-          });
+          toast.success(response.data.message);
           
           // Wait for 3 seconds before redirecting
           setTimeout(() => {
@@ -37,10 +34,7 @@ const EmailConfirmation = () => {
         }
       } catch (error: any) {
         const errorMessage = error.response?.data?.error || "An error occurred during email verification";
-        toast.error(errorMessage, {
-          position: "top-right",
-          autoClose: 5000,
-        });
+        toast.error(errorMessage);
       } finally {
         setVerifying(false);
       }
