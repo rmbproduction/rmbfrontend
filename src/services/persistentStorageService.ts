@@ -1,8 +1,8 @@
 /**
- * Persistent Storage Service
+ * Persistent Storage Service - Optimized Version
  * 
- * Provides a way to persistently store vehicle data using both localStorage and IndexedDB.
- * This ensures data is never lost once it's stored, even if the user clears their session.
+ * Provides an efficient way to store vehicle data using an appropriate storage strategy
+ * based on data size and persistence requirements.
  */
 
 // Declare global window property to store the DB promise
@@ -12,11 +12,15 @@ declare global {
   }
 }
 
+// In-memory cache for fastest access
+const memoryCache = new Map<string, any>();
+
 // Constants for IndexedDB
 const DB_NAME = 'RepairMyBike_DB';
 const DB_VERSION = 1;
 const VEHICLE_STORE = 'vehicles';
 const VEHICLE_DETAILS_STORE = 'vehicle_details';
+
 // TTL values in milliseconds
 const TTL = {
   VEHICLE: 24 * 60 * 60 * 1000, // 24 hours
@@ -24,11 +28,23 @@ const TTL = {
   HISTORY: 30 * 24 * 60 * 60 * 1000 // 30 days
 };
 
+// Size limits in bytes
+const SIZE_LIMITS = {
+  SESSION_STORAGE: 50000, // ~50KB
+  LOCAL_STORAGE: 100000,  // ~100KB
+};
+
+// Singleton DB instance
+let dbInstance: IDBDatabase | null = null;
+
 /**
  * Initialize the IndexedDB database
  * @returns Promise that resolves to an IndexedDB database instance
  */
-const initializeDB = (): Promise<IDBDatabase> => {
+const initializeDB = async (): Promise<IDBDatabase> => {
+  // Return existing instance if available
+  if (dbInstance) return dbInstance;
+  
   return new Promise((resolve, reject) => {
     if (!window.indexedDB) {
       console.error('IndexedDB is not supported in this browser.');
@@ -36,61 +52,64 @@ const initializeDB = (): Promise<IDBDatabase> => {
       return;
     }
     
-    const request = window.indexedDB.open(DB_NAME, DB_VERSION);
-    
-    request.onerror = (event) => {
-      console.error('Error opening IndexedDB:', (event.target as IDBOpenDBRequest).error);
-      reject((event.target as IDBOpenDBRequest).error);
-    };
-    
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
+    try {
+      const request = window.indexedDB.open(DB_NAME, DB_VERSION);
       
-      // Create or update stores as needed
-      if (!db.objectStoreNames.contains(VEHICLE_STORE)) {
-        db.createObjectStore(VEHICLE_STORE, { keyPath: 'id' });
-      }
+      request.onerror = (event) => {
+        console.error('Error opening IndexedDB:', (event.target as IDBOpenDBRequest).error);
+        reject((event.target as IDBOpenDBRequest).error);
+      };
       
-      if (!db.objectStoreNames.contains(VEHICLE_DETAILS_STORE)) {
-        db.createObjectStore(VEHICLE_DETAILS_STORE, { keyPath: 'id' });
-      }
-    };
-    
-    request.onsuccess = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      resolve(db);
-    };
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        
+        // Create or update stores as needed
+        if (!db.objectStoreNames.contains(VEHICLE_STORE)) {
+          db.createObjectStore(VEHICLE_STORE, { keyPath: 'id' });
+        }
+        
+        if (!db.objectStoreNames.contains(VEHICLE_DETAILS_STORE)) {
+          db.createObjectStore(VEHICLE_DETAILS_STORE, { keyPath: 'id' });
+        }
+      };
+      
+      request.onsuccess = (event) => {
+        dbInstance = (event.target as IDBOpenDBRequest).result;
+        resolve(dbInstance);
+      };
+    } catch (err) {
+      console.error('Failed to initialize IndexedDB:', err);
+      reject(err);
+      
+      // The application can continue without IndexedDB
+      // We'll fallback to other storage mechanisms
+    }
   });
 };
 
+// Helper to calculate data size in bytes
+const getDataSize = (data: any): number => {
+  try {
+    return new Blob([JSON.stringify(data)]).size;
+  } catch (e) {
+    return Number.MAX_SAFE_INTEGER; // Assume large if can't calculate
+  }
+};
+
 /**
- * Service for persistently storing vehicle data
+ * Service for persistently storing vehicle data with optimized storage strategy
  */
 const persistentStorageService = {
   /**
-   * Save vehicle data to persistent storage (both IndexedDB and localStorage)
-   * @param vehicleId The vehicle ID
-   * @param data The data to store
-   * @param version Optional version identifier (like ETag)
-   * @returns Promise that resolves when data is saved
+   * Save vehicle data using the most appropriate storage method
+   * based on data size and persistence requirements
    */
   saveVehicleData: async (vehicleId: string, data: any, version?: string): Promise<void> => {
+    if (!vehicleId) {
+      throw new Error('Vehicle ID is required');
+    }
+    
     try {
-      if (!vehicleId) {
-        throw new Error('Vehicle ID is required');
-      }
-      
-      // PERFORMANCE: Check if we already have this data version in memory
-      // Use a simple in-memory cache to avoid redundant storage operations
-      const cacheKey = `__storageCache_${vehicleId}`;
-      const existingData = (window as any)[cacheKey];
-      if (existingData && 
-          existingData.version === (version || data.version || `v${Date.now()}`)) {
-        // Skip storage operations if same version
-        console.log(`Skipping storage for ID ${vehicleId} - same version already stored`);
-        return;
-      }
-      
       // First, ensure we have a full copy with ID embedded in the object
       const dataToStore = {
         ...data,
@@ -101,55 +120,68 @@ const persistentStorageService = {
         expiry: Date.now() + TTL.VEHICLE
       };
       
-      // Update in-memory cache
-      (window as any)[cacheKey] = dataToStore;
+      // Memory cache is always updated (fastest access)
+      const cacheKey = `vehicle_${vehicleId}`;
+      memoryCache.set(cacheKey, dataToStore);
       
-      // 1. Save to sessionStorage (for fast access during session)
-      // This is highest priority since it's the fastest
-      try {
-        sessionStorage.setItem(`vehicle_summary_${vehicleId}`, JSON.stringify(dataToStore));
-      } catch (e) {
-        console.warn('Error saving to sessionStorage:', e);
-      }
+      // Determine data size
+      const dataSize = getDataSize(dataToStore);
       
-      // 2. Save to localStorage (as fallback) - only if not too large
-      try {
-        // OPTIMIZATION: Skip localStorage for large objects
-        const dataSize = JSON.stringify(dataToStore).length;
-        if (dataSize < 100000) { // ~100KB limit
-          localStorage.setItem(`vehicle_data_${vehicleId}`, JSON.stringify(dataToStore));
-        } else {
-          console.log(`Data for ID ${vehicleId} too large for localStorage (${dataSize} bytes), skipping`);
+      // STORAGE STRATEGY:
+      // 1. Small data (<50KB): Use sessionStorage (fast, but cleared on tab close)
+      // 2. Medium data (<100KB): Use localStorage (persists across sessions)
+      // 3. Large data (>100KB): Use IndexedDB only (avoids blocking UI)
+      
+      // Always try sessionStorage for small data (fastest retrieval)
+      if (dataSize < SIZE_LIMITS.SESSION_STORAGE) {
+        try {
+          sessionStorage.setItem(`vehicle_summary_${vehicleId}`, JSON.stringify(dataToStore));
+        } catch (e) {
+          console.warn('Failed to save to sessionStorage, falling back to other storage:', e);
         }
-      } catch (e) {
-        console.warn('Error saving to localStorage (possibly full):', e);
       }
       
-      // 3. Save to IndexedDB (for permanent storage)
-      // Initialize DB only once per session
-      if (!window.__dbPromise) {
-        window.__dbPromise = initializeDB();
+      // For medium-sized data, try localStorage
+      if (dataSize < SIZE_LIMITS.LOCAL_STORAGE) {
+        try {
+          localStorage.setItem(`vehicle_data_${vehicleId}`, JSON.stringify(dataToStore));
+        } catch (e) {
+          console.warn('Failed to save to localStorage, falling back to IndexedDB:', e);
+          // Continue to IndexedDB
+        }
       }
       
-      const db = await window.__dbPromise;
-      
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction([VEHICLE_STORE], 'readwrite');
+      // For all data, especially large data, use IndexedDB
+      // This won't block the UI thread for large datasets
+      try {
+        const db = await initializeDB();
         
-        transaction.oncomplete = () => {
-          console.log(`Successfully saved vehicle data for ID ${vehicleId} to IndexedDB`);
-          resolve();
-        };
-        
-        transaction.onerror = (event) => {
-          console.error(`Error saving vehicle data for ID ${vehicleId}:`, 
-            (event.target as IDBTransaction).error);
-          reject((event.target as IDBTransaction).error);
-        };
-        
-        const store = transaction.objectStore(VEHICLE_STORE);
-        store.put(dataToStore);
-      });
+        return new Promise((resolve, reject) => {
+          try {
+            const transaction = db.transaction([VEHICLE_STORE], 'readwrite');
+            
+            transaction.oncomplete = () => {
+              resolve();
+            };
+            
+            transaction.onerror = (event) => {
+              console.error(`Error saving vehicle data for ID ${vehicleId}:`, 
+                (event.target as IDBTransaction).error);
+              reject((event.target as IDBTransaction).error);
+            };
+            
+            const store = transaction.objectStore(VEHICLE_STORE);
+            store.put(dataToStore);
+          } catch (txError) {
+            console.error('Transaction error:', txError);
+            reject(txError);
+          }
+        });
+      } catch (dbError) {
+        console.error('IndexedDB error:', dbError);
+        // Continue even if IndexedDB fails
+        // We already tried memory cache, sessionStorage and localStorage
+      }
     } catch (error) {
       console.error('Error in saveVehicleData:', error);
       throw error;
@@ -261,129 +293,103 @@ const persistentStorageService = {
   },
   
   /**
-   * Get vehicle data from persistent storage
-   * @param vehicleId The vehicle ID
-   * @returns Promise that resolves to the vehicle data or null if not found
+   * Get vehicle data using the fastest available source
    */
-  getVehicleData: async (vehicleId: string): Promise<any | null> => {
+  getVehicleData: async (vehicleId: string): Promise<any> => {
+    if (!vehicleId) {
+      throw new Error('Vehicle ID is required');
+    }
+    
     try {
-      if (!vehicleId) {
-        throw new Error('Vehicle ID is required');
+      // First check memory cache (fastest)
+      const cacheKey = `vehicle_${vehicleId}`;
+      if (memoryCache.has(cacheKey)) {
+        const cachedData = memoryCache.get(cacheKey);
+        // Check if expired
+        if (cachedData.expiry && Date.now() < cachedData.expiry) {
+          return cachedData;
+        }
+        // If expired, continue to check other sources
       }
       
-      // PRIORITIZE sessionStorage for fastest access during the current session
+      // Next, check sessionStorage (still fast)
       try {
         const sessionData = sessionStorage.getItem(`vehicle_summary_${vehicleId}`);
         if (sessionData) {
           const parsedData = JSON.parse(sessionData);
-          console.log(`Retrieved vehicle data for ID ${vehicleId} from sessionStorage`);
-          
-          // Always use sessionStorage data, skipping expiration check
-          // Enhance the data structure before returning
-          return enrichStoredVehicleData(parsedData, vehicleId);
+          // Check if expired
+          if (parsedData.expiry && Date.now() < parsedData.expiry) {
+            // Update memory cache for future access
+            memoryCache.set(cacheKey, parsedData);
+            return parsedData;
+          }
         }
       } catch (e) {
-        console.error('Error reading from sessionStorage:', e);
+        console.warn('Error reading from sessionStorage:', e);
       }
       
-      // Then try IndexedDB for persistent data
+      // Then check localStorage
+      try {
+        const localData = localStorage.getItem(`vehicle_data_${vehicleId}`);
+        if (localData) {
+          const parsedData = JSON.parse(localData);
+          // Check if expired
+          if (parsedData.expiry && Date.now() < parsedData.expiry) {
+            // Update caches for future access
+            memoryCache.set(cacheKey, parsedData);
+            try {
+              sessionStorage.setItem(`vehicle_summary_${vehicleId}`, localData);
+            } catch (e) {
+              // Ignore sessionStorage errors
+            }
+            return parsedData;
+          }
+        }
+      } catch (e) {
+        console.warn('Error reading from localStorage:', e);
+      }
+      
+      // Finally, check IndexedDB
       try {
         const db = await initializeDB();
         
         return new Promise((resolve, reject) => {
-          const transaction = db.transaction([VEHICLE_STORE], 'readonly');
-          const store = transaction.objectStore(VEHICLE_STORE);
-          const request = store.get(vehicleId);
-          
-          request.onsuccess = () => {
-            const data = request.result;
-            if (data) {
-              console.log(`Retrieved vehicle data for ID ${vehicleId} from IndexedDB`);
-              
-              // Always update sessionStorage with the latest retrieved data
-              try {
-                sessionStorage.setItem(`vehicle_summary_${vehicleId}`, JSON.stringify(data));
-                console.log(`Updated sessionStorage with data from IndexedDB for ID ${vehicleId}`);
-              } catch (e) {
-                console.warn('Error updating sessionStorage with IndexedDB data:', e);
-              }
-              
-              // Enhance the data structure before returning
-              resolve(enrichStoredVehicleData(data, vehicleId));
-              return;
-            }
-              
-            // Fall back to localStorage if not in IndexedDB
-            try {
-              const localData = localStorage.getItem(`vehicle_data_${vehicleId}`);
-              if (localData) {
-                try {
-                  const parsedData = JSON.parse(localData);
-                  console.log(`Retrieved vehicle data for ID ${vehicleId} from localStorage`);
-                  
-                  // Save to both IndexedDB and sessionStorage for future access
-                  persistentStorageService.saveVehicleData(vehicleId, parsedData)
-                    .catch(e => console.warn('Error saving localStorage data to IndexedDB:', e));
-                  
-                  // Save directly to sessionStorage as well for immediate use
-                  try {
-                    sessionStorage.setItem(`vehicle_summary_${vehicleId}`, JSON.stringify(parsedData));
-                    console.log(`Updated sessionStorage with data from localStorage for ID ${vehicleId}`);
-                  } catch (sessErr) {
-                    console.warn('Error updating sessionStorage with localStorage data:', sessErr);
-                  }
-                  
-                  // Enhance the data structure before returning
-                  resolve(enrichStoredVehicleData(parsedData, vehicleId));
-                  return;
-                } catch (e) {
-                  console.error('Error parsing vehicle data from localStorage:', e);
-                }
-              }
-            } catch (e) {
-              console.error('Error reading from localStorage:', e);
-            }
+          try {
+            const transaction = db.transaction([VEHICLE_STORE], 'readonly');
+            const store = transaction.objectStore(VEHICLE_STORE);
+            const request = store.get(vehicleId);
             
-            console.log(`No stored vehicle data found for ID ${vehicleId}`);
-            resolve(null);
-          };
-          
-          request.onerror = (event) => {
-            console.error(`Error retrieving vehicle data for ID ${vehicleId}:`, 
-              (event.target as IDBRequest).error);
-            reject((event.target as IDBRequest).error);
-          };
+            request.onsuccess = () => {
+              const data = request.result;
+              if (data && data.expiry && Date.now() < data.expiry) {
+                // Update caches for future access
+                memoryCache.set(cacheKey, data);
+                
+                // Try to update session storage if data is small enough
+                if (getDataSize(data) < SIZE_LIMITS.SESSION_STORAGE) {
+                  try {
+                    sessionStorage.setItem(`vehicle_summary_${vehicleId}`, JSON.stringify(data));
+                  } catch (e) {
+                    // Ignore sessionStorage errors
+                  }
+                }
+                
+                resolve(data);
+              } else {
+                resolve(null);
+              }
+            };
+            
+            request.onerror = (event) => {
+              reject((event.target as IDBRequest).error);
+            };
+          } catch (txError) {
+            console.error('Transaction error:', txError);
+            reject(txError);
+          }
         });
       } catch (dbError) {
         console.error('IndexedDB error:', dbError);
-        
-        // Fall back to localStorage
-        try {
-          const localData = localStorage.getItem(`vehicle_data_${vehicleId}`);
-          if (localData) {
-            const parsedData = JSON.parse(localData);
-            
-            // Save directly to sessionStorage as well
-            try {
-              sessionStorage.setItem(`vehicle_summary_${vehicleId}`, JSON.stringify(parsedData));
-              console.log(`Updated sessionStorage with data from localStorage fallback for ID ${vehicleId}`);
-            } catch (sessErr) {
-              console.warn('Error updating sessionStorage with localStorage fallback data:', sessErr);
-            }
-            
-            return enrichStoredVehicleData(parsedData, vehicleId);
-          }
-          
-          // Try sessionStorage as last resort (although we should have checked this first)
-          const sessionData = sessionStorage.getItem(`vehicle_summary_${vehicleId}`);
-          if (sessionData) {
-            const parsedData = JSON.parse(sessionData);
-            return enrichStoredVehicleData(parsedData, vehicleId);
-          }
-        } catch (e) {
-          console.error('Error reading from storage:', e);
-        }
-        
         return null;
       }
     } catch (error) {
@@ -708,6 +714,117 @@ const persistentStorageService = {
     } catch (error) {
       console.error('Error in clearVehicleData:', error);
     }
+  },
+  
+  /**
+   * Clear expired data from all storage mechanisms
+   */
+  clearExpiredData: async (): Promise<void> => {
+    const now = Date.now();
+    
+    // Clear memory cache
+    for (const [key, value] of memoryCache.entries()) {
+      if (value.expiry && now > value.expiry) {
+        memoryCache.delete(key);
+      }
+    }
+    
+    // Clear sessionStorage
+    try {
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const key = sessionStorage.key(i);
+        if (key && key.startsWith('vehicle_')) {
+          try {
+            const item = sessionStorage.getItem(key);
+            if (item) {
+              const data = JSON.parse(item);
+              if (data.expiry && now > data.expiry) {
+                sessionStorage.removeItem(key);
+              }
+            }
+          } catch (e) {
+            // Skip items that can't be parsed
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error cleaning sessionStorage:', e);
+    }
+    
+    // Clear localStorage
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('vehicle_')) {
+          try {
+            const item = localStorage.getItem(key);
+            if (item) {
+              const data = JSON.parse(item);
+              if (data.expiry && now > data.expiry) {
+                localStorage.removeItem(key);
+              }
+            }
+          } catch (e) {
+            // Skip items that can't be parsed
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error cleaning localStorage:', e);
+    }
+    
+    // Clear IndexedDB data
+    try {
+      const db = await initializeDB();
+      
+      return new Promise((resolve, reject) => {
+        try {
+          const transaction = db.transaction([VEHICLE_STORE, VEHICLE_DETAILS_STORE], 'readwrite');
+          
+          transaction.oncomplete = () => {
+            resolve();
+          };
+          
+          transaction.onerror = (event) => {
+            console.error('Error cleaning IndexedDB:', (event.target as IDBTransaction).error);
+            reject((event.target as IDBTransaction).error);
+          };
+          
+          const vehicleStore = transaction.objectStore(VEHICLE_STORE);
+          const vehicleRequest = vehicleStore.openCursor();
+          
+          vehicleRequest.onsuccess = (event) => {
+            const cursor = (event.target as IDBRequest).result as IDBCursorWithValue;
+            if (cursor) {
+              const data = cursor.value;
+              if (data.expiry && now > data.expiry) {
+                cursor.delete();
+              }
+              cursor.continue();
+            }
+          };
+          
+          const detailsStore = transaction.objectStore(VEHICLE_DETAILS_STORE);
+          const detailsRequest = detailsStore.openCursor();
+          
+          detailsRequest.onsuccess = (event) => {
+            const cursor = (event.target as IDBRequest).result as IDBCursorWithValue;
+            if (cursor) {
+              const data = cursor.value;
+              if (data.expiry && now > data.expiry) {
+                cursor.delete();
+              }
+              cursor.continue();
+            }
+          };
+        } catch (txError) {
+          console.error('Transaction error during cleanup:', txError);
+          reject(txError);
+        }
+      });
+    } catch (dbError) {
+      console.error('IndexedDB error during cleanup:', dbError);
+    }
   }
 };
 
@@ -812,5 +929,5 @@ function enrichStoredVehicleData(data: any, vehicleId: string): any {
   return enriched;
 }
 
-export default persistentStorageService;
-export { initializeDB, TTL }; 
+export { persistentStorageService, initializeDB };
+export default persistentStorageService; 

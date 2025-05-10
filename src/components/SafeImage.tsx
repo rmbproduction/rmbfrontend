@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { Bike, ImageOff } from 'lucide-react';
 import { isBase64Image, isValidImageUrl, getBestImageSource, getImageWithFallback } from '../services/imageUtils';
 import marketplaceService from '../services/marketplaceService';
@@ -7,44 +7,54 @@ import { useLocation } from 'react-router-dom';
 interface SafeImageProps {
   src: string | null | undefined;
   alt: string;
+  fallbackSrc?: string;
+  placeholderSrc?: string;
   className?: string;
-  fallbackComponent?: React.ReactNode;
-  showLoadingIndicator?: boolean;
-  fallbackSrc?: string | null;
-  sessionStorageKey?: string;
-  imageKey?: string;
-  fetchFromBackend?: boolean;
-  vehicleId?: string;
-  onError?: () => void;
+  containerClassName?: string;
+  width?: number | string;
+  height?: number | string;
+  style?: React.CSSProperties;
   onLoad?: () => void;
+  onError?: () => void;
+  lazy?: boolean;
+  threshold?: number;
 }
 
 // Global blob URL registry to track valid blob URLs across component instances
 const validBlobUrls = new Set<string>();
 
 /**
- * A component that safely renders images with error handling, loading states, and fallbacks
- * Enhanced to handle blob URLs and provide proper fallbacks from session/localStorage
- * Can also fetch from backend API when necessary
+ * SafeImage - A component for safely loading images with fallbacks and optimizations
+ * 
+ * Features:
+ * - Lazy loading with IntersectionObserver
+ * - Placeholder display during loading
+ * - Fallback image on error
+ * - Progressive enhancement when available
  */
-const SafeImage: React.FC<SafeImageProps> = ({
+const SafeImage: React.FC<SafeImageProps> = memo(({
   src,
   alt,
+  fallbackSrc = 'https://placehold.co/400x300?text=Image+Not+Available',
+  placeholderSrc = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iI2YwZjBmMCIvPjwvc3ZnPg==',
   className = '',
-  fallbackComponent,
-  showLoadingIndicator = true,
-  fallbackSrc = null,
-  sessionStorageKey = null,
-  imageKey = null,
-  fetchFromBackend = true,
-  vehicleId = null,
-  onError,
+  containerClassName = '',
+  width,
+  height,
+  style = {},
   onLoad,
+  onError,
+  lazy = true,
+  threshold = 0.1
 }) => {
-  const [hasError, setHasError] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [imageSrc, setImageSrc] = useState<string | null | undefined>(null);
-  const [fetchingFromBackend, setFetchingFromBackend] = useState(false);
+  // Keep track of the current image state
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
+  const [imageSrc, setImageSrc] = useState<string>(placeholderSrc || '');
+  
+  // Refs for intersection observer and image element
+  const imageRef = useRef<HTMLImageElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
   
   // Use location to detect if we're on the email verification page
   const location = useLocation();
@@ -164,184 +174,129 @@ const SafeImage: React.FC<SafeImageProps> = ({
   // Derive vehicleId from sessionStorageKey if not provided directly
   const derivedVehicleId = vehicleId || (sessionStorageKey ? sessionStorageKey.replace('vehicle_summary_', '') : null);
   
-  // Handle blob URLs and find the best source when src changes
+  // Clean up the current source
+  const actualSrc = src || fallbackSrc;
+  
+  // Set up intersection observer for lazy loading
   useEffect(() => {
-    // Store the current blob URL before changing, so we can revoke it later
-    if (imageSrc && imageSrc.startsWith('blob:')) {
-      prevBlobUrlRef.current = imageSrc;
+    // If not using lazy loading, or no image ref, skip
+    if (!lazy || !imageRef.current) {
+      setImageSrc(actualSrc);
+      return;
     }
     
-    // Process the new source
-    const processSource = async () => {
-      // Check if the new source is a blob URL
-      const isBlobUrl = src && typeof src === 'string' && src.startsWith('blob:');
-      
-      // If we're on verification page or the source is a blob URL, always look for alternatives
-      if (isEmailVerificationPage || isBlobUrl) {
-        // If on email verification page, never use blob URLs
-        if (isEmailVerificationPage && isBlobUrl) {
-          console.log(`On email verification page - not using blob URL: ${src}`);
-          
-          // Look for a non-blob alternative
-          const betterSource = await findBestNonBlobSource();
-          
-          if (betterSource) {
-            console.log('Found non-blob source for verification page, using that instead');
-            setImageSrc(betterSource);
-            return;
-          }
-          
-          // If no alternative found, show fallback component
-          setHasError(true);
-          setIsLoading(false);
-          return;
-        }
-        
-        // For non-verification pages with blob URLs, check validity
-        if (isBlobUrl && !isBlobUrlValid(src)) {
-          console.log(`Blob URL ${src} might be invalid, looking for alternatives`);
-          
-          // Look for a better non-blob source immediately
-          const betterSource = await findBestNonBlobSource();
-          if (betterSource) {
-            console.log('Found better non-blob source, using that instead');
-            setImageSrc(betterSource);
-            return;
-          }
-        } else if (isBlobUrl) {
-          console.log(`Blob URL ${src} is registered as valid, using it`);
-          
-          // Add reference for blob URL
-          blobUrlRef.current = src;
-        }
-      }
-      
-      // If we get here, either it's not a blob URL or we couldn't find a better alternative
-      // or we're not on the verification page
-      setImageSrc(src);
-      setHasError(false);
-      setIsLoading(true);
-    };
+    // Disconnect any existing observer
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
     
-    processSource();
-  }, [src, sessionStorageKey, imageKey, fetchFromBackend, derivedVehicleId, fallbackSrc, isEmailVerificationPage]);
-  
-  // Revoke previous blob URL after the image is loaded or on error
-  useEffect(() => {
-    if (!isLoading) {
-      // If image loaded successfully and it's a blob URL, add to registry of valid URLs
-      if (!hasError && imageSrc && imageSrc.startsWith('blob:') && !isEmailVerificationPage) {
-        registerValidBlobUrl(imageSrc);
-      }
-      
-      // Safe to revoke the previous blob URL now that new image is loaded or failed
-      if (prevBlobUrlRef.current && prevBlobUrlRef.current !== imageSrc) {
-        revokeBlobUrl(prevBlobUrlRef.current);
-        prevBlobUrlRef.current = null;
-      }
-    }
-  }, [isLoading, hasError, imageSrc, isEmailVerificationPage]);
-  
-  // Clean up any blob URLs when component unmounts
-  useEffect(() => {
-    return () => {
-      // Revoke both current and previous blob URLs
-      if (blobUrlRef.current) {
-        revokeBlobUrl(blobUrlRef.current);
-        blobUrlRef.current = null;
-      }
-      if (prevBlobUrlRef.current) {
-        revokeBlobUrl(prevBlobUrlRef.current);
-        prevBlobUrlRef.current = null;
-      }
-    };
-  }, []);
-  
-  // Handle errors by finding alternative sources
-  useEffect(() => {
-    if (hasError) {
-      const findAlternativeSource = async () => {
-        console.log(`Looking for alternative to failed image: ${imageSrc}`);
-        
-        // If current source is a blob URL, remove it from registry since it failed
-        if (imageSrc && imageSrc.startsWith('blob:')) {
-          validBlobUrls.delete(imageSrc as string);
-        }
-        
-        // Try to find a non-blob alternative
-        const alternativeSource = await findBestNonBlobSource();
-        
-        if (alternativeSource && alternativeSource !== imageSrc) {
-          console.log('Found alternative source after error', alternativeSource);
-          setImageSrc(alternativeSource);
-          setHasError(false);
-          setIsLoading(true);
-        } else {
-          console.log('Could not find alternative source');
-        }
-      };
-      
-      findAlternativeSource();
-    }
-  }, [hasError, imageSrc, sessionStorageKey, imageKey, derivedVehicleId, fetchFromBackend, fallbackSrc]);
-  
-  // If no source is provided, show fallback
-  if (!imageSrc) {
-    return (
-      <div className={`flex flex-col items-center justify-center bg-gray-100 ${className}`}>
-        {fallbackComponent || <Bike className="h-12 w-12 text-gray-400" />}
-      </div>
+    // Create new intersection observer
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          // When the image enters the viewport
+          if (entry.isIntersecting) {
+            setImageSrc(actualSrc);
+            // Stop observing after loading starts
+            observer.disconnect();
+            observerRef.current = null;
+          }
+        });
+      },
+      { threshold, rootMargin: '50px' }
     );
-  }
+    
+    // Start observing the image element
+    observer.observe(imageRef.current);
+    observerRef.current = observer;
+    
+    // Clean up observer on unmount
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [actualSrc, lazy, threshold]);
   
-  const handleError = () => {
-    console.error(`Image failed to load: ${imageSrc}`);
-    setHasError(true);
-    setIsLoading(false);
-    if (onError) onError();
+  // Handle image loading
+  const handleLoad = () => {
+    setLoaded(true);
+    onLoad?.();
   };
   
-  const handleLoad = () => {
-    setIsLoading(false);
-    if (onLoad) onLoad();
+  // Handle image error
+  const handleError = () => {
+    setError(true);
+    setImageSrc(fallbackSrc);
+    onError?.();
+  };
+  
+  // Combine passed style with default styles
+  const imageStyle: React.CSSProperties = {
+    ...style,
+    transition: 'opacity 0.3s ease',
+    opacity: loaded ? 1 : 0.5,
   };
   
   return (
-    <>
-      {!hasError ? (
-        <div className={`relative ${className}`}>
-          <img 
-            key={imageSrc} // Add key to force re-mount when source changes
-            src={imageSrc} 
-            alt={alt} 
-            className={`w-full h-full object-cover ${isLoading ? 'opacity-0' : 'opacity-100'}`}
-            onError={handleError}
-            onLoad={handleLoad}
-            loading="lazy"
-            crossOrigin="anonymous" // Enable cross-origin attribute
-          />
-          {isLoading && showLoadingIndicator && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-              <div className="w-6 h-6 border-4 border-t-[#FF5733] border-b-[#FF5733] rounded-full animate-spin"></div>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className={`flex flex-col items-center justify-center bg-gray-100 ${className}`}>
-          {fallbackComponent || (
-            <>
-              <ImageOff className="h-8 w-8 text-gray-400 mb-1" />
-              <p className="text-xs text-gray-500 text-center px-2">
-                {fetchingFromBackend 
-                  ? "Loading image..." 
-                  : "Image unavailable"}
-              </p>
-            </>
-          )}
+    <div 
+      className={`safe-image-container ${containerClassName}`}
+      style={{ 
+        position: 'relative',
+        width: width || 'auto',
+        height: height || 'auto',
+        overflow: 'hidden'
+      }}
+    >
+      {/* Render base placeholder if image hasn't loaded yet */}
+      {!loaded && !error && (
+        <div
+          className="safe-image-placeholder"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: '#f0f0f0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <div className="loading-spinner" style={{
+            width: '30px',
+            height: '30px',
+            border: '3px solid rgba(0, 0, 0, 0.1)',
+            borderRadius: '50%',
+            borderTopColor: '#3498db',
+            animation: 'spin 1s ease-in-out infinite'
+          }}></div>
+          <style jsx>{`
+            @keyframes spin {
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
         </div>
       )}
-    </>
+      
+      {/* The actual image element */}
+      <img
+        ref={imageRef}
+        src={imageSrc}
+        alt={alt}
+        className={`safe-image ${className} ${error ? 'safe-image-error' : ''}`}
+        width={width}
+        height={height}
+        style={imageStyle}
+        onLoad={handleLoad}
+        onError={handleError}
+        loading={lazy ? "lazy" : "eager"}
+      />
+    </div>
   );
-};
+});
+
+SafeImage.displayName = 'SafeImage';
 
 export default SafeImage; 

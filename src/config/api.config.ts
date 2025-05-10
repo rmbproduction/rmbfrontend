@@ -5,6 +5,15 @@
  * It defines base URLs, helper functions, and commonly used endpoints.
  */
 
+// Default timeout for API requests in milliseconds
+export const DEFAULT_TIMEOUT = 15000; // 15 seconds
+
+// Maximum number of retries for failed requests
+export const MAX_RETRIES = 2;
+
+// Retry delay multiplier in milliseconds
+export const RETRY_DELAY = 1000; // 1 second initial, doubles each retry
+
 // Helper to determine if running in production
 const isProduction = () => {
   const prodDomain = window.location.hostname === 'repairmybike.in' || 
@@ -28,10 +37,34 @@ const getMediaBaseUrl = () => {
   return import.meta.env.VITE_MEDIA_URL || 'https://repairmybike.up.railway.app';
 };
 
+// API status monitoring
+export const API_STATUS = {
+  isOnline: true,
+  lastCheck: Date.now(),
+  responseTime: 0,
+};
+
+// Function to update API status
+export const updateApiStatus = (online: boolean, responseTime?: number) => {
+  API_STATUS.isOnline = online;
+  API_STATUS.lastCheck = Date.now();
+  if (responseTime !== undefined) {
+    API_STATUS.responseTime = responseTime;
+  }
+};
+
 export const API_CONFIG = {
   // Base URLs for API and media content
   BASE_URL: getApiBaseUrl(),
   MEDIA_URL: getMediaBaseUrl(),
+  
+  // Default timeouts - can be overridden in specific requests
+  DEFAULT_TIMEOUT,
+  
+  // Retry configuration
+  MAX_RETRIES,
+  RETRY_DELAY,
+  
   // Use BASE_URL for marketplace to avoid hardcoding
   get MARKETPLACE_URL() {
     // Ensure the path includes /marketplace/ with proper slashes
@@ -127,6 +160,54 @@ export const API_CONFIG = {
   },
   
   /**
+   * Perform controlled fetch with timeout
+   * @param url - The URL to fetch
+   * @param options - Fetch options
+   * @param timeout - Timeout in milliseconds
+   * @returns Promise resolving to Response
+   */
+  fetchWithTimeout: async (url: string, options: RequestInit = {}, timeout = DEFAULT_TIMEOUT): Promise<Response> => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    
+    // Create timeout promise
+    const timeoutPromise = new Promise<Response>((_, reject) => {
+      setTimeout(() => {
+        controller.abort();
+        reject(new Error(`Request timeout after ${timeout}ms`));
+      }, timeout);
+    });
+    
+    try {
+      // Start timing
+      const startTime = Date.now();
+      
+      // Race between fetch and timeout
+      const response = await Promise.race([
+        fetch(url, { ...options, signal }),
+        timeoutPromise
+      ]) as Response;
+      
+      // Update API status on success
+      updateApiStatus(true, Date.now() - startTime);
+      
+      return response;
+    } catch (error) {
+      // Check if it's an abort error (timeout) or network error
+      const isTimeout = error instanceof Error && error.name === 'AbortError';
+      
+      // Update API status on errors
+      updateApiStatus(false);
+      
+      if (isTimeout) {
+        throw new Error(`Request to ${url} timed out after ${timeout}ms`);
+      }
+      
+      throw error;
+    }
+  },
+  
+  /**
    * API endpoints
    */
   ENDPOINTS: {
@@ -150,7 +231,7 @@ export const API_CONFIG = {
       SEARCH: '/marketplace/search/',
     },
     // Account-related endpoints
-    PROFILE: '/accounts/profile/', // Updated from /profiles/me/
+    PROFILE: '/accounts/profile/', 
     AUTH_CALLBACK: '/accounts/auth/callback',
     SESSION: '/accounts/session',
     USER: '/accounts/user',
@@ -198,32 +279,16 @@ export const API_CONFIG = {
      * @returns API endpoint for document upload
      */
     getSellRequestDocuments: (requestId: string) => `/marketplace/sell-requests/${requestId}/documents/`,
-    
-    /**
-     * Get endpoint for uploading photos to a sell request
-     * @param requestId - The sell request ID
-     * @returns API endpoint for photo upload
-     */
-    getSellRequestPhotos: (requestId: string) => `/marketplace/sell-requests/${requestId}/photos/`
   },
   
-  // Default headers
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  },
-  
-  // Default timeout in milliseconds
-  timeout: 30000, // 30 seconds
-  
-  // Debug mode
-  debugMode: import.meta.env.DEV,
-  
-  // Vehicle image helper functions
+  /**
+   * Helper function to get vehicle image URL
+   * @param vehicleId - The vehicle ID
+   * @returns The URL to the vehicle image
+   */
   getVehicleImageUrl(vehicleId: string | number): string {
-    if (!vehicleId) return this.getDefaultVehicleImage();
-    return `${this.MEDIA_URL}/vehicles/${vehicleId}/image.jpg`;
-  },
+    return `${this.MARKETPLACE_URL}/vehicles/${vehicleId}/image/`;
+  }
 };
 
 // Google Maps API configuration
