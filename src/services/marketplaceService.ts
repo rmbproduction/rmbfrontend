@@ -2133,8 +2133,8 @@ const marketplaceService = {
   // Share vehicle via native share API if available or copy link to clipboard
   shareVehicle: async (vehicleId: string, vehicleName: string) => {
     const shareUrl = `${window.location.origin}/vehicles/${vehicleId}`;
-    const shareTitle = `Check out this ${vehicleName || 'vehicle'} on RepairMyBike`;
-    const shareText = `I found this great vehicle on RepairMyBike. Check it out!`;
+    const shareTitle = "Check out this " + (vehicleName || 'vehicle') + " on RepairMyBike";
+    const shareText = "I found this great vehicle on RepairMyBike. Check it out!";
     
     // Use native share API if available
     if (navigator.share) {
