@@ -18,6 +18,10 @@ interface SafeImageProps {
   onError?: () => void;
   lazy?: boolean;
   threshold?: number;
+  vehicleId?: string | number | null;
+  sessionStorageKey?: string | null;
+  imageKey?: string | null;
+  fetchFromBackend?: boolean;
 }
 
 // Global blob URL registry to track valid blob URLs across component instances
@@ -45,7 +49,11 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
   onLoad,
   onError,
   lazy = true,
-  threshold = 0.1
+  threshold = 0.1,
+  vehicleId = null,
+  sessionStorageKey = null,
+  imageKey = null,
+  fetchFromBackend = false
 }) => {
   // Keep track of the current image state
   const [loaded, setLoaded] = useState(false);
@@ -153,7 +161,12 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
     // If all else fails and we can fetch from backend, try that
     if (fetchFromBackend && derivedVehicleId && imageKey) {
       try {
-        const apiSource = await getImageWithFallback(derivedVehicleId, imageKey, marketplaceService);
+        // Convert vehicleId to string to fix type error
+        const apiSource = await getImageWithFallback(
+          typeof derivedVehicleId === 'number' ? String(derivedVehicleId) : derivedVehicleId,
+          imageKey,
+          marketplaceService
+        );
         if (apiSource && !apiSource.startsWith('blob:')) {
           console.log(`Found image from API for ${imageKey}`);
           return apiSource;
@@ -272,11 +285,13 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
             borderTopColor: '#3498db',
             animation: 'spin 1s ease-in-out infinite'
           }}></div>
-          <style jsx>{`
-            @keyframes spin {
-              to { transform: rotate(360deg); }
-            }
-          `}</style>
+          <style>
+            {`
+              @keyframes spin {
+                to { transform: rotate(360deg); }
+              }
+            `}
+          </style>
         </div>
       )}
       

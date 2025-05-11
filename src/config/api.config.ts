@@ -131,8 +131,14 @@ export const API_CONFIG = {
     }
     
     // If it's already an absolute URL, return it
+    // This will handle Cloudinary URLs (res.cloudinary.com) and other external URLs
     if (url.startsWith('http')) {
       return url;
+    }
+    
+    // If it's a Cloudinary URL without http prefix
+    if (url.includes('res.cloudinary.com')) {
+      return `https://${url}`;
     }
     
     // If it's a media URL from our backend
