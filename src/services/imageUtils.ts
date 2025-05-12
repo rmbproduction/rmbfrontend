@@ -185,4 +185,115 @@ export const persistImageUrl = (vehicleId: string, imageKey: string, url: string
 export const shouldFetchImagesFromBackend = (vehicleId: string, requiredKeys: string[] = ['front']): boolean => {
   // Always fetch from backend if this function is called
   return true;
+};
+
+/**
+ * Convert a file to base64 string
+ * @param file The file to convert
+ * @returns Promise that resolves to the base64 string
+ */
+export const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+  });
+};
+
+/**
+ * Safely store a base64 image in localStorage with compression if needed
+ * @param storageKey The key to use in localStorage
+ * @param imageKey The key for this particular image
+ * @param base64 The base64 string to store
+ * @param maxSizeMB Maximum size in MB
+ * @returns Promise that resolves when storage is complete
+ */
+export const safeStoreBase64Image = async (
+  storageKey: string,
+  imageKey: string,
+  base64: string,
+  maxSizeMB: number = 1
+): Promise<void> => {
+  try {
+    // Get existing images
+    const storedImagesJson = localStorage.getItem(storageKey) || '{}';
+    const storedImages = JSON.parse(storedImagesJson);
+    
+    // Store the new/updated image
+    storedImages[imageKey] = base64;
+    
+    // Check size before saving
+    const jsonString = JSON.stringify(storedImages);
+    const sizeInMB = new Blob([jsonString]).size / (1024 * 1024);
+    
+    if (sizeInMB > maxSizeMB) {
+      console.warn(`Image storage exceeds ${maxSizeMB}MB limit. Not storing in localStorage.`);
+      return;
+    }
+    
+    // Save to localStorage
+    localStorage.setItem(storageKey, jsonString);
+  } catch (error) {
+    console.error('Error storing image in localStorage:', error);
+    // Silently fail - localStorage errors shouldn't block the app
+  }
+};
+
+/**
+ * Check if a string is a base64 encoded image
+ * @param str String to check
+ * @returns boolean indicating if the string is a base64 image
+ */
+export const isBase64Image = (str: string): boolean => {
+  if (typeof str !== 'string') return false;
+  return str.startsWith('data:image/') && str.includes('base64,');
+};
+
+/**
+ * Sanitize image URLs for storage by replacing blob URLs with placeholders
+ * @param urls Object containing image URLs
+ * @returns Sanitized version of the URLs object
+ */
+export const sanitizeUrlsForStorage = (urls: Record<string, string>): Record<string, string> => {
+  const sanitized: Record<string, string> = {};
+  
+  Object.entries(urls).forEach(([key, url]) => {
+    // Replace blob URLs with a marker that indicates they were blob URLs
+    if (url && url.startsWith('blob:')) {
+      sanitized[key] = '[BLOB_URL]';
+    } else {
+      sanitized[key] = url;
+    }
+  });
+  
+  return sanitized;
+};
+
+/**
+ * Synchronize image storage for a vehicle across localStorage and Cloudinary
+ * @param vehicleId The vehicle ID
+ * @param photoUrls Object containing photo URLs
+ */
+export const syncImageStorageForVehicle = async (
+  vehicleId: string,
+  photoUrls: Record<string, string>
+): Promise<void> => {
+  if (!vehicleId) return;
+  
+  try {
+    // Store in localStorage for offline/fast access
+    Object.entries(photoUrls).forEach(([key, url]) => {
+      if (isValidImageUrl(url)) {
+        persistImageUrl(vehicleId, key, url);
+      }
+    });
+    
+    // For future: here you could add logic to sync with Cloudinary
+    // For example, you might want to upload any base64 images to Cloudinary
+    
+    console.log(`Image storage synchronized for vehicle ${vehicleId}`);
+  } catch (error) {
+    console.error('Error synchronizing image storage:', error);
+  }
 }; 

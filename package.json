@@ -50,6 +50,7 @@
     "terser": "^5.26.0",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
-    "vite": "^6.2.4"
+    "vite": "^6.2.4",
+    "webpack-bundle-analyzer": "^4.10.2"
   }
 }

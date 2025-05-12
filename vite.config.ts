@@ -9,9 +9,11 @@ export default defineConfig({
     react(),
     splitVendorChunkPlugin(),
     visualizer({
-      open: false,
+      open: true,
       gzipSize: true,
       brotliSize: true,
+      filename: 'stats.html',
+      template: 'treemap'
     }),
   ],
   build: {
