@@ -76,7 +76,11 @@ const DEFAULT_SERVICE_IMAGE = 'https://placehold.co/600x400?text=Service';
 // Map of fallback images for error recovery
 const IMAGE_FALLBACKS = {
   'static_assets/bikeExpert': 'https://placehold.co/800x500?text=Bike+Expert', 
+  'static_assets/bikeExpert.jpg': 'https://placehold.co/800x500?text=Bike+Expert',
   'static_assets/founder': 'https://placehold.co/600x800?text=Founder',
+  'static_assets/founder.jpg': 'https://placehold.co/600x800?text=Founder',
+  'static_assets/logo': 'https://placehold.co/48x48?text=RMB',
+  'static_assets/logo.png': 'https://placehold.co/48x48?text=RMB',
   'vehicle_photos': DEFAULT_VEHICLE_IMAGE,
   'service_images': DEFAULT_SERVICE_IMAGE,
   'profile_images': DEFAULT_PROFILE_IMAGE
@@ -156,11 +160,35 @@ export const API_CONFIG = {
   getFallbackImageUrl: (url: string | null | undefined): string => {
     if (!url) return DEFAULT_VEHICLE_IMAGE;
     
+    // Extract the path from Cloudinary URLs
+    let pathToCheck = url;
+    
+    // Handle Cloudinary transformations pattern - extract path after the last '/'
+    if (url.includes('cloudinary.com') && url.includes('/upload/')) {
+      const uploadParts = url.split('/upload/');
+      if (uploadParts.length > 1) {
+        // Get everything after the transformation parameters
+        const transformParts = uploadParts[1].split('/');
+        // Take the part after the transformations (f_auto, w_X, etc.)
+        pathToCheck = transformParts.length > 1 ? transformParts[transformParts.length - 1] : transformParts[0];
+      }
+    }
+    
     // Check common patterns and return appropriate fallbacks
     for (const [pattern, fallbackUrl] of Object.entries(IMAGE_FALLBACKS)) {
-      if (url.includes(pattern)) {
+      if (url.includes(pattern) || pathToCheck.includes(pattern)) {
+        console.log(`Using fallback for ${url} -> ${fallbackUrl}`);
         return fallbackUrl;
       }
+    }
+    
+    // Default fallback based on URL path patterns
+    if (url.includes('vehicle')) {
+      return DEFAULT_VEHICLE_IMAGE;
+    } else if (url.includes('profile') || url.includes('user')) {
+      return DEFAULT_PROFILE_IMAGE;
+    } else if (url.includes('service')) {
+      return DEFAULT_SERVICE_IMAGE;
     }
     
     // Default fallback
