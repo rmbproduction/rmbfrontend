@@ -34,7 +34,7 @@ const RepairsBasketIcon: React.FC = () => {
         // If we have a cart ID, try to load from server
         if (cartId) {
           try {
-            const response = await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${cartId}/`), {
+            const response = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/`), {
               credentials: 'omit'
             });
             
@@ -75,7 +75,7 @@ const RepairsBasketIcon: React.FC = () => {
             // If we don't have a cart yet, create one
             if (!cartId) {
               try {
-                const createResponse = await fetch(API_CONFIG.getApiUrl('/repairing_service/cart/create/'), {
+                const createResponse = await fetch(API_CONFIG.getApiUrl('/repairing-service/cart/create/'), {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   credentials: 'omit'
@@ -87,7 +87,7 @@ const RepairsBasketIcon: React.FC = () => {
                   sessionStorage.setItem('cartId', newCart.id.toString());
                   
                   // Add the service to the new cart
-                  await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${newCart.id}/add/`), {
+                  await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${newCart.id}/add/`), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -180,7 +180,7 @@ const RepairsBasketIcon: React.FC = () => {
       }
 
       // For regular items, call the API
-      const response = await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/items/${itemId}/`), {
+      const response = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/items/${itemId}/`), {
         method: 'DELETE',
         credentials: 'omit'
       });
@@ -240,7 +240,7 @@ const RepairsBasketIcon: React.FC = () => {
       }
       
       // Then send update to server
-      const response = await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${cartId}/update-item/`), {
+      const response = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/update-item/`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -288,7 +288,7 @@ const RepairsBasketIcon: React.FC = () => {
         return;
       }
       
-      const response = await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${cartId}/clear/`), {
+      const response = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/clear/`), {
         method: 'DELETE',
         credentials: 'omit'
       });

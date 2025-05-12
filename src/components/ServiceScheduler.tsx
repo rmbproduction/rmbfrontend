@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
-import format from 'date-fns/format';
-import parse from 'date-fns/parse';
-import startOfWeek from 'date-fns/startOfWeek';
-import getDay from 'date-fns/getDay';
+import { format } from 'date-fns/format';
+import { parse } from 'date-fns/parse';
+import { startOfWeek } from 'date-fns/startOfWeek';
+import { getDay } from 'date-fns/getDay';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { apiService } from '../services/api.service';
 import { showNotification } from './NotificationCenter';
@@ -55,7 +55,7 @@ const ServiceScheduler: React.FC<ServiceSchedulerProps> = ({
       // Format date as YYYY-MM-DD
       const formattedDate = format(date, 'yyyy-MM-dd');
       const response = await apiService.request<TimeSlot[]>(
-        `/repairing_service/available-slots/?service_id=${serviceId}&date=${formattedDate}`
+        `/repairing-service/available-slots/?service_id=${serviceId}&date=${formattedDate}`
       );
       
       // Convert string dates to Date objects

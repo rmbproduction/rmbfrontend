@@ -22,6 +22,7 @@ interface SafeImageProps {
   sessionStorageKey?: string | null;
   imageKey?: string | null;
   fetchFromBackend?: boolean;
+  fallbackComponent?: React.ReactNode;
 }
 
 // Global blob URL registry to track valid blob URLs across component instances
@@ -53,7 +54,8 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
   vehicleId = null,
   sessionStorageKey = null,
   imageKey = null,
-  fetchFromBackend = false
+  fetchFromBackend = false,
+  fallbackComponent
 }) => {
   // Keep track of the current image state
   const [loaded, setLoaded] = useState(false);
@@ -240,7 +242,9 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
   // Handle image error
   const handleError = () => {
     setError(true);
-    setImageSrc(fallbackSrc);
+    if (!fallbackComponent) {
+      setImageSrc(fallbackSrc);
+    }
     onError?.();
   };
   
@@ -295,19 +299,24 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
         </div>
       )}
       
-      {/* The actual image element */}
-      <img
-        ref={imageRef}
-        src={imageSrc}
-        alt={alt}
-        className={`safe-image ${className} ${error ? 'safe-image-error' : ''}`}
-        width={width}
-        height={height}
-        style={imageStyle}
-        onLoad={handleLoad}
-        onError={handleError}
-        loading={lazy ? "lazy" : "eager"}
-      />
+      {/* Show fallbackComponent when provided and there's an error */}
+      {error && fallbackComponent ? (
+        fallbackComponent
+      ) : (
+        /* The actual image element */
+        <img
+          ref={imageRef}
+          src={imageSrc}
+          alt={alt}
+          className={`safe-image ${className} ${error ? 'safe-image-error' : ''}`}
+          width={width}
+          height={height}
+          style={imageStyle}
+          onLoad={handleLoad}
+          onError={handleError}
+          loading={lazy ? "lazy" : "eager"}
+        />
+      )}
     </div>
   );
 });

@@ -44,7 +44,7 @@ const ReviewSystem: React.FC<ReviewSystemProps> = ({ serviceId, className = '' }
     setLoading(true);
     try {
       const response = await apiService.request<Review[]>(
-        `/repairing_service/reviews/?service_id=${serviceId}`
+        `/repairing-service/reviews/?service_id=${serviceId}`
       );
       setReviews(response.data);
     } catch (error) {
@@ -73,7 +73,7 @@ const ReviewSystem: React.FC<ReviewSystemProps> = ({ serviceId, className = '' }
       });
 
       await apiService.request<Review>(
-        '/repairing_service/reviews/',
+        '/repairing-service/reviews/',
         {
           method: 'POST',
           headers: {

@@ -1557,35 +1557,22 @@ const VehicleSummary = () => {
               <div className="flex flex-col md:flex-row gap-8">
                 <div className="flex-shrink-0 md:w-1/3">
                   <div className="bg-gray-100 rounded-lg overflow-hidden h-48 md:h-auto flex items-center justify-center">
-                    {/* Enhanced SafeImage with better fallback handling */}
-                    {(() => {
-                      // Debug all possible image sources
-                      console.log('IMAGE DEBUG - Possible sources:', {
-                        photoURLsFront: photoURLs.front,
-                        vehicleDetailsFrontImage: vehicleData?.vehicle_details?.front_image_url,
-                        directPhotoFront: vehicleData?.photo_front,
-                        vehiclePhotoFront: vehicleData?.vehicle?.photo_front
-                      });
-                      
-                      // Get the best image source with fallbacks
-                      const imageSrc = photoURLs.front || 
-                                      vehicleData?.vehicle_details?.front_image_url ||
-                                      vehicleData?.photo_front || 
-                                      vehicleData?.vehicle?.photo_front;
-                      
-                      return (
-                        <SafeImage 
-                          src={imageSrc}
-                          alt={`${vehicle.brand} ${vehicle.model}`} 
-                          className="w-full h-full object-cover" 
-                          sessionStorageKey={`vehicle_summary_${id}`}
-                          imageKey="front"
-                          vehicleId={id}
-                          fetchFromBackend={true}
-                          fallbackComponent={<Bike className="h-16 w-16 text-gray-400" />}
-                        />
-                      );
-                    })()}
+                    <div className="aspect-square rounded-lg overflow-hidden bg-gray-100 mb-4">
+                      {(() => {
+                        const mainPhoto = photoURLs.front || vehicle.photo || vehicle.photo_front || null;
+                        return (
+                          <SafeImage 
+                            src={mainPhoto} 
+                            alt={`${vehicle.brand || ''} ${vehicle.model || ''}`} 
+                            className="w-full h-full object-cover" 
+                            sessionStorageKey={`vehicle_summary_${id}`}
+                            imageKey="front"
+                            vehicleId={id}
+                            fetchFromBackend={true}
+                          />
+                        );
+                      })()}
+                    </div>
                   </div>
                   
                   {/* Photo gallery - Enhanced version */}
