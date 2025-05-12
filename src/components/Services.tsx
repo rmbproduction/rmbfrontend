@@ -41,7 +41,7 @@ const Services = () => {
         setLoading(true);
         setError(null);
 
-        const url = API_CONFIG.getApiUrl('/repairing_service/service-categories/');
+        const url = API_CONFIG.getApiUrl('/repairing-service/service-categories/');
         if (!url) {
           throw new Error('Service categories URL is not configured');
         }
