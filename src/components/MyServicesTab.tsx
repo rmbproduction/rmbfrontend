@@ -206,7 +206,7 @@ const MyServicesTab: React.FC = () => {
           }
           
           // Make API call to backend to clear cancelled bookings
-          const response = await safeFetch(`${API_CONFIG.BASE_URL}/repairing_service/bookings/clear-cancelled/`, {
+          const response = await safeFetch(`${API_CONFIG.BASE_URL}/repairing-service/bookings/clear-cancelled/`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -335,7 +335,7 @@ const MyServicesTab: React.FC = () => {
         if (accessToken) {
           try {
             console.log('[DEBUG] Fetching bookings from API');
-            const response = await fetchWithRetry(`${API_CONFIG.BASE_URL}/repairing_service/bookings/`, {
+            const response = await fetchWithRetry(`${API_CONFIG.BASE_URL}/repairing-service/bookings/`, {
               headers: {
                 'Authorization': `Bearer ${accessToken}`,
                 'Content-Type': 'application/json'
@@ -480,7 +480,7 @@ const MyServicesTab: React.FC = () => {
       }
       
       // Make API call to cancel the booking
-      const response = await fetchWithRetry(`${API_CONFIG.BASE_URL}/repairing_service/bookings/${cancelBookingId}/cancel/`, {
+      const response = await fetchWithRetry(`${API_CONFIG.BASE_URL}/repairing-service/bookings/${cancelBookingId}/cancel/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,

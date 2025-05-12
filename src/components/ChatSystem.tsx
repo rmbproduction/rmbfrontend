@@ -79,7 +79,7 @@ const ChatSystem: React.FC<ChatSystemProps> = ({
     setLoading(true);
     try {
       const response = await apiService.request<Message[]>(
-        `/repairing_service/chat/${serviceRequestId}/messages/`
+        `/repairing-service/chat/${serviceRequestId}/messages/`
       );
       setMessages(response.data);
     } catch (error) {
@@ -111,7 +111,7 @@ const ChatSystem: React.FC<ChatSystemProps> = ({
       });
 
       await apiService.request<Message>(
-        `/repairing_service/chat/${serviceRequestId}/messages/`,
+        `/repairing-service/chat/${serviceRequestId}/messages/`,
         {
           method: 'POST',
           body: formData

@@ -387,7 +387,7 @@ class ApiService {
             throw new Error('Authentication required');
           }
           
-          const response = await apiClient.get('/repairing_service/subscription-plans/', {
+          const response = await apiClient.get('/repairing-service/subscription-plans/', {
             headers: {
               'Authorization': `Bearer ${token}`
             }
@@ -414,7 +414,7 @@ class ApiService {
     if (!token) {
       throw new Error('Authentication required');
     }
-    const response = await apiClient.post('/repairing_service/subscriptions/create/', payload, {
+    const response = await apiClient.post('/repairing-service/subscriptions/create/', payload, {
       headers: {
         'Authorization': `Bearer ${token}`
       }

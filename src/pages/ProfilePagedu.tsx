@@ -2355,7 +2355,7 @@ const ProfilePage = () => {
 
         // Fetch manufacturers
         const manufacturersResponse = await axios.get(
-          `${API_CONFIG.BASE_URL}/repairing_service/manufacturers/`,
+          `${API_CONFIG.BASE_URL}/repairing-service/manufacturers/`,
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,

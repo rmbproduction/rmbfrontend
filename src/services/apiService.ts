@@ -2,7 +2,7 @@
 import { API_CONFIG } from '../config/api.config';
 
 // Use the API_CONFIG for base URL
-const API_BASE = API_CONFIG.getApiUrl('/repairing_service');
+const API_BASE = API_CONFIG.getApiUrl('/repairing-service');
 
 // Common request options for consistency
 const defaultOptions = {

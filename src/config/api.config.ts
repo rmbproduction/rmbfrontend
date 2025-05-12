@@ -225,8 +225,8 @@ export const API_CONFIG = {
       FORGOT_PASSWORD: '/accounts/password-reset/',
     },
     SERVICES: {
-      LIST: '/repairing_service/services/',
-      CATEGORIES: '/repairing_service/categories/',
+      LIST: '/repairing-service/services/',
+      CATEGORIES: '/repairing-service/categories/',
     },
     VEHICLES: {
       LIST: '/marketplace/vehicles/',
@@ -254,7 +254,7 @@ export const API_CONFIG = {
     // Booking endpoints
     BOOKINGS: '/marketplace/bookings/',
     USER_BOOKINGS: '/marketplace/bookings/user/',
-    BOOKING_CANCEL: (bookingId: string) => `/repairing_service/bookings/${bookingId}/cancel/`,
+    BOOKING_CANCEL: (bookingId: string) => `/repairing-service/bookings/${bookingId}/cancel/`,
     
     /**
      * Get endpoint for filtered vehicle models by manufacturer and vehicle type

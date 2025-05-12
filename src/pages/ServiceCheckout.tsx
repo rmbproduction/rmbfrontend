@@ -125,7 +125,7 @@ const ServiceCheckout: React.FC = () => {
     
     setLoadingModels(true);
     try {
-      const url = API_CONFIG.getApiUrl(`/repairing_service/vehicle-models/?manufacturer_id=${manufacturerId}`);
+      const url = API_CONFIG.getApiUrl(`/repairing-service/vehicle-models/?manufacturer_id=${manufacturerId}`);
       console.log(`[DEBUG] Fetching models from: ${url}`);
       
       const modelsResponse = await fetch(url, {
@@ -171,7 +171,7 @@ const ServiceCheckout: React.FC = () => {
       }
       
       // Fetch manufacturers
-      const mfgResponse = await fetch(API_CONFIG.getApiUrl('/repairing_service/manufacturers/'), {
+      const mfgResponse = await fetch(API_CONFIG.getApiUrl('/repairing-service/manufacturers/'), {
         credentials: 'omit'
       });
       
@@ -185,7 +185,7 @@ const ServiceCheckout: React.FC = () => {
       }
       
       // Fetch all vehicle models (as a backup)
-      const modelsResponse = await fetch(API_CONFIG.getApiUrl('/repairing_service/vehicle-models/'), {
+      const modelsResponse = await fetch(API_CONFIG.getApiUrl('/repairing-service/vehicle-models/'), {
         credentials: 'omit'
       });
       
@@ -399,7 +399,7 @@ const ServiceCheckout: React.FC = () => {
                 }
                 
                 // Fetch manufacturer name
-                const mfgResponse = await fetch(API_CONFIG.getApiUrl('/repairing_service/manufacturers/'), {
+                const mfgResponse = await fetch(API_CONFIG.getApiUrl('/repairing-service/manufacturers/'), {
                   credentials: 'omit'
                 });
                 
@@ -413,7 +413,7 @@ const ServiceCheckout: React.FC = () => {
                 }
                 
                 // Fetch model name
-                const modelResponse = await fetch(API_CONFIG.getApiUrl(`/repairing_service/vehicle-models/?manufacturer_id=${latestVehicle.manufacturer}`), {
+                const modelResponse = await fetch(API_CONFIG.getApiUrl(`/repairing-service/vehicle-models/?manufacturer_id=${latestVehicle.manufacturer}`), {
                   credentials: 'omit'
                 });
                 
@@ -554,7 +554,7 @@ const ServiceCheckout: React.FC = () => {
             
             // Fetch manufacturer name if needed
             try {
-              const mfgResponse = await fetch(API_CONFIG.getApiUrl('/repairing_service/manufacturers/'), {
+              const mfgResponse = await fetch(API_CONFIG.getApiUrl('/repairing-service/manufacturers/'), {
                 credentials: 'omit'
               });
               
@@ -571,7 +571,7 @@ const ServiceCheckout: React.FC = () => {
             
             // Fetch model name if needed
             try {
-              const modelResponse = await fetch(API_CONFIG.getApiUrl(`/repairing_service/vehicle-models/?manufacturer_id=${parsedVehicle.manufacturer}`), {
+              const modelResponse = await fetch(API_CONFIG.getApiUrl(`/repairing-service/vehicle-models/?manufacturer_id=${parsedVehicle.manufacturer}`), {
                 credentials: 'omit'
               });
               
@@ -624,7 +624,7 @@ const ServiceCheckout: React.FC = () => {
               // Create a new cart with the pending service
               const createCartAndAddPendingService = async () => {
                 try {
-              const createCartResponse = await fetch(API_CONFIG.getApiUrl('/repairing_service/cart/create/'), {
+              const createCartResponse = await fetch(API_CONFIG.getApiUrl('/repairing-service/cart/create/'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'omit'
@@ -635,7 +635,7 @@ const ServiceCheckout: React.FC = () => {
               const newCartId = cartData.id;
               sessionStorage.setItem('cartId', newCartId.toString());
               
-              await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${newCartId}/add/`), {
+              await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${newCartId}/add/`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -670,7 +670,7 @@ const ServiceCheckout: React.FC = () => {
         // Fetch cart items from API
         console.log(`[DEBUG] Fetching cart data for cart ID: ${cartId}`);
         // Change from /cart/{id}/items/ to /cart/{id}/ to match backend
-        const response = await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${cartId}/`), {
+        const response = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/`), {
           credentials: 'omit'
         });
         
@@ -703,7 +703,7 @@ const ServiceCheckout: React.FC = () => {
               setTimeout(() => {
                 const createCartAndAddPendingService = async () => {
                   try {
-                    await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${cartId}/add/`), {
+                    await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/add/`), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -1412,7 +1412,7 @@ const ServiceCheckout: React.FC = () => {
           };
           
           // Call legacy API endpoint
-          const response = await fetch(API_CONFIG.getApiUrl('/repairing_service/subscriptions/create/'), {
+          const response = await fetch(API_CONFIG.getApiUrl('/repairing-service/subscriptions/create/'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1575,7 +1575,7 @@ const ServiceCheckout: React.FC = () => {
       };
       
       // Call API to create booking
-      const response = await fetch(API_CONFIG.getApiUrl('/repairing_service/bookings/create/'), {
+      const response = await fetch(API_CONFIG.getApiUrl('/repairing-service/bookings/create/'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1688,7 +1688,7 @@ const ServiceCheckout: React.FC = () => {
         return;
       }
       
-      const response = await fetch(API_CONFIG.getApiUrl(`/repairing_service/cart/${cartId}/clear/`), {
+      const response = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/clear/`), {
         method: 'DELETE',
         credentials: 'omit'
       });
