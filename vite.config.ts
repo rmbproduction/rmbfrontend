@@ -1,15 +1,13 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { splitVendorChunkPlugin } from 'vite';
 import { visualizer } from 'rollup-plugin-visualizer';
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
-    splitVendorChunkPlugin(),
     visualizer({
-      open: true,
+      open: false,
       gzipSize: true,
       brotliSize: true,
       filename: 'stats.html',
@@ -58,7 +56,16 @@ export default defineConfig({
     },
     sourcemap: false,
     chunkSizeWarningLimit: 1000,
-    minify: 'esbuild',
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        pure_funcs: ['console.log'],
+        drop_debugger: true
+      },
+      format: {
+        comments: false
+      }
+    },
     target: 'es2018',
     // Code splitting optimization
     cssCodeSplit: true,
