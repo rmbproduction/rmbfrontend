@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
 import { Bike, ImageOff } from 'lucide-react';
 import { isValidImageUrl, getBestImageSource, getCloudinaryUrl } from '../services/imageUtils';
+import { API_CONFIG } from '../config/api.config';
 import marketplaceService from '../services/marketplaceService';
 import { useLocation } from 'react-router-dom';
 
@@ -41,7 +42,7 @@ const validBlobUrls = new Set<string>();
 const SafeImage: React.FC<SafeImageProps> = memo(({
   src,
   alt,
-  fallbackSrc = 'https://placehold.co/400x300?text=Image+Not+Available',
+  fallbackSrc,
   placeholderSrc = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iI2YwZjBmMCIvPjwvc3ZnPg==',
   className = '',
   containerClassName = '',
@@ -58,10 +59,14 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
   fetchFromBackend = false,
   fallbackComponent
 }) => {
+  // If no specific fallback is provided, use our new smart fallback system
+  const smartFallbackSrc = fallbackSrc || API_CONFIG.getFallbackImageUrl(src);
+  
   // Keep track of the current image state
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [imageSrc, setImageSrc] = useState<string>(placeholderSrc || '');
+  const [fallbackAttempted, setFallbackAttempted] = useState(false);
   
   // Refs for intersection observer and image element
   const imageRef = useRef<HTMLImageElement>(null);
@@ -159,8 +164,8 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
     }
     
     // If we have a fallback source and it's not a blob, use it
-    if (fallbackSrc && isValidImageUrl(fallbackSrc) && !fallbackSrc.startsWith('blob:')) {
-      return fallbackSrc;
+    if (smartFallbackSrc && isValidImageUrl(smartFallbackSrc) && !smartFallbackSrc.startsWith('blob:')) {
+      return smartFallbackSrc;
     }
     
     return null;
@@ -185,7 +190,7 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
         setImageSrc(betterSource);
       } else {
         // If we couldn't find a better source, use the original or fallback
-        setImageSrc(src || fallbackSrc);
+        setImageSrc(src || smartFallbackSrc);
       }
     };
     
@@ -193,7 +198,7 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
   }, [src, vehicleId, imageKey]);
   
   // Clean up the current source
-  const actualSrc = src || fallbackSrc;
+  const actualSrc = src || smartFallbackSrc;
   
   // Set up intersection observer for lazy loading
   useEffect(() => {
@@ -243,11 +248,17 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
   
   // Handle image error
   const handleError = () => {
-    setError(true);
-    if (!fallbackComponent) {
-      setImageSrc(fallbackSrc);
+    console.warn(`Image error loading: ${imageSrc}`);
+    
+    // Try fallback if we haven't already
+    if (!fallbackAttempted && smartFallbackSrc && smartFallbackSrc !== imageSrc) {
+      console.log(`Trying fallback image: ${smartFallbackSrc}`);
+      setImageSrc(smartFallbackSrc);
+      setFallbackAttempted(true);
+    } else {
+      setError(true);
+      onError?.();
     }
-    onError?.();
   };
   
   // Combine passed style with default styles

@@ -42,10 +42,23 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
   
   if (isAssetUrl) {
     // Extract the filename from the asset path
-    const assetName = src.split('/').pop()?.split('.')[0];
-    // Use a dedicated folder for static assets in Cloudinary
-    const cloudinaryPath = `static_assets/${assetName}`;
+    const assetPath = src.split('/').pop() || '';
+    const assetName = assetPath.split('.')[0];
+    // Get the file extension, default to jpg if not present
+    const fileExtension = assetPath.includes('.') ? assetPath.split('.').pop() : 'jpg';
+    
+    // Use a dedicated folder for static assets in Cloudinary with proper extension
+    const cloudinaryPath = `static_assets/${assetName}.${fileExtension}`;
     optimizedSrc = getCloudinaryUrl(cloudinaryPath, { width, height, quality });
+    
+    // Add debug log to help diagnose
+    console.debug('Asset URL conversion:', { 
+      original: src, 
+      assetName, 
+      fileExtension, 
+      cloudinaryPath, 
+      optimizedSrc 
+    });
   } else if (!isCloudinaryUrl && src) {
     // For other URLs that aren't already Cloudinary, apply transformations
     optimizedSrc = getCloudinaryUrl(src, { width, height, quality });
@@ -88,7 +101,10 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
           className={`w-full h-full transition-opacity duration-300 ${!isLoaded ? 'opacity-0' : 'opacity-100'}`}
           style={{ objectFit }}
           onLoad={() => setIsLoaded(true)}
-          onError={() => setHasError(true)}
+          onError={(e) => {
+            console.error(`Image load error for: ${optimizedSrc}`, e);
+            setHasError(true);
+          }}
         />
       )}
     </div>

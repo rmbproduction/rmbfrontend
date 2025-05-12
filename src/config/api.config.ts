@@ -22,19 +22,23 @@ const isProduction = () => {
   return prodDomain || prodEnv;
 };
 
+// Get host information from environment variables or use defaults - moved up for clarity
+const HOST_DOMAIN = import.meta.env.VITE_HOST_DOMAIN || 'repairmybike.up.railway.app';
+const HOST_PROTOCOL = import.meta.env.VITE_HOST_PROTOCOL || 'https';
+
 // Force production URLs if in production environment
 const getApiBaseUrl = () => {
   if (isProduction()) {
-    return 'https://repairmybike.up.railway.app/api';
+    return `${HOST_PROTOCOL}://${HOST_DOMAIN}/api`;
   }
-  return import.meta.env.VITE_API_URL || 'https://repairmybike.up.railway.app/api';
+  return import.meta.env.VITE_API_URL || `${HOST_PROTOCOL}://${HOST_DOMAIN}/api`;
 };
 
 const getMediaBaseUrl = () => {
   if (isProduction()) {
-    return 'https://repairmybike.up.railway.app';
+    return `${HOST_PROTOCOL}://${HOST_DOMAIN}`;
   }
-  return import.meta.env.VITE_MEDIA_URL || 'https://repairmybike.up.railway.app';
+  return import.meta.env.VITE_MEDIA_URL || `${HOST_PROTOCOL}://${HOST_DOMAIN}`;
 };
 
 // API status monitoring
@@ -53,13 +57,9 @@ export const updateApiStatus = (online: boolean, responseTime?: number) => {
   }
 };
 
-// Get host information from environment variables or use defaults
-const HOST_DOMAIN = import.meta.env.VITE_HOST_DOMAIN || 'repairmybike.up.railway.app';
-const HOST_PROTOCOL = import.meta.env.VITE_HOST_PROTOCOL || 'https';
-
 // Get API URL from environment variable or build it
-const API_URL = import.meta.env.VITE_API_URL || `${HOST_PROTOCOL}://${HOST_DOMAIN}/api`;
-const MEDIA_URL = import.meta.env.VITE_MEDIA_URL || `${HOST_PROTOCOL}://${HOST_DOMAIN}`;
+const API_URL = getApiBaseUrl();
+const MEDIA_URL = getMediaBaseUrl();
 
 // Cloudinary configuration
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dz81bjuea';
@@ -67,6 +67,20 @@ const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dz8
 // WebSocket URL (wss for https, ws for http)
 const WS_PROTOCOL = HOST_PROTOCOL === 'https' ? 'wss' : 'ws';
 const WEBSOCKET_URL = import.meta.env.VITE_WEBSOCKET_URL || `${WS_PROTOCOL}://${HOST_DOMAIN}/ws`;
+
+// Image fallbacks and helpers
+const DEFAULT_VEHICLE_IMAGE = 'https://placehold.co/600x400?text=Vehicle';
+const DEFAULT_PROFILE_IMAGE = 'https://placehold.co/400x400?text=Profile';
+const DEFAULT_SERVICE_IMAGE = 'https://placehold.co/600x400?text=Service';
+
+// Map of fallback images for error recovery
+const IMAGE_FALLBACKS = {
+  'static_assets/bikeExpert': 'https://placehold.co/800x500?text=Bike+Expert', 
+  'static_assets/founder': 'https://placehold.co/600x800?text=Founder',
+  'vehicle_photos': DEFAULT_VEHICLE_IMAGE,
+  'service_images': DEFAULT_SERVICE_IMAGE,
+  'profile_images': DEFAULT_PROFILE_IMAGE
+};
 
 export const API_CONFIG = {
   // Base URLs for API and media content
@@ -135,6 +149,25 @@ export const API_CONFIG = {
   },
   
   /**
+   * Get a fallback image URL when an image fails to load
+   * @param url - The original image URL that failed
+   * @returns A fallback image URL
+   */
+  getFallbackImageUrl: (url: string | null | undefined): string => {
+    if (!url) return DEFAULT_VEHICLE_IMAGE;
+    
+    // Check common patterns and return appropriate fallbacks
+    for (const [pattern, fallbackUrl] of Object.entries(IMAGE_FALLBACKS)) {
+      if (url.includes(pattern)) {
+        return fallbackUrl;
+      }
+    }
+    
+    // Default fallback
+    return 'https://placehold.co/600x400?text=Image+Not+Found';
+  },
+  
+  /**
    * Helper function to properly format image URLs
    * @param url - The image URL (can be relative, absolute, or from API)
    * @returns The complete, usable image URL
@@ -175,10 +208,7 @@ export const API_CONFIG = {
    * Helper function to get a default vehicle image when no image is available
    * @returns The URL to the default vehicle image
    */
-  getDefaultVehicleImage: () => {
-    // Use a guaranteed working placeholder image
-    return 'https://placehold.co/600x400?text=Vehicle';
-  },
+  getDefaultVehicleImage: () => DEFAULT_VEHICLE_IMAGE,
   
   /**
    * Perform controlled fetch with timeout
