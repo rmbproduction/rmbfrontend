@@ -1,7 +1,7 @@
 {
   "framework": "vite",
   "installCommand": "npm install && npm install -D terser@5.28.1",
-  "buildCommand": "npm run build",
+  "buildCommand": "node -e \"process.env.NODE_OPTIONS='--max-old-space-size=4096'\" && npm run build",
   "headers": [
     {
       "source": "/(.*)",
