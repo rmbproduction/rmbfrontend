@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
 import { Bike, ImageOff } from 'lucide-react';
-import { isBase64Image, isValidImageUrl, getBestImageSource, getImageWithFallback } from '../services/imageUtils';
+import { isValidImageUrl, getBestImageSource, getCloudinaryUrl } from '../services/imageUtils';
 import marketplaceService from '../services/marketplaceService';
 import { useLocation } from 'react-router-dom';
 
@@ -36,6 +36,7 @@ const validBlobUrls = new Set<string>();
  * - Placeholder display during loading
  * - Fallback image on error
  * - Progressive enhancement when available
+ * - Uses Cloudinary for optimized delivery
  */
 const SafeImage: React.FC<SafeImageProps> = memo(({
   src,
@@ -112,9 +113,31 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
     }
   };
   
+  // Helper to check if a string is a base64 data URL
+  const isBase64Image = (str: string): boolean => {
+    return typeof str === 'string' && str.startsWith('data:image/');
+  };
+  
   // Find the best non-blob source for an image
   const findBestNonBlobSource = async (): Promise<string | null> => {
-    // Try to get from sessionStorage first
+    // If we have a vehicleId and imageKey, use the CDN approach
+    if (derivedVehicleId && imageKey) {
+      try {
+        const cdnSource = getBestImageSource(
+          typeof derivedVehicleId === 'number' ? String(derivedVehicleId) : derivedVehicleId,
+          imageKey
+        );
+        
+        if (cdnSource) {
+          console.log(`Using CDN source for ${imageKey}`);
+          return cdnSource;
+        }
+      } catch (e) {
+        console.error('Error getting CDN source:', e);
+      }
+    }
+    
+    // Try to get from sessionStorage for backwards compatibility
     if (sessionStorageKey && imageKey) {
       try {
         const sessionData = sessionStorage.getItem(sessionStorageKey);
@@ -129,52 +152,9 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
               return url;
             }
           }
-          
-          // Try base64 images
-          if (parsedData.base64_photos && parsedData.base64_photos[imageKey]) {
-            const base64 = parsedData.base64_photos[imageKey];
-            if (isBase64Image(base64)) {
-              console.log(`Found base64 image in sessionStorage for ${imageKey}`);
-              return base64;
-            }
-          }
         }
       } catch (e) {
         console.error('Error checking sessionStorage:', e);
-      }
-    }
-    
-    // Try localStorage as fallback
-    if (imageKey) {
-      try {
-        const localData = localStorage.getItem('sell_vehicle_photos_base64');
-        if (localData) {
-          const parsedData = JSON.parse(localData);
-          if (parsedData[imageKey] && isBase64Image(parsedData[imageKey])) {
-            console.log(`Found base64 image in localStorage for ${imageKey}`);
-            return parsedData[imageKey];
-          }
-        }
-      } catch (e) {
-        console.error('Error checking localStorage:', e);
-      }
-    }
-    
-    // If all else fails and we can fetch from backend, try that
-    if (fetchFromBackend && derivedVehicleId && imageKey) {
-      try {
-        // Convert vehicleId to string to fix type error
-        const apiSource = await getImageWithFallback(
-          typeof derivedVehicleId === 'number' ? String(derivedVehicleId) : derivedVehicleId,
-          imageKey,
-          marketplaceService
-        );
-        if (apiSource && !apiSource.startsWith('blob:')) {
-          console.log(`Found image from API for ${imageKey}`);
-          return apiSource;
-        }
-      } catch (e) {
-        console.error('Error fetching from API:', e);
       }
     }
     
@@ -189,6 +169,29 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
   // Derive vehicleId from sessionStorageKey if not provided directly
   const derivedVehicleId = vehicleId || (sessionStorageKey ? sessionStorageKey.replace('vehicle_summary_', '') : null);
   
+  // If we have a URL that might be a blob, try to find a better source
+  useEffect(() => {
+    const fetchBetterSource = async () => {
+      // Only try to find a better source if the current one is a blob URL or missing
+      if (src && !src.startsWith('blob:')) {
+        // Use the provided source directly
+        setImageSrc(src);
+        return;
+      }
+      
+      // Try to find a non-blob source
+      const betterSource = await findBestNonBlobSource();
+      if (betterSource) {
+        setImageSrc(betterSource);
+      } else {
+        // If we couldn't find a better source, use the original or fallback
+        setImageSrc(src || fallbackSrc);
+      }
+    };
+    
+    fetchBetterSource();
+  }, [src, vehicleId, imageKey]);
+  
   // Clean up the current source
   const actualSrc = src || fallbackSrc;
   
@@ -196,7 +199,6 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
   useEffect(() => {
     // If not using lazy loading, or no image ref, skip
     if (!lazy || !imageRef.current) {
-      setImageSrc(actualSrc);
       return;
     }
     
@@ -211,7 +213,7 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
         entries.forEach((entry) => {
           // When the image enters the viewport
           if (entry.isIntersecting) {
-            setImageSrc(actualSrc);
+            // Image is already set by the fetchBetterSource useEffect
             // Stop observing after loading starts
             observer.disconnect();
             observerRef.current = null;
@@ -231,7 +233,7 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
         observerRef.current.disconnect();
       }
     };
-  }, [actualSrc, lazy, threshold]);
+  }, [lazy, threshold]);
   
   // Handle image loading
   const handleLoad = () => {

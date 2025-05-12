@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Wrench, Calendar, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import OptimizedImage from './OptimizedImage';
 
 const AboutUsSection = () => {
   return (
@@ -87,14 +88,14 @@ const AboutUsSection = () => {
                 <div className="absolute top-0 right-0 bottom-0 left-0 bg-[#FF5733] opacity-10 rounded-xl transform rotate-3"></div>
                 <div className="absolute top-0 right-0 bottom-0 left-0 bg-gray-200 rounded-xl transform -rotate-3"></div>
                 <div className="relative rounded-xl overflow-hidden h-full shadow-lg">
-                  <img 
+                  <OptimizedImage 
                     src="/assets/founder.jpg" 
                     alt="RepairMyBike Founder" 
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.src = "/assets/bikeExpert.jpg";
-                    }}
+                    width={600}
+                    height={800}
+                    quality={75}
+                    className="w-full h-full"
+                    objectFit="cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
                   <div className="absolute bottom-0 left-0 right-0 p-4 text-white">

@@ -1,6 +1,7 @@
 import { MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import OptimizedImage from './OptimizedImage';
 
 const Hero = () => {
   const navigate = useNavigate();
@@ -84,10 +85,14 @@ const Hero = () => {
                 className="mt-12 lg:mt-0 relative"
               >
                 <div className="floating relative w-full h-[500px] rounded-2xl overflow-hidden shadow-2xl transform perspective-1000">
-                  <img
-                    className="w-full h-full object-cover"
+                  <OptimizedImage
                     src="/assets/bikeExpert.jpg"
                     alt="Bike mechanic working"
+                    width={800}
+                    height={500}
+                    quality={75}
+                    objectFit="cover"
+                    className="w-full h-full"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent"></div>
                 </div>

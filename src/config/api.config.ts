@@ -53,10 +53,25 @@ export const updateApiStatus = (online: boolean, responseTime?: number) => {
   }
 };
 
+// Get host information from environment variables or use defaults
+const HOST_DOMAIN = import.meta.env.VITE_HOST_DOMAIN || 'repairmybike.up.railway.app';
+const HOST_PROTOCOL = import.meta.env.VITE_HOST_PROTOCOL || 'https';
+
+// Get API URL from environment variable or build it
+const API_URL = import.meta.env.VITE_API_URL || `${HOST_PROTOCOL}://${HOST_DOMAIN}/api`;
+const MEDIA_URL = import.meta.env.VITE_MEDIA_URL || `${HOST_PROTOCOL}://${HOST_DOMAIN}`;
+
+// Cloudinary configuration
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dz81bjuea';
+
+// WebSocket URL (wss for https, ws for http)
+const WS_PROTOCOL = HOST_PROTOCOL === 'https' ? 'wss' : 'ws';
+const WEBSOCKET_URL = import.meta.env.VITE_WEBSOCKET_URL || `${WS_PROTOCOL}://${HOST_DOMAIN}/ws`;
+
 export const API_CONFIG = {
   // Base URLs for API and media content
-  BASE_URL: getApiBaseUrl(),
-  MEDIA_URL: getMediaBaseUrl(),
+  BASE_URL: API_URL,
+  MEDIA_URL: MEDIA_URL,
   
   // Default timeouts - can be overridden in specific requests
   DEFAULT_TIMEOUT,
@@ -79,7 +94,7 @@ export const API_CONFIG = {
     if (isProduction()) {
       return 'https://repairmybike.in';
     }
-    return window.location.origin;
+    return MEDIA_URL.replace('/api', '');
   },
   
   /**
@@ -293,8 +308,25 @@ export const API_CONFIG = {
    * @returns The URL to the vehicle image
    */
   getVehicleImageUrl(vehicleId: string | number): string {
-    return `${this.MARKETPLACE_URL}/vehicles/${vehicleId}/image/`;
-  }
+    return `${this.MARKETPLACE_URL}/vehicles/${vehicleId}/images/front/`;
+  },
+  
+  // Cloudinary
+  CLOUDINARY_CLOUD_NAME,
+  WEBSOCKET_URL,
+  
+  // Format validation
+  validateEmail: (email: string): boolean => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  },
+  
+  validatePhone: (phone: string): boolean => {
+    return /^\+?[0-9]{10,15}$/.test(phone);
+  },
+  
+  validatePassword: (password: string): boolean => {
+    return password.length >= 8;
+  },
 };
 
 // Google Maps API configuration
@@ -303,3 +335,5 @@ export const googleMapsConfig = {
   region: 'IN',
   language: 'en'
 };
+
+export default API_CONFIG;

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { safeRevokeUrl } from './imageUtils';
 import { API_CONFIG } from '../config/api.config';
-import persistentStorageService, { TTL } from './persistentStorageService';
+import persistentStorageService from './persistentStorageService';
 
 // Add debug logging to verify the API URL
 console.log('[DEBUG] MARKETPLACE URL:', API_CONFIG.MARKETPLACE_URL);
@@ -38,10 +38,90 @@ interface VehicleData {
   [key: string]: any;
 }
 
-// Subscription management for vehicle updates
+// WebSocket singleton for vehicle updates
+let vehicleUpdateSocket: WebSocket | null = null;
 const subscriptions = new Map<string, Array<() => void>>();
-let pollingInterval: ReturnType<typeof setInterval> | null = null;
-const POLLING_INTERVAL = 30000; // Poll every 30 seconds
+
+// Utility to create and manage WebSocket connection
+const createWebSocketConnection = (): WebSocket => {
+  if (vehicleUpdateSocket && vehicleUpdateSocket.readyState === WebSocket.OPEN) {
+    return vehicleUpdateSocket;
+  }
+  
+  // Close any existing socket
+  if (vehicleUpdateSocket) {
+    try {
+      vehicleUpdateSocket.close();
+    } catch (e) {
+      console.warn('Error closing existing WebSocket:', e);
+    }
+  }
+  
+  console.log('Creating WebSocket connection to:', API_CONFIG.WEBSOCKET_URL);
+  const socket = new WebSocket(API_CONFIG.WEBSOCKET_URL + '/vehicle-updates/');
+  
+  socket.onopen = () => {
+    console.log('WebSocket connection established for vehicle updates');
+    
+    // Authenticate if needed
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      socket.send(JSON.stringify({
+        type: 'authenticate',
+        token
+      }));
+      
+      // Subscribe to all vehicle IDs we're tracking
+      for (const vehicleId of subscriptions.keys()) {
+        socket.send(JSON.stringify({
+          type: 'subscribe',
+          vehicle_id: vehicleId
+        }));
+      }
+    }
+  };
+  
+  socket.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      
+      // Handle vehicle update messages
+      if (data.type === 'vehicle_update' && data.vehicle_id) {
+        const callbacks = subscriptions.get(data.vehicle_id);
+        if (callbacks) {
+          console.log(`Received update for vehicle ${data.vehicle_id}, notifying ${callbacks.length} subscribers`);
+          callbacks.forEach(callback => {
+            try {
+              callback();
+            } catch (e) {
+              console.error(`Error in vehicle update callback for ${data.vehicle_id}:`, e);
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Error processing WebSocket message:', e);
+    }
+  };
+  
+  socket.onerror = (error) => {
+    console.error('WebSocket error:', error);
+  };
+  
+  socket.onclose = (event) => {
+    console.log(`WebSocket closed with code ${event.code}. Reason: ${event.reason}`);
+    
+    // Attempt to reconnect after a delay
+    if (subscriptions.size > 0) {
+      setTimeout(() => {
+        console.log('Attempting to reconnect WebSocket...');
+        vehicleUpdateSocket = createWebSocketConnection();
+      }, 5000); // 5 second reconnection delay
+    }
+  };
+  
+  return socket;
+};
 
 // In-memory cache for sell requests with TTL support
 const sellRequestCache = {
@@ -117,119 +197,55 @@ const sellRequestCache = {
 };
 
 const marketplaceService = {
-  // Subscribe to vehicle updates
+  // Subscribe to vehicle updates via WebSocket
   subscribeToVehicleUpdates: (vehicleId: string, callback: () => void): (() => void) => {
     console.log(`Subscribing to updates for vehicle ${vehicleId}`);
     
     if (!subscriptions.has(vehicleId)) {
       subscriptions.set(vehicleId, []);
+      
+      // Initialize WebSocket if not already done
+      if (!vehicleUpdateSocket || vehicleUpdateSocket.readyState !== WebSocket.OPEN) {
+        vehicleUpdateSocket = createWebSocketConnection();
+      } else {
+        // If socket is already open, subscribe to this vehicle
+        vehicleUpdateSocket.send(JSON.stringify({
+          type: 'subscribe',
+          vehicle_id: vehicleId
+        }));
+      }
     }
     
     // Add this callback to the list of subscribers
     subscriptions.get(vehicleId)?.push(callback);
     
-    // Start the polling if not already started
-    if (!pollingInterval) {
-      console.log('Starting global polling for vehicle updates');
-      pollingInterval = setInterval(async () => {
-        // Check each vehicle with subscriptions for updates
-        for (const [id, callbacks] of subscriptions.entries()) {
-          try {
-            // Skip if no valid token (user not logged in)
-            const token = localStorage.getItem('accessToken');
-            if (!token) continue;
-            
-            // Get the ETag from cache if available
-            const cachedRequest = sellRequestCache.get(id);
-            const headers: Record<string, string> = { 
-              Authorization: `Bearer ${token}` 
-            };
-            
-            if (cachedRequest?.etag) {
-              headers['If-None-Match'] = cachedRequest.etag;
-            }
-            
-            // Make a HEAD request to check for changes (lighter than GET)
-            // Use a short timeout to avoid hanging requests
-            const response = await axios.head(
-              `${API_CONFIG.BASE_URL}/marketplace/sell-requests/${id}/`, 
-              { 
-                headers,
-                timeout: 5000
-              }
-            );
-            
-            // If we get here, there might be an update (no 304 response)
-            if (response.status !== 304) {
-              console.log(`Detected change for vehicle ${id}, notifying subscribers`);
-              // Notify all callbacks
-              callbacks.forEach(cb => {
-                try {
-                  cb();
-                } catch (callbackError) {
-                  console.error(`Error in callback for vehicle ${id}:`, callbackError);
-                }
-              });
-            }
-          } catch (error: any) {
-            // Handle specific error cases
-            if (error.response) {
-              // If we get a 304 Not Modified, there's no update
-              if (error.response.status === 304) {
-                console.log(`No changes for vehicle ${id}`);
-              } 
-              // If the request is unauthorized, the token might be invalid
-              else if (error.response.status === 401 || error.response.status === 403) {
-                console.warn(`Authentication error checking for updates on vehicle ${id}, removing subscription`);
-                // Remove this subscription to avoid repeated failed requests
-                subscriptions.delete(id);
-              }
-              // If the vehicle doesn't exist anymore
-              else if (error.response.status === 404) {
-                console.warn(`Vehicle ${id} not found, removing subscription`);
-                // Remove this subscription to avoid repeated failed requests
-                subscriptions.delete(id);
-              } 
-              else {
-                console.error(`Error checking for updates on vehicle ${id}:`, error.response.status, error.response.statusText);
-              }
-            } else if (error.code === 'ECONNABORTED') {
-              console.warn(`Timeout checking for updates on vehicle ${id}`);
-            } else {
-              console.error(`Error checking for updates on vehicle ${id}:`, error);
-            }
-          }
+    // Return unsubscribe function
+    return () => {
+      const callbacks = subscriptions.get(vehicleId);
+      if (callbacks) {
+        const index = callbacks.indexOf(callback);
+        if (index !== -1) {
+          callbacks.splice(index, 1);
         }
         
-        // If no more subscriptions, clear the interval
-        if (subscriptions.size === 0 && pollingInterval !== null) {
-          console.log('No more subscriptions, stopping polling');
-          clearInterval(pollingInterval);
-          pollingInterval = null;
+        // If no more callbacks for this vehicle, unsubscribe from updates
+        if (callbacks.length === 0) {
+          subscriptions.delete(vehicleId);
+          
+          // Notify WebSocket to unsubscribe if it's open
+          if (vehicleUpdateSocket && vehicleUpdateSocket.readyState === WebSocket.OPEN) {
+            vehicleUpdateSocket.send(JSON.stringify({
+              type: 'unsubscribe',
+              vehicle_id: vehicleId
+            }));
+          }
+          
+          // If no more subscriptions at all, close the WebSocket
+          if (subscriptions.size === 0 && vehicleUpdateSocket) {
+            vehicleUpdateSocket.close();
+            vehicleUpdateSocket = null;
+          }
         }
-      }, POLLING_INTERVAL);
-    }
-    
-    // Return an unsubscribe function
-    return () => {
-      console.log(`Unsubscribing from updates for vehicle ${vehicleId}`);
-      const vehicleSubscribers = subscriptions.get(vehicleId) || [];
-      const index = vehicleSubscribers.indexOf(callback);
-      
-      if (index !== -1) {
-        vehicleSubscribers.splice(index, 1);
-      }
-      
-      // If this was the last subscriber for this vehicle, remove it
-      if (vehicleSubscribers.length === 0) {
-        subscriptions.delete(vehicleId);
-      }
-      
-      // If no more subscriptions at all, clear the interval
-      if (subscriptions.size === 0 && pollingInterval !== null) {
-        console.log('Stopping global polling for vehicle updates');
-        clearInterval(pollingInterval);
-        pollingInterval = null;
       }
     };
   },

@@ -3,6 +3,7 @@ import { Wrench, Menu, X, LogIn, LogOut, User } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import RepairsBasketIcon from './RepairsBasketIcon';
 import useAuth from '../hooks/useAuth';
+import OptimizedImage from './OptimizedImage';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -51,10 +52,13 @@ const Navbar = () => {
             <div className="flex items-center">
               <Link to="/" className="flex items-center">
                 <div className="h-12 w-12 flex items-center justify-center">
-                  <img 
+                  <OptimizedImage 
                     src="/assets/logo.png" 
                     alt="RepairMyBike Logo" 
-                    className="h-full w-auto"
+                    width={48}
+                    height={48}
+                    quality={85}
+                    loading="eager"
                   />
                 </div>
                 <span className="ml-2 text-xl font-bold text-gray-900">
