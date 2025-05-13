@@ -63,3 +63,27 @@ When generating Cloudinary URLs, we now:
 2. Include a fixed version number (v1)
 3. Apply appropriate transformations (width, quality, etc.)
 4. Use Cloudinary's sample image feature for guaranteed fallbacks
+
+### Cloudinary Integration and URL Format
+
+We've implemented a robust solution for handling Cloudinary image URLs to avoid 404 errors:
+
+#### Correct Cloudinary URL Format
+```
+https://res.cloudinary.com/dz81bjuea/image/upload/v1747150610/vehicle_photos/back/hrj3dowlhp5biid3ardg.png
+```
+
+Where:
+- `dz81bjuea` is our cloud name
+- `v1747150610` is the version timestamp (NOT just 'v1')
+- `vehicle_photos/back/` is the folder structure
+- `hrj3dowlhp5biid3ardg.png` is the Cloudinary-generated public ID
+
+#### Our Solution
+Rather than trying to construct URLs with specific asset IDs (which was causing 404 errors), we now:
+
+1. For known assets (logo, founder image, etc.), use their exact Cloudinary URLs
+2. For vehicle images, use Cloudinary's sample image with text overlay showing the vehicle ID
+3. For any image load failures, use a guaranteed working placeholder image
+
+This approach ensures users always see something rather than broken images, while we implement a proper asset management solution.

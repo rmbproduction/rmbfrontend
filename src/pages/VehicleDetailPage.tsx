@@ -141,19 +141,19 @@ const VehicleDetailPage = () => {
     
     // Get vehicle information for better logging
     const vehicleInfo = vehicle ? `vehicle ${vehicle.id} (${vehicle.name})` : 'unknown vehicle';
-    console.warn(`Failed to load image for ${vehicleInfo}. Creating avatar.`);
+    console.warn(`Failed to load image for ${vehicleInfo}. Using placeholder.`);
     
     // Use a guaranteed working Cloudinary placeholder - this is essential for reliability
-    const fallbackUrl = API_CONFIG.getCloudinaryPlaceholder(vehicle?.name || 'Vehicle');
+    const fallbackUrl = API_CONFIG.getCloudinaryPlaceholder(
+      vehicle?.name || 'Vehicle',
+      600,
+      400
+    );
     
     // Set a new source only if the current one isn't already the fallback
     if (target.src !== fallbackUrl) {
       target.src = fallbackUrl;
-      console.log(`Using Cloudinary fallback image: ${fallbackUrl}`);
     }
-    
-    // Mark as loaded to stop retry attempts
-    setImagesLoaded(prev => ({ ...prev, [index]: true }));
   }, [vehicle]);
 
   const fetchVehicleDetails = async (vehicleId: string) => {

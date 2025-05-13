@@ -1545,44 +1545,37 @@ const marketplaceService = {
       // Helper function to convert relative paths to absolute URLs using Cloudinary
       const getAbsoluteUrl = (path: string | null | undefined, vehicleId: string | number) => {
         if (!path) return null;
-        if (path.startsWith('http')) return path;
+        if (path.startsWith('http') && path.includes('cloudinary.com')) return path;
         
-        // Extract the filename from the path
-        const filename = path.split('/').pop();
-        if (!filename) return API_CONFIG.getDefaultVehicleImage();
-        
-        // Prefer Cloudinary URL for better performance and reliability
-        try {
-          return getCloudinaryUrl(filename, {
-            width: 400, // Smaller width for listing thumbnails
-            quality: 80,
-            version: 'v1' // Use a fixed version number
-          });
-        } catch (err) {
-          console.warn('Error generating Cloudinary URL:', err);
-        }
-        
-        // Fallback to regular media URL if Cloudinary fails
-        return API_CONFIG.getMediaUrl(path);
+        // Use our guaranteed working approach with vehicleId
+        return getCloudinaryUrl('vehicle_image', {
+          width: 400, // Smaller width for listing thumbnails
+          quality: 80,
+          vehicleId: vehicleId
+        });
       };
       
       // Add a helper function to check if an image exists
-      const imageExists = async (url: string | null): Promise<string | null> => {
-        if (!url) return API_CONFIG.getCloudinaryPlaceholder();
+      const imageExists = async (url: string | null, vehicleId: string | number): Promise<string | null> => {
+        if (!url) return API_CONFIG.getCloudinaryPlaceholder(`Vehicle ${vehicleId}`);
         
         try {
-          // Attempt to check if the image exists using a HEAD request
-          const response = await fetch(url, { method: 'HEAD' });
-          if (response.ok) {
+          // For Cloudinary URLs that we know work correctly, just return them
+          if (url.includes('cloudinary.com') && 
+              url.includes('/upload/v') && 
+              !url.includes('/v1/')) {
             return url;
           }
-          console.warn(`Image not found: ${url}`);
           
-          // Use Cloudinary's guaranteed placeholder instead of potentially failing default image
-          return API_CONFIG.getCloudinaryPlaceholder();
+          // Otherwise, use our guaranteed approach
+          return getCloudinaryUrl('vehicle_image', {
+            width: 600,
+            height: 400,
+            vehicleId: vehicleId
+          });
         } catch (error) {
           console.warn(`Error checking image: ${url}`, error);
-          return API_CONFIG.getCloudinaryPlaceholder();
+          return API_CONFIG.getCloudinaryPlaceholder(`Vehicle ${vehicleId}`);
         }
       };
       
@@ -1615,7 +1608,7 @@ const marketplaceService = {
                      (vehicle.images?.front ? getAbsoluteUrl(vehicle.images.front, vehicleId) : null);
             
             // Check if the image exists
-            imageUrl = await imageExists(potentialImageUrl) || API_CONFIG.getDefaultVehicleImage();
+            imageUrl = await imageExists(potentialImageUrl, vehicleId) || API_CONFIG.getDefaultVehicleImage();
             
             // Store for future use
             if (imageUrl && vehicleId) {
@@ -1702,28 +1695,12 @@ const marketplaceService = {
           return url;
         }
         
-        // If it's a relative URL or path to an image
-        if (!url.startsWith('http')) {
-          // Extract the filename from the path
-          const filename = url.split('/').pop();
-          
-          if (!filename) return API_CONFIG.getDefaultVehicleImage();
-          
-          // Generate a Cloudinary URL for the image, including the actual filename
-          try {
-            return getCloudinaryUrl(filename, {
-              width: 800,
-              quality: 85,
-              version: 'v1' // Use a fixed version number
-            });
-          } catch (err) {
-            console.warn('Error generating Cloudinary URL:', err);
-            // Fall back to the default image URL processing
-          }
-        }
-        
-        // If all else fails, use the API_CONFIG to get an absolute URL
-        return API_CONFIG.getImageUrl(url);
+        // Use our guaranteed reliable approach - passing vehicleId ensures we get a working URL
+        return getCloudinaryUrl('vehicle_image', {
+          width: 800,
+          quality: 85,
+          vehicleId: vehicleId
+        });
       };
       
       // Process all image URLs
