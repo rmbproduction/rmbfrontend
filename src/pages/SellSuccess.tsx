@@ -7,29 +7,22 @@ import SafeImage from '../components/SafeImage';
 import { extractPhotoUrls, isBase64Image } from '../services/imageUtils';
 import StatusDisplay from '../components/StatusDisplay';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { VehicleData, StatusInfo } from '../types/vehicle';
 
-interface StatusInfo {
-  status: string;
-  status_display: string;
-  title: string;
-  message: string;
-  updated_at: string;
-}
-
-const SellSuccess = () => {
+const SellSuccess: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
   const params = new URLSearchParams(location.search);
   const sellRequestId = params.get('id') || id;
   
-  const [isScheduled, setIsScheduled] = useState(false);
-  const [vehicleData, setVehicleData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [isScheduled, setIsScheduled] = useState<boolean>(false);
+  const [vehicleData, setVehicleData] = useState<VehicleData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [statusInfo, setStatusInfo] = useState<StatusInfo | null>(null);
-  const [sellRequest, setSellRequest] = useState<any>(null);
+  const [sellRequest, setSellRequest] = useState<VehicleData | null>(null);
   
   // Fetch vehicle data from backend or storage
   useEffect(() => {
@@ -40,18 +33,21 @@ const SellSuccess = () => {
       try {
         // DIRECT SESSION STORAGE CHECK FIRST
         const sessionData = sessionStorage.getItem(`vehicle_summary_${sellRequestId}`);
-        let sellRequestData;
+        let sellRequestData: VehicleData | null = null;
         
         if (sessionData) {
           // Direct session storage hit
           console.log(`Using direct sessionStorage data for sell request ID ${sellRequestId}`);
           try {
-            sellRequestData = JSON.parse(sessionData);
-            console.log('[DEBUG] Session storage data structure:', sellRequestData);
-            
-            // Log nested vehicle structure if it exists
-            if (sellRequestData.vehicle) {
-              console.log('[DEBUG] Vehicle object in session data:', sellRequestData.vehicle);
+            const parsedData = JSON.parse(sessionData);
+            if (isValidVehicleData(parsedData)) {
+              sellRequestData = parsedData;
+              console.log('[DEBUG] Session storage data structure:', sellRequestData);
+              
+              // Log nested vehicle structure if it exists
+              if (sellRequestData?.vehicle) {
+                console.log('[DEBUG] Vehicle object in session data:', sellRequestData.vehicle);
+              }
             }
           } catch (parseError) {
             console.error('Error parsing session data:', parseError);
@@ -61,28 +57,36 @@ const SellSuccess = () => {
         // If no session data or parsing failed, fetch from service
         if (!sellRequestData) {
           console.log('Fetching from marketplaceService...');
-          sellRequestData = await marketplaceService.getSellRequest(sellRequestId);
-          console.log('[DEBUG] Data from marketplaceService:', sellRequestData);
+          const response = await marketplaceService.getSellRequest(sellRequestId);
+          if (isValidVehicleData(response)) {
+            sellRequestData = response;
+            console.log('[DEBUG] Data from marketplaceService:', sellRequestData);
+          }
         }
         
         // Still need to enrich to ensure consistency
-        sellRequestData = marketplaceService.enrichVehicleData(sellRequestData);
-        console.log('[DEBUG] Enriched vehicle data:', sellRequestData);
-        
-        // Set sell request data
-        setSellRequest(sellRequestData);
-        setVehicleData(sellRequestData);
-        
-        // Save to session storage for future use
-        try {
-          sessionStorage.setItem(`vehicle_summary_${sellRequestId}`, JSON.stringify(sellRequestData));
-          console.log('[DEBUG] Saved to session storage after fetch.');
-        } catch (storageError) {
-          console.error('Error saving to session storage:', storageError);
+        if (sellRequestData) {
+          const enrichedData = marketplaceService.enrichVehicleData(sellRequestData);
+          if (isValidVehicleData(enrichedData)) {
+            sellRequestData = enrichedData;
+            console.log('[DEBUG] Enriched vehicle data:', sellRequestData);
+            
+            // Set sell request data
+            setSellRequest(sellRequestData);
+            setVehicleData(sellRequestData);
+            
+            // Save to session storage for future use
+            try {
+              sessionStorage.setItem(`vehicle_summary_${sellRequestId}`, JSON.stringify(sellRequestData));
+              console.log('[DEBUG] Saved to session storage after fetch.');
+            } catch (storageError) {
+              console.error('Error saving to session storage:', storageError);
+            }
+            
+            // Set debug info
+            setDebugInfo(JSON.stringify(sellRequestData, null, 2));
+          }
         }
-        
-        // Set debug info
-        setDebugInfo(JSON.stringify(sellRequestData, null, 2));
         
         if (!sellRequestData) {
           console.error('Invalid response format:', sellRequestData);
@@ -124,6 +128,20 @@ const SellSuccess = () => {
     fetchData();
   }, [sellRequestId]);
 
+  // Type guard to validate VehicleData
+  const isValidVehicleData = (data: any): data is VehicleData => {
+    return (
+      data &&
+      typeof data === 'object' &&
+      typeof data.id === 'string' &&
+      typeof data.brand === 'string' &&
+      typeof data.model === 'string' &&
+      (typeof data.year === 'number' || typeof data.year === 'string') &&
+      typeof data.registration_number === 'string' &&
+      typeof data.created_at === 'string'
+    );
+  };
+
   // Set up polling for status updates
   useEffect(() => {
     if (!id || loading) return;
@@ -158,7 +176,7 @@ const SellSuccess = () => {
   };
 
   // Format price with commas
-  const formatPrice = (price: string | number) => {
+  const formatPrice = (price: string | number): string => {
     if (!price) return '0';
     return parseInt(price.toString()).toLocaleString('en-IN');
   };

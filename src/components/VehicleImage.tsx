@@ -2,8 +2,20 @@ import React, { useState } from 'react';
 import { ImageOff } from 'lucide-react';
 import { API_CONFIG } from '../config/api.config';
 
+interface Vehicle {
+  imageUrl?: string;
+  image_urls?: {
+    main?: string;
+    thumbnail?: string;
+    gallery?: string[];
+  };
+  photo_front?: string;
+  image_url?: string;
+  image?: string;
+}
+
 interface VehicleImageProps {
-  vehicle: any;
+  vehicle: Vehicle;
   alt?: string;
   className?: string;
   imageType?: 'main' | 'thumbnail' | 'gallery';
@@ -23,14 +35,14 @@ const VehicleImage: React.FC<VehicleImageProps> = ({
   const [hasError, setHasError] = useState(false);
 
   // Determine classes based on size
-  const sizeClasses = {
+  const sizeClasses: Record<string, string> = {
     sm: 'h-20 w-20 object-cover',
     md: 'h-44 w-full object-cover',
     lg: 'h-64 w-full object-cover',
     full: 'w-full h-full object-cover',
   };
 
-  const getImageUrl = () => {
+  const getImageUrl = (): string => {
     if (!vehicle) return API_CONFIG.getDefaultVehicleImage();
 
     try {
