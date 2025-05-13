@@ -1,9 +1,10 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import LoadingSpinner from './components/LoadingSpinner';
 import ProtectedRoute from './components/ProtectedRoute';
+import errorReporter from './utils/errorReporter';
 
 // Import main components eagerly (critical path components)
 import Hero from './components/Hero';
@@ -42,17 +43,57 @@ const TestAPI = lazy(() => import('./components/TestAPI'));
 // Create a loading fallback component
 const PageLoader = () => (
   <div className="flex justify-center items-center h-[50vh]">
-    <LoadingSpinner />
-    <span className="ml-2 text-gray-600">Loading page...</span>
+    <LoadingSpinner size="lg" message="Loading page..." />
   </div>
 );
 
+// Handle unhandled promise rejections globally
+const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+  errorReporter.reportError(
+    event.reason, 
+    'UnhandledPromiseRejection', 
+    { message: event.reason?.message || 'No details available' }
+  );
+  // Prevent the default browser behavior (console error)
+  event.preventDefault();
+};
+
 function App() {
+  // Set up global error handlers
+  useEffect(() => {
+    // Set up global unhandled promise rejection handler
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    
+    // Set up global uncaught exception handler
+    const handleError = (event: ErrorEvent) => {
+      errorReporter.reportError(
+        event.error || event.message,
+        'UncaughtException',
+        { 
+          message: event.message,
+          filename: event.filename,
+          lineno: event.lineno,
+          colno: event.colno
+        }
+      );
+    };
+    
+    window.addEventListener('error', handleError);
+    
+    // Cleanup when component unmounts
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      window.removeEventListener('error', handleError);
+    };
+  }, []);
+
   return (
     <Router>
-      <ErrorBoundary>
+      <ErrorBoundary componentName="RootApp">
         <div className="min-h-screen bg-gray-50 flex flex-col">
-          <Navbar />
+          <ErrorBoundary componentName="Navbar">
+            <Navbar />
+          </ErrorBoundary>
           
           <main className="flex-grow">
             <Suspense fallback={<PageLoader />}>
@@ -61,13 +102,17 @@ function App() {
                 <Route 
                   path="/" 
                   element={
-                    <ErrorBoundary>
-                      <>
+                    <>
+                      <ErrorBoundary componentName="Hero">
                         <Hero />
+                      </ErrorBoundary>
+                      <ErrorBoundary componentName="Services">
                         <Services />
+                      </ErrorBoundary>
+                      <ErrorBoundary componentName="AboutUsSection">
                         <AboutUsSection />
-                      </>
-                    </ErrorBoundary>
+                      </ErrorBoundary>
+                    </>
                   } 
                 />
 
@@ -75,87 +120,175 @@ function App() {
                 <Route path="/login" element={<Navigate to="/login-signup" replace />} />
 
                 {/* Additional Pages */}
-                <Route path="/about" element={<About />} />
-                <Route path="/contact" element={<Contact />} />
-                <Route path="/pricing" element={<Pricing />} />
-                <Route path="/login-signup" element={<LoginSignupPage />} />
-                <Route path="/checkout" element={<CheckoutPage />} />
-                <Route path="/faq" element={<FaqPage />} />
-                <Route path="/profile" element={
-                  <ProtectedRoute>
-                    <Profile />
-                  </ProtectedRoute>
+                <Route path="/about" element={
+                  <ErrorBoundary componentName="About">
+                    <About />
+                  </ErrorBoundary>
                 } />
-                <Route path="/Password-reset-confirmation" element={<PasswordResetConfirmation />} />
+                <Route path="/contact" element={
+                  <ErrorBoundary componentName="Contact">
+                    <Contact />
+                  </ErrorBoundary>
+                } />
+                <Route path="/pricing" element={
+                  <ErrorBoundary componentName="Pricing">
+                    <Pricing />
+                  </ErrorBoundary>
+                } />
+                <Route path="/login-signup" element={
+                  <ErrorBoundary componentName="LoginSignup">
+                    <LoginSignupPage />
+                  </ErrorBoundary>
+                } />
+                <Route path="/checkout" element={
+                  <ErrorBoundary componentName="Checkout">
+                    <CheckoutPage />
+                  </ErrorBoundary>
+                } />
+                <Route path="/faq" element={
+                  <ErrorBoundary componentName="FAQ">
+                    <FaqPage />
+                  </ErrorBoundary>
+                } />
+                <Route path="/profile" element={
+                  <ErrorBoundary componentName="Profile">
+                    <ProtectedRoute>
+                      <Profile />
+                    </ProtectedRoute>
+                  </ErrorBoundary>
+                } />
+                <Route path="/Password-reset-confirmation" element={
+                  <ErrorBoundary componentName="PasswordReset">
+                    <PasswordResetConfirmation />
+                  </ErrorBoundary>
+                } />
                 
                 {/* Sell Vehicle Routes - Protected */}
                 <Route path="/sell-vehicle" element={
-                  <ProtectedRoute>
-                    <SellVehicle />
-                  </ProtectedRoute>
+                  <ErrorBoundary componentName="SellVehicle">
+                    <ProtectedRoute>
+                      <SellVehicle />
+                    </ProtectedRoute>
+                  </ErrorBoundary>
                 } />
                 <Route path="/sell-success" element={
-                  <ProtectedRoute>
-                    <SellSuccess />
-                  </ProtectedRoute>
+                  <ErrorBoundary componentName="SellSuccess">
+                    <ProtectedRoute>
+                      <SellSuccess />
+                    </ProtectedRoute>
+                  </ErrorBoundary>
                 } />
                 <Route path="/sell-vehicle/:id/summary" element={
-                  <ProtectedRoute>
-                    <VehicleSummary />
-                  </ProtectedRoute>
+                  <ErrorBoundary componentName="VehicleSummary">
+                    <ProtectedRoute>
+                      <VehicleSummary />
+                    </ProtectedRoute>
+                  </ErrorBoundary>
                 } />
 
                 {/* Buy Vehicle Routes */}
-                <Route path="/vehicles" element={<VehicleBuyPage />} />
-                <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
+                <Route path="/vehicles" element={
+                  <ErrorBoundary componentName="VehicleBuy">
+                    <VehicleBuyPage />
+                  </ErrorBoundary>
+                } />
+                <Route path="/vehicles/:id" element={
+                  <ErrorBoundary componentName="VehicleDetail">
+                    <VehicleDetailPage />
+                  </ErrorBoundary>
+                } />
                 
                 {/* Booking */}
-                <Route path="/booking" element={<Booking />} />
+                <Route path="/booking" element={
+                  <ErrorBoundary componentName="Booking">
+                    <Booking />
+                  </ErrorBoundary>
+                } />
 
                 {/* Services */}
-                <Route path="/services" element={<ServicesPage />} />
-                <Route path="/services/:serviceId" element={<ServiceDetails />} />
-                <Route path="/verify-email" element={<EmailVerification />} />
-                <Route path="/verify-email/:key" element={<EmailConfirmation />} />
+                <Route path="/services" element={
+                  <ErrorBoundary componentName="ServicesPage">
+                    <ServicesPage />
+                  </ErrorBoundary>
+                } />
+                <Route path="/services/:serviceId" element={
+                  <ErrorBoundary componentName="ServiceDetails">
+                    <ServiceDetails />
+                  </ErrorBoundary>
+                } />
+                <Route path="/verify-email" element={
+                  <ErrorBoundary componentName="EmailVerification">
+                    <EmailVerification />
+                  </ErrorBoundary>
+                } />
+                <Route path="/verify-email/:key" element={
+                  <ErrorBoundary componentName="EmailConfirmation">
+                    <EmailConfirmation />
+                  </ErrorBoundary>
+                } />
 
                 {/* Cart */}
-                <Route path="/cart" element={<Cart />} />
+                <Route path="/cart" element={
+                  <ErrorBoundary componentName="Cart">
+                    <Cart />
+                  </ErrorBoundary>
+                } />
                 
                 {/* Service Checkout */}
-                <Route path="/service-checkout" element={<ServiceCheckout />} />
-                <Route path="/booking-confirmation" element={<BookingConfirmation />} />
+                <Route path="/service-checkout" element={
+                  <ErrorBoundary componentName="ServiceCheckout">
+                    <ServiceCheckout />
+                  </ErrorBoundary>
+                } />
+                <Route path="/booking-confirmation" element={
+                  <ErrorBoundary componentName="BookingConfirmation">
+                    <BookingConfirmation />
+                  </ErrorBoundary>
+                } />
 
                 {/* Other Example Pages */}
                 <Route 
                   path="/manufacturers" 
                   element={
-                    <ManufacturerSelect 
-                      manufacturers={[]} 
-                      onSelect={(manufacturer: any) => {
-                        console.log('Manufacturer selected:', manufacturer.id);
-                      }} 
-                    />
+                    <ErrorBoundary componentName="ManufacturerSelect">
+                      <ManufacturerSelect 
+                        manufacturers={[]} 
+                        onSelect={(manufacturer: any) => {
+                          console.log('Manufacturer selected:', manufacturer.id);
+                        }} 
+                      />
+                    </ErrorBoundary>
                   } 
                 />
-                <Route path="/test-api" element={<TestAPI />} />
+                <Route path="/test-api" element={
+                  <ErrorBoundary componentName="TestAPI">
+                    <TestAPI />
+                  </ErrorBoundary>
+                } />
 
                 {/* Purchase pages */}
                 <Route path="/vehicles/:id/purchase" element={
-                  <ProtectedRoute>
-                    <VehiclePurchasePage />
-                  </ProtectedRoute>
+                  <ErrorBoundary componentName="VehiclePurchase">
+                    <ProtectedRoute>
+                      <VehiclePurchasePage />
+                    </ProtectedRoute>
+                  </ErrorBoundary>
                 } />
                 <Route path="/purchase-success" element={
-                  <ProtectedRoute>
-                    <PurchaseSuccessPage />
-                  </ProtectedRoute>
+                  <ErrorBoundary componentName="PurchaseSuccess">
+                    <ProtectedRoute>
+                      <PurchaseSuccessPage />
+                    </ProtectedRoute>
+                  </ErrorBoundary>
                 } />
 
                 {/* Previous Vehicles Page */}
                 <Route path="/previous-vehicles" element={
-                  <ProtectedRoute>
-                    <PreviousVehiclesPage />
-                  </ProtectedRoute>
+                  <ErrorBoundary componentName="PreviousVehicles">
+                    <ProtectedRoute>
+                      <PreviousVehiclesPage />
+                    </ProtectedRoute>
+                  </ErrorBoundary>
                 } />
                 
                 {/* 404 catch-all route */}
@@ -172,7 +305,9 @@ function App() {
             </Suspense>
           </main>
 
-          <Footer />
+          <ErrorBoundary componentName="Footer">
+            <Footer />
+          </ErrorBoundary>
         </div>
       </ErrorBoundary>
     </Router>

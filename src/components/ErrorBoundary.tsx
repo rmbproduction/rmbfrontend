@@ -1,10 +1,12 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertCircle, RefreshCw, Home } from 'lucide-react';
+import errorReporter from '../utils/errorReporter';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
   fallback?: ReactNode;
   onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  componentName?: string;
 }
 
 interface ErrorBoundaryState {
@@ -40,7 +42,8 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     // Log the error to an error reporting service
-    console.error('Error caught by boundary:', error, errorInfo);
+    const componentName = this.props.componentName || 'ErrorBoundary';
+    errorReporter.handleBoundaryError(error, errorInfo, componentName);
     
     // Store the error info in state for rendering
     this.setState({
@@ -51,9 +54,6 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
     }
-    
-    // You could also log to an error reporting service here
-    // logErrorToService(error, errorInfo);
   }
   
   handleRefresh = (): void => {
