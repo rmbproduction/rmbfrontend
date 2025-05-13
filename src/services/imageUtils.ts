@@ -85,6 +85,23 @@ export const getCloudinaryUrl = (
     'static_assets/founder.jpg': 'founder_vpnyov.jpg',
   };
   
+  // High quality settings for important assets
+  const HIGH_QUALITY_ASSETS = [
+    'logo_jlugzw.jpg',
+    'bikeExpert_qt2sfa.jpg',
+    'founder_vpnyov.jpg',
+    'logo',
+    'bikeExpert',
+    'founder'
+  ];
+  
+  // Asset natural dimensions for proper rendering
+  const ASSET_DIMENSIONS: Record<string, { width: number; height: number }> = {
+    'logo_jlugzw.jpg': { width: 240, height: 80 },
+    'bikeExpert_qt2sfa.jpg': { width: 800, height: 500 },
+    'founder_vpnyov.jpg': { width: 600, height: 400 }
+  };
+  
   // Check if this is a known asset
   const cloudinaryId = ASSET_TO_CLOUDINARY_MAP[cleanPath];
   const finalPath = cloudinaryId || cleanPath;
@@ -92,16 +109,58 @@ export const getCloudinaryUrl = (
   // Build transformation string
   const transformations = [];
   
-  if (options.width) transformations.push(`w_${options.width}`);
-  if (options.height) transformations.push(`h_${options.height}`);
-  if (options.quality) transformations.push(`q_${options.quality}`);
-  if (options.crop) transformations.push(`c_${options.crop}`);
+  // Check if this is a high-quality asset
+  const isHighQualityAsset = HIGH_QUALITY_ASSETS.some(asset => 
+    finalPath.includes(asset)
+  );
   
-  // Always use f_auto for automatic format selection (WebP when supported)
-  transformations.push('f_auto');
+  // Get natural dimensions for known assets if dimensions not provided
+  const assetDimensions = Object.keys(ASSET_DIMENSIONS).find(key => 
+    finalPath.includes(key)
+  );
   
-  // Add q_auto for automatic quality optimization if quality not specified
-  if (!options.quality) transformations.push('q_auto');
+  // Add dimensions with preference to passed options
+  if (options.width) {
+    transformations.push(`w_${options.width}`);
+  } else if (assetDimensions && ASSET_DIMENSIONS[assetDimensions].width) {
+    transformations.push(`w_${ASSET_DIMENSIONS[assetDimensions].width}`);
+  }
+  
+  if (options.height) {
+    transformations.push(`h_${options.height}`);
+  } else if (assetDimensions && ASSET_DIMENSIONS[assetDimensions].height) {
+    transformations.push(`h_${ASSET_DIMENSIONS[assetDimensions].height}`);
+  }
+  
+  // Set quality based on asset importance
+  if (options.quality) {
+    transformations.push(`q_${options.quality}`);
+  } else if (isHighQualityAsset) {
+    // Use higher quality for important assets
+    transformations.push('q_95');
+  } else {
+    // Use automatic quality for other assets
+    transformations.push('q_auto');
+  }
+  
+  // Set crop mode to preserve aspect ratio
+  if (options.crop) {
+    transformations.push(`c_${options.crop}`);
+  } else if (options.width && options.height) {
+    // If both dimensions provided, use fill to maintain aspect ratio
+    transformations.push('c_fill');
+  }
+  
+  // Special format handling for logo (PNG) vs other images
+  if (finalPath.includes('logo')) {
+    // For logos, prefer PNG for crisp edges
+    transformations.push('f_png');
+  } else if (options.format) {
+    transformations.push(`f_${options.format}`);
+  } else {
+    // Use auto format for other images
+    transformations.push('f_auto');
+  }
   
   // Construct the URL
   const transformationString = transformations.length > 0 

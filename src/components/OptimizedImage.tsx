@@ -24,6 +24,13 @@ const ASSET_TO_CLOUDINARY_MAP: Record<string, string> = {
 // Cloudinary version number for these uploads
 const CLOUDINARY_VERSION = 'v1747031052';
 
+// Natural dimensions for known assets to prevent distortion
+const ASSET_DIMENSIONS: Record<string, { width: number; height: number; quality: number }> = {
+  'logo.png': { width: 240, height: 80, quality: 100 },
+  'bikeExpert.jpg': { width: 800, height: 500, quality: 95 },
+  'founder.jpg': { width: 600, height: 400, quality: 95 }
+};
+
 /**
  * OptimizedImage - A component for high-performance image delivery
  * Automatically uses Cloudinary for dynamic resizing, format conversion, and compression
@@ -61,24 +68,40 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
     const hasExtension = cloudinaryId.includes('_');
     const fileExtension = hasExtension ? 'jpg' : (assetPath.includes('.') ? assetPath.split('.').pop() : 'jpg');
     
-    // Build the optimized source URL using direct Cloudinary URL format
-    optimizedSrc = `https://res.cloudinary.com/dz81bjuea/image/upload/${CLOUDINARY_VERSION}/${cloudinaryId}${!hasExtension ? `.${fileExtension}` : ''}`;
+    // Get natural dimensions and quality for known assets or use passed props
+    const assetInfo = ASSET_DIMENSIONS[assetPath];
+    const imageWidth = assetInfo?.width || width;
+    const imageHeight = assetInfo?.height || height;
+    const imageQuality = assetInfo?.quality || quality;
     
-    // If dimensions or quality are provided, use Cloudinary transformations
-    if (width || height || quality) {
-      const transformations = [];
-      if (width) transformations.push(`w_${width}`);
-      if (height) transformations.push(`h_${height}`);
-      if (quality) transformations.push(`q_${quality}`);
-      transformations.push('f_auto'); // Always use automatic format
-      
-      optimizedSrc = `https://res.cloudinary.com/dz81bjuea/image/upload/${transformations.join(',')}/${CLOUDINARY_VERSION}/${cloudinaryId}${!hasExtension ? `.${fileExtension}` : ''}`;
+    // Build transformations with the right dimensions and quality
+    const transformations = [];
+    if (assetPath === 'logo.png') {
+      // Special handling for logo - use PNG format for crisp edges
+      transformations.push('f_png');
+      transformations.push(`q_${imageQuality}`);
+    } else {
+      // For photos, use auto format but with high quality
+      transformations.push('f_auto');
+      transformations.push(`q_${imageQuality}`);
     }
+    
+    // Add dimensions ensuring aspect ratio is maintained
+    if (imageWidth) transformations.push(`w_${imageWidth}`);
+    if (imageHeight) transformations.push(`h_${imageHeight}`);
+    
+    // For known assets, add crop parameter to prevent distortion
+    transformations.push('c_fill');
+    
+    // Build the optimized source URL using direct Cloudinary URL format
+    optimizedSrc = `https://res.cloudinary.com/dz81bjuea/image/upload/${transformations.join(',')}/${CLOUDINARY_VERSION}/${cloudinaryId}${!hasExtension ? `.${fileExtension}` : ''}`;
     
     // Add debug log to help diagnose
     console.debug('Asset URL conversion:', { 
       original: src, 
       cloudinaryId,
+      dimensions: `${imageWidth}x${imageHeight}`,
+      quality: imageQuality,
       optimizedSrc 
     });
   } else if (!isCloudinaryUrl && src) {
