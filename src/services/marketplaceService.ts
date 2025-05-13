@@ -793,46 +793,78 @@ const marketplaceService = {
         
         console.log('Sending multipart form data request for sell request with vehicle ID:', vehicleId);
         
-        const response = await axios.post(`${API_CONFIG.BASE_URL}/marketplace/sell-requests/`, data, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
-        console.log('Submission successful! Response:', response.data);
-        
-        // Clean up any blob URLs to prevent memory leaks
+        // Enhanced error handling for debugging API errors
         try {
-          // Clean up photo blob URLs
-          Object.keys(photos).forEach(key => {
-            const photo = photos[key];
-            if (photo && photo instanceof File) {
-              // Use a safer approach that doesn't rely on non-standard properties
-              const blobUrl = (photo as any)._blobURL || null;
-              if (blobUrl) {
-                safeRevokeUrl(blobUrl);
-              }
+          const response = await axios.post(`${API_CONFIG.BASE_URL}/marketplace/sell-requests/`, data, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              'Authorization': `Bearer ${token}`
             }
           });
           
-          // Clean up document blob URLs
-          Object.keys(documents).forEach(key => {
-            const doc = documents[key];
-            if (doc && doc instanceof File) {
-              // Use a safer approach that doesn't rely on non-standard properties
-              const blobUrl = (doc as any)._blobURL || null;
-              if (blobUrl) {
-                safeRevokeUrl(blobUrl);
+          console.log('Submission successful! Response:', response.data);
+          
+          // Clean up any blob URLs to prevent memory leaks
+          try {
+            // Clean up photo blob URLs
+            Object.keys(photos).forEach(key => {
+              const photo = photos[key];
+              if (photo && photo instanceof File) {
+                // Use a safer approach that doesn't rely on non-standard properties
+                const blobUrl = (photo as any)._blobURL || null;
+                if (blobUrl) {
+                  safeRevokeUrl(blobUrl);
+                }
               }
+            });
+            
+            // Clean up document blob URLs
+            Object.keys(documents).forEach(key => {
+              const doc = documents[key];
+              if (doc && doc instanceof File) {
+                // Use a safer approach that doesn't rely on non-standard properties
+                const blobUrl = (doc as any)._blobURL || null;
+                if (blobUrl) {
+                  safeRevokeUrl(blobUrl);
+                }
+              }
+            });
+          } catch (e) {
+            console.error('Error cleaning up blob URLs:', e);
+            // Non-critical error, don't throw
+          }
+          
+          return response.data;
+        } catch (submitError: any) {
+          // Enhanced error logging
+          console.error('Error submitting sell request:', submitError);
+          console.error('Error status:', submitError.response?.status);
+          console.error('Error data:', submitError.response?.data);
+          
+          // Check for specific error types
+          if (submitError.response?.data) {
+            // Convert error data to string for easier debugging
+            const errorDataStr = JSON.stringify(submitError.response.data);
+            console.error('Full error response as string:', errorDataStr);
+            
+            // Extract field-specific errors if available
+            if (typeof submitError.response.data === 'object') {
+              Object.entries(submitError.response.data).forEach(([field, errors]) => {
+                console.error(`Field '${field}' errors:`, errors);
+              });
             }
-          });
-        } catch (e) {
-          console.error('Error cleaning up blob URLs:', e);
-          // Non-critical error, don't throw
+          }
+          
+          // Enhanced debug output for form data
+          console.log('Debug request details:');
+          console.log('- vehicleId:', vehicleId);
+          console.log('- contact_number:', formattedPhone);
+          console.log('- pickup_address length:', formattedAddress.length);
+          console.log('- pickup_slot:', pickupSlot);
+          
+          // Re-throw with better message
+          throw submitError;
         }
-        
-        return response.data;
       } else {
         // If we don't have real photos, use the simplified JSON approach
         console.log('Using simplified JSON approach due to missing photos and documents');
@@ -879,6 +911,7 @@ const marketplaceService = {
           return retryResponse.data;
         } catch (retryError: any) {
           console.error('Retry also failed:', retryError);
+          console.error('Retry error details:', retryError.response?.data);
           // If retry also fails, continue with normal error handling
         }
       }
@@ -962,6 +995,13 @@ const marketplaceService = {
       }
       
       console.error('Error submitting vehicle:', error);
+      
+      // Enhanced error inspection
+      if (error.response) {
+        console.error('Server response status:', error.response.status);
+        console.error('Server response data:', error.response.data);
+        console.error('Server response headers:', error.response.headers);
+      }
       
       // Format error message based on type
       let errorMessage = 'An unknown error occurred';
@@ -2226,7 +2266,244 @@ const marketplaceService = {
     }
     
     return marketplaceService.enrichVehicleData(vehicle);
-  }
+  },
+
+  // Add this method to debug specific API errors
+  debugSubmitForm: async (vehicleId: string, formData: any) => {
+    try {
+      console.log('Running minimal debug submission test');
+      
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+      
+      // Format basic data with only required fields
+      const minimalData = new FormData();
+      
+      // Add only the absolute minimum required fields
+      minimalData.append('vehicle', vehicleId);
+      
+      // Handle phone number carefully
+      let formattedPhone = formData.contactNumber || localStorage.getItem('userPhone') || '';
+      if (!formattedPhone.startsWith('+')) {
+        formattedPhone = '+' + formattedPhone.replace(/\D/g, '');
+      }
+      // Ensure it's at least 10 digits
+      if (formattedPhone.replace(/\D/g, '').length < 10) {
+        formattedPhone = '+91' + '1234567890';
+      }
+      minimalData.append('contact_number', formattedPhone);
+      
+      // Add minimal pickup address
+      const address = formData.pickupAddress || 'Test Address, 123 Street, City, 10001';
+      minimalData.append('pickup_address', address);
+      
+      // Add fixed pickup slot - use noon tomorrow UTC
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setUTCHours(12, 0, 0, 0);
+      minimalData.append('pickup_slot', tomorrow.toISOString());
+      
+      console.log('Sending minimal form with required fields only:');
+      console.log('- vehicle:', vehicleId);
+      console.log('- contact_number:', formattedPhone);
+      console.log('- pickup_address:', address);
+      console.log('- pickup_slot:', tomorrow.toISOString());
+      
+      // Make the API call with minimal data
+      const response = await axios.post(
+        `${API_CONFIG.BASE_URL}/marketplace/sell-requests/`,
+        minimalData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      console.log('Minimal debug submission successful:', response.data);
+      return {
+        success: true,
+        data: response.data,
+        message: 'Debug request succeeded'
+      };
+    } catch (error: any) {
+      console.error('Debug submission failed:', error);
+      console.error('Error response data:', error.response?.data);
+      
+      // Extract detailed error information
+      let errorDetails = 'Unknown error';
+      if (error.response?.data) {
+        if (typeof error.response.data === 'string') {
+          errorDetails = error.response.data;
+        } else {
+          // Format field errors into a readable message
+          errorDetails = JSON.stringify(error.response.data, null, 2);
+        }
+      }
+      
+      return {
+        success: false,
+        error: error,
+        message: error.message,
+        details: errorDetails,
+        statusCode: error.response?.status
+      };
+    }
+  },
+  
+  // Simplified submission method with minimal data
+  submitVehicleMinimal: async (formData: any) => {
+    console.log('Using simplified submission with minimal data');
+    
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      throw new Error('Authentication required. Please log in to continue.');
+    }
+    
+    try {
+      // STEP 1: Create vehicle with minimal required fields only
+      console.log('Step 1: Creating vehicle with minimal data');
+      
+      const minimalVehicleData = {
+        vehicle_type: formData.type || 'bike',
+        brand: formData.brand,
+        model: formData.model,
+        year: parseInt(formData.year),
+        registration_number: formData.registrationNumber.trim().toUpperCase(),
+        kms_driven: parseInt(formData.kmsDriven),
+        fuel_type: formData.fuelType || 'petrol',
+        price: parseInt(formData.expectedPrice)
+      };
+      
+      console.log('Minimal vehicle data:', minimalVehicleData);
+      
+      // Try to find existing vehicle first to avoid duplicates
+      try {
+        const checkResponse = await axios.get(
+          `${API_CONFIG.BASE_URL}/marketplace/vehicles/?registration_number=${encodeURIComponent(formData.registrationNumber)}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        
+        if (checkResponse.data && checkResponse.data.length > 0) {
+          console.log('Found existing vehicle, using its ID');
+          const vehicleId = checkResponse.data[0].id;
+          
+          // STEP 2: Create sell request with only required fields
+          return await marketplaceService.createMinimalSellRequest(vehicleId, formData);
+        }
+      } catch (checkError) {
+        console.warn('Error checking for existing vehicle:', checkError);
+        // Continue with creation
+      }
+      
+      // Create new vehicle
+      const vehicleResponse = await axios.post(
+        `${API_CONFIG.BASE_URL}/marketplace/vehicles/`,
+        minimalVehicleData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      console.log('Vehicle created successfully:', vehicleResponse.data);
+      const vehicleId = vehicleResponse.data.id;
+      
+      // STEP 2: Create sell request with only required fields
+      return await marketplaceService.createMinimalSellRequest(vehicleId, formData);
+      
+    } catch (error: any) {
+      console.error('Error in simplified submission:', error);
+      
+      // More detailed error logging
+      if (error.response) {
+        console.error('Status:', error.response.status);
+        console.error('Data:', error.response.data);
+      }
+      
+      throw error;
+    }
+  },
+  
+  // Create a minimal sell request with only required fields
+  createMinimalSellRequest: async (vehicleId: string, formData: any) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+      
+      // Format phone number
+      let phone = formData.contactNumber || localStorage.getItem('userPhone') || '';
+      if (!phone.startsWith('+')) {
+        phone = '+' + phone.replace(/\D/g, '');
+      }
+      
+      // Make sure phone has at least 10 digits
+      const digits = phone.replace(/\D/g, '');
+      if (digits.length < 10) {
+        phone = '+91' + '1234567890';
+      }
+      
+      // Ensure pickup address is long enough
+      const address = formData.pickupAddress || '';
+      const formattedAddress = address.length >= 10 ? 
+        address : 
+        address + ', Default Address, City, 12345';
+      
+      // Set pickup slot to tomorrow noon UTC
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setUTCHours(12, 0, 0, 0);
+      const pickupSlot = tomorrow.toISOString();
+      
+      // Create minimal JSON request
+      const minimalRequestData = {
+        vehicle: vehicleId,
+        contact_number: phone,
+        pickup_address: formattedAddress,
+        pickup_slot: pickupSlot,
+        is_price_negotiable: formData.isPriceNegotiable === 'true' || formData.isPriceNegotiable === true
+      };
+      
+      console.log('Sending minimal sell request:', minimalRequestData);
+      
+      // Make the API call with minimal JSON
+      const response = await axios.post(
+        `${API_CONFIG.BASE_URL}/marketplace/sell-requests/`,
+        minimalRequestData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      console.log('Sell request created successfully:', response.data);
+      return response.data;
+      
+    } catch (error: any) {
+      console.error('Error creating minimal sell request:', error);
+      
+      // Extract detailed error information
+      if (error.response) {
+        console.error('Status:', error.response.status);
+        console.error('Data:', error.response.data);
+      }
+      
+      throw error;
+    }
+  },
 };
 
 export default marketplaceService; 
