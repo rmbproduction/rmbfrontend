@@ -183,14 +183,30 @@ const VehicleDetailPage = () => {
       };
       
       // Try to set the main image if it exists
-      const mainImage = API_CONFIG.getImageUrl(vehicleData.front_image_url);
-      if (mainImage) {
-        processedVehicle.images.main = mainImage;
+      // First check if we already have a CDN URL in imageUrl property
+      if (vehicleData.imageUrl && vehicleData.imageUrl.includes('cloudinary.com')) {
+        processedVehicle.images.main = vehicleData.imageUrl;
+        console.log('Using CDN imageUrl from API response:', vehicleData.imageUrl);
+      } else if (vehicleData.front_image_url) {
+        // Front image should already be processed by marketplaceService
+        processedVehicle.images.main = vehicleData.front_image_url;
+        console.log('Using front_image_url from API response:', vehicleData.front_image_url);
+      } else {
+        // Create an alternate main image
+        const mainImage = API_CONFIG.getImageUrl(vehicleData.front_image_url || vehicleData.photo_front);
+        if (mainImage) {
+          processedVehicle.images.main = mainImage;
+        }
       }
       
       // Create an image loading utility function to validate image URLs
       const tryLoadImage = (url: string | null | undefined): string | null => {
         if (!url) return null;
+        
+        // If it's already a CDN URL, use it directly
+        if (url.includes('cloudinary.com')) {
+          return url;
+        }
         
         try {
           // Use a proper URL validation rather than just string manipulation
@@ -205,11 +221,11 @@ const VehicleDetailPage = () => {
       // Build the gallery array with valid URLs only, with better validation
       const galleryUrls = [
         // Prioritize the front image first for consistency
-        tryLoadImage(vehicleData.front_image_url),
-        tryLoadImage(vehicleData.back_image_url),
-        tryLoadImage(vehicleData.left_image_url),
-        tryLoadImage(vehicleData.right_image_url),
-        tryLoadImage(vehicleData.dashboard_image_url)
+        vehicleData.front_image_url || tryLoadImage(vehicleData.front_image_url),
+        vehicleData.back_image_url || tryLoadImage(vehicleData.back_image_url),
+        vehicleData.left_image_url || tryLoadImage(vehicleData.left_image_url),
+        vehicleData.right_image_url || tryLoadImage(vehicleData.right_image_url),
+        vehicleData.dashboard_image_url || tryLoadImage(vehicleData.dashboard_image_url)
       ].filter(Boolean) as string[];
       
       // If we have no gallery images, create one with the default

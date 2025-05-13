@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { safeRevokeUrl } from './imageUtils';
+import { safeRevokeUrl, getCloudinaryUrl, persistImageUrl, isValidImageUrl } from './imageUtils';
 import { API_CONFIG } from '../config/api.config';
 import persistentStorageService from './persistentStorageService';
 import { Vehicle } from '../types/vehicles';
@@ -1542,12 +1542,24 @@ const marketplaceService = {
       // Helper function to get safe string value
       const safeStr = (value: any): string => (value !== undefined && value !== null) ? String(value) : '';
       
-      // Helper function to convert relative paths to absolute URLs
-      const getAbsoluteUrl = (path: string | null | undefined) => {
+      // Helper function to convert relative paths to absolute URLs using Cloudinary
+      const getAbsoluteUrl = (path: string | null | undefined, vehicleId: string | number) => {
         if (!path) return null;
         if (path.startsWith('http')) return path;
         
-        // Use the API_CONFIG helper for media URLs
+        // Prefer Cloudinary URL for better performance and reliability
+        try {
+          if (vehicleId) {
+            return getCloudinaryUrl(`vehicle_photos/${vehicleId}`, {
+              width: 400, // Smaller width for listing thumbnails
+              quality: 80
+            });
+          }
+        } catch (err) {
+          console.warn('Error generating Cloudinary URL:', err);
+        }
+        
+        // Fallback to regular media URL if Cloudinary fails
         return API_CONFIG.getMediaUrl(path);
       };
       
@@ -1576,17 +1588,35 @@ const marketplaceService = {
         // Ensure we have at least minimal required data
         const brand = safeStr(vehicle.brand || '');
         const model = safeStr(vehicle.model || '');
+        const vehicleId = vehicle.id || '';
         
         // Get image URL (handle multiple possible formats)
         let imageUrl = null;
         try {
-          // Try various image sources
-          const potentialImageUrl = getAbsoluteUrl(vehicle.front_image_url) || 
-                   getAbsoluteUrl(vehicle.photo_front) || 
-                   (vehicle.images?.front ? getAbsoluteUrl(vehicle.images.front) : null);
+          // Try various image sources - prefer Cloudinary URLs
+          // First, check if we have a stored URL in localStorage
+          if (vehicleId) {
+            const storedUrl = localStorage.getItem(`vehicle_image_${vehicleId}_front`);
+            if (isValidImageUrl(storedUrl)) {
+              imageUrl = storedUrl;
+            }
+          }
           
-          // Check if the image exists
-          imageUrl = await imageExists(potentialImageUrl) || API_CONFIG.getDefaultVehicleImage();
+          // If no stored URL, generate one
+          if (!imageUrl) {
+            // Try various image sources with preference for Cloudinary
+            const potentialImageUrl = getAbsoluteUrl(vehicle.front_image_url, vehicleId) || 
+                     getAbsoluteUrl(vehicle.photo_front, vehicleId) || 
+                     (vehicle.images?.front ? getAbsoluteUrl(vehicle.images.front, vehicleId) : null);
+            
+            // Check if the image exists
+            imageUrl = await imageExists(potentialImageUrl) || API_CONFIG.getDefaultVehicleImage();
+            
+            // Store for future use
+            if (imageUrl && vehicleId) {
+              persistImageUrl(vehicleId.toString(), 'front', imageUrl);
+            }
+          }
         } catch (e) {
           console.warn(`Error processing image for vehicle ${vehicle.id}:`, e);
           imageUrl = API_CONFIG.getDefaultVehicleImage();
@@ -1604,7 +1634,7 @@ const marketplaceService = {
         }
         
         return {
-          id: vehicle.id || '',
+          id: vehicleId,
           brand: brand,
           model: model,
           year: vehicle.year || new Date().getFullYear(),
@@ -1654,7 +1684,81 @@ const marketplaceService = {
           'Authorization': token ? `Bearer ${token}` : ''
         }
       });
-      return response.data;
+      
+      // Process the vehicle data to normalize image URLs
+      const vehicleData = response.data;
+      
+      // Helper function to convert an image URL to CDN format
+      const processImageUrl = (url: string | null | undefined): string | null => {
+        if (!url) return null;
+        
+        // If it's already a Cloudinary URL, leave it as is
+        if (url.includes('cloudinary.com')) {
+          return url;
+        }
+        
+        // If it's a relative URL, try to create a CDN URL
+        if (vehicleId && !url.startsWith('http')) {
+          // Extract just the filename if it's a path
+          const parts = url.split('/');
+          const filename = parts[parts.length - 1];
+          
+          // Generate a Cloudinary URL for the image
+          try {
+            return getCloudinaryUrl(`vehicle_photos/${vehicleId}`, {
+              width: 800,
+              quality: 85
+            });
+          } catch (err) {
+            console.warn('Error generating Cloudinary URL:', err);
+          }
+        }
+        
+        // If all else fails, use the API_CONFIG to get an absolute URL
+        return API_CONFIG.getImageUrl(url);
+      };
+      
+      // Process all image URLs
+      if (vehicleData) {
+        // Store original URLs for debugging
+        vehicleData._original_front_image_url = vehicleData.front_image_url;
+        
+        // Process main image URLs
+        vehicleData.front_image_url = processImageUrl(vehicleData.front_image_url);
+        vehicleData.back_image_url = processImageUrl(vehicleData.back_image_url);
+        vehicleData.left_image_url = processImageUrl(vehicleData.left_image_url);
+        vehicleData.right_image_url = processImageUrl(vehicleData.right_image_url);
+        vehicleData.dashboard_image_url = processImageUrl(vehicleData.dashboard_image_url);
+        
+        // Add an imageUrl field for compatibility with other components
+        vehicleData.imageUrl = vehicleData.front_image_url || processImageUrl(vehicleData.photo_front);
+        
+        // Log the processed vehicle data
+        console.log('Processed vehicle data with CDN URLs:', vehicleData);
+        
+        // Store processed URLs for offline access
+        if (vehicleId) {
+          try {
+            // Store in localStorage for next time
+            if (vehicleData.front_image_url) {
+              persistImageUrl(vehicleId, 'front', vehicleData.front_image_url);
+            }
+            if (vehicleData.back_image_url) {
+              persistImageUrl(vehicleId, 'back', vehicleData.back_image_url);
+            }
+            if (vehicleData.left_image_url) {
+              persistImageUrl(vehicleId, 'left', vehicleData.left_image_url);
+            }
+            if (vehicleData.right_image_url) {
+              persistImageUrl(vehicleId, 'right', vehicleData.right_image_url);
+            }
+          } catch (err) {
+            console.warn('Error storing image URLs:', err);
+          }
+        }
+      }
+      
+      return vehicleData;
     } catch (error) {
       console.error('Error fetching vehicle details:', error);
       throw error;

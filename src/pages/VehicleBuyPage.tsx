@@ -20,6 +20,7 @@ interface UIVehicle extends Vehicle {
   formatted_price?: string;
   imageUrl?: string; // New field for front_image_url
   thumbnailPath: string | null;
+  front_image_url?: string | null; // Add this property
 }
 
 const VehicleBuyPage = () => {
@@ -354,8 +355,23 @@ const VehicleBuyPage = () => {
   };
 
   const getImageUrl = (vehicle: UIVehicle) => {
+    // First check if we already have a CDN URL in imageUrl property (added by marketplaceService)
+    if (vehicle.imageUrl && vehicle.imageUrl.includes('cloudinary.com')) {
+      return vehicle.imageUrl;
+    }
+    
+    // Check if front_image_url is a CDN URL
+    if (vehicle.front_image_url && vehicle.front_image_url.includes('cloudinary.com')) {
+      return vehicle.front_image_url;
+    }
+    
     // Check if vehicle has image_urls from the API response
     if (vehicle.image_urls?.main) {
+      // If it's already a Cloudinary URL, use it directly
+      if (vehicle.image_urls.main.includes('cloudinary.com')) {
+        return vehicle.image_urls.main;
+      }
+      
       return vehicle.image_urls.main.startsWith('http') 
         ? vehicle.image_urls.main 
         : API_CONFIG.getMediaUrl(vehicle.image_urls.main);
@@ -363,6 +379,11 @@ const VehicleBuyPage = () => {
     
     // Check for thumbnail
     if (vehicle.image_urls?.thumbnail) {
+      // If it's already a Cloudinary URL, use it directly
+      if (vehicle.image_urls.thumbnail.includes('cloudinary.com')) {
+        return vehicle.image_urls.thumbnail;
+      }
+      
       return vehicle.image_urls.thumbnail.startsWith('http') 
         ? vehicle.image_urls.thumbnail 
         : API_CONFIG.getMediaUrl(vehicle.image_urls.thumbnail);
@@ -370,6 +391,11 @@ const VehicleBuyPage = () => {
     
     // If the image is a full URL, use it
     if (vehicle.image && (vehicle.image.startsWith('http') || vehicle.image.startsWith('/'))) {
+      // If it's a Cloudinary URL, use it directly
+      if (vehicle.image.includes('cloudinary.com')) {
+        return vehicle.image;
+      }
+      
       return vehicle.image;
     }
     
