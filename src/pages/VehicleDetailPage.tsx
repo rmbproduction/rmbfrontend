@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import * as React from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -135,8 +136,8 @@ const VehicleDetailPage = () => {
       }
       
       // Set up handlers before setting src
-      img.onload = () => handleImageLoad(index, { target: imagePreloadersRef.current[index] } as React.SyntheticEvent<HTMLImageElement>));
-      img.onerror = (e) => handleImageError(index, e as any);
+      img.onload = () => handleImageLoad(index, { target: imagePreloadersRef.current[index] } as unknown as React.SyntheticEvent<HTMLImageElement>);
+      img.onerror = () => handleImageError(index, { target: img } as unknown as React.SyntheticEvent<HTMLImageElement>);
       
       // Set src after event handlers
       try {
@@ -544,7 +545,7 @@ const VehicleDetailPage = () => {
                     onClick={() => openModal(activeImageIndex)}
                     loading="eager"
                     decoding="async"
-                    onLoad={() => handleImageLoad(activeImageIndex, { target: imagePreloadersRef.current[activeImageIndex] } as React.SyntheticEvent<HTMLImageElement>)}
+                    onLoad={() => handleImageLoad(activeImageIndex, { target: imagePreloadersRef.current[activeImageIndex] } as unknown as React.SyntheticEvent<HTMLImageElement>)}
                     onError={(e) => handleImageError(activeImageIndex, e)}
                   />
                   
@@ -599,7 +600,7 @@ const VehicleDetailPage = () => {
                         src={image || API_CONFIG.getDefaultVehicleImage()}
                         alt={`${vehicle.name} thumbnail ${idx + 1}`}
                         className={`w-full h-full object-cover transition-opacity duration-300 ${imagesLoaded[idx] ? 'opacity-100' : 'opacity-0'}`}
-                        onLoad={() => handleImageLoad(idx, { target: imagePreloadersRef.current[idx] } as React.SyntheticEvent<HTMLImageElement>)}
+                        onLoad={() => handleImageLoad(idx, { target: imagePreloadersRef.current[idx] } as unknown as React.SyntheticEvent<HTMLImageElement>)}
                         onError={(e) => handleImageError(idx, e)}
                       />
                     </div>
@@ -865,7 +866,7 @@ const VehicleDetailPage = () => {
                   src={vehicle?.images.gallery[activeImageIndex] || API_CONFIG.getDefaultVehicleImage()}
                   alt={vehicle?.name || "Vehicle"}
                   className={`w-full h-full object-contain transition-opacity duration-300 ${imagesLoaded[activeImageIndex] ? 'opacity-100' : 'opacity-0'}`}
-                  onLoad={() => handleImageLoad(activeImageIndex, { target: imagePreloadersRef.current[activeImageIndex] } as React.SyntheticEvent<HTMLImageElement>)}
+                  onLoad={() => handleImageLoad(activeImageIndex, { target: imagePreloadersRef.current[activeImageIndex] } as unknown as React.SyntheticEvent<HTMLImageElement>)}
                   onError={(e) => handleImageError(activeImageIndex, e)}
                 />
               </div>
