@@ -348,4 +348,110 @@ export const syncImageStorageForVehicle = async (
   } catch (error) {
     console.error('Error synchronizing image storage:', error);
   }
+};
+
+/**
+ * Validate if a URL is a proper Cloudinary URL with version number
+ * @param url The URL to validate
+ * @returns boolean indicating if it's a valid Cloudinary URL
+ */
+export const isValidCloudinaryUrl = (url: string | null | undefined): boolean => {
+  if (!url || typeof url !== 'string') return false;
+  
+  // Check if it's a properly formatted Cloudinary URL with version number
+  // Example: https://res.cloudinary.com/dz81bjuea/image/upload/v1747150610/vehicle_photos/back/hrj3dowlhp5biid3ardg.png
+  return url.includes('cloudinary.com') && 
+         url.includes('/upload/v') && 
+         !url.includes('/v1/') && // avoid the common error format
+         url.match(/\/v\d+\//) !== null; // ensure it has a numeric version
+};
+
+/**
+ * Process an image URL to ensure it's properly formatted
+ * @param url The original URL from API or other source
+ * @returns A properly formatted URL or null
+ */
+export const processCloudinaryUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  
+  // If it's already a properly formatted Cloudinary URL, use it directly
+  if (isValidCloudinaryUrl(url)) {
+    return url;
+  }
+  
+  // If it's a URL with hostname but not properly formatted, log for debugging
+  if (url.includes('cloudinary.com')) {
+    console.warn('Potentially malformed Cloudinary URL:', url);
+  }
+  
+  // If it's a relative media URL, complete it
+  if (url.startsWith('/media/')) {
+    return `${API_CONFIG.MEDIA_URL}${url}`;
+  }
+  
+  // Return the original URL - don't try to fix it
+  // The backend should provide proper URLs
+  return url;
+};
+
+/**
+ * Get an image URL with guaranteed fallback
+ * @param url The primary URL to try
+ * @param fallbackUrl Optional specific fallback URL
+ * @returns A URL that should work
+ */
+export const getImageUrlWithFallback = (
+  url: string | null | undefined, 
+  fallbackUrl?: string
+): string => {
+  // First process the URL to ensure it's valid
+  const processedUrl = processCloudinaryUrl(url);
+  
+  // If processing succeeded, use it
+  if (processedUrl) {
+    return processedUrl;
+  }
+  
+  // Use the provided fallback or a default placeholder
+  return fallbackUrl || API_CONFIG.getCloudinaryPlaceholder();
+};
+
+/**
+ * Store a valid Cloudinary URL in localStorage for future use
+ * @param vehicleId The vehicle ID
+ * @param imageType The image type (front, back, etc.)
+ * @param url The URL to store
+ */
+export const storeValidCloudinaryUrl = (
+  vehicleId: string, 
+  imageType: string, 
+  url: string
+): void => {
+  // Only store if it's a valid Cloudinary URL
+  if (isValidCloudinaryUrl(url)) {
+    try {
+      localStorage.setItem(`vehicle_image_${vehicleId}_${imageType}`, url);
+    } catch (e) {
+      console.warn('Error storing URL in localStorage:', e);
+    }
+  }
+};
+
+/**
+ * Retrieve a previously stored valid Cloudinary URL
+ * @param vehicleId The vehicle ID
+ * @param imageType The image type (front, back, etc.)
+ * @returns The stored URL or null if not found
+ */
+export const getStoredCloudinaryUrl = (
+  vehicleId: string, 
+  imageType: string
+): string | null => {
+  try {
+    const storedUrl = localStorage.getItem(`vehicle_image_${vehicleId}_${imageType}`);
+    return isValidCloudinaryUrl(storedUrl) ? storedUrl : null;
+  } catch (e) {
+    console.warn('Error retrieving URL from localStorage:', e);
+    return null;
+  }
 }; 

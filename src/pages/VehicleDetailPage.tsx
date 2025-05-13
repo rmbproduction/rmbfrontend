@@ -85,6 +85,37 @@ const VehicleDetailPage = () => {
     }
   }, [id]);
 
+  // This useEffect hook validates and logs image URLs for debugging
+  useEffect(() => {
+    if (vehicle && vehicle.images) {
+      // Log image URLs for debugging
+      console.log('[VehicleDetailPage] Vehicle images:', {
+        main: vehicle.images.main,
+        gallery: vehicle.images.gallery,
+        count: vehicle.images.gallery.length
+      });
+      
+      // Add direct DOM inspection for image elements
+      setTimeout(() => {
+        const mainImage = document.querySelector('.main-vehicle-image img');
+        if (mainImage) {
+          console.log('[VehicleDetailPage] Main image element src:', (mainImage as HTMLImageElement).src);
+        } else {
+          console.warn('[VehicleDetailPage] Main image element not found in DOM');
+        }
+        
+        // Check gallery images
+        const galleryImages = document.querySelectorAll('.vehicle-gallery img');
+        console.log(`[VehicleDetailPage] Found ${galleryImages.length} gallery image elements`);
+        
+        // Log every gallery image for debugging
+        galleryImages.forEach((img, index) => {
+          console.log(`[VehicleDetailPage] Gallery image ${index} src:`, (img as HTMLImageElement).src);
+        });
+      }, 500); // Small delay to ensure DOM is updated
+    }
+  }, [vehicle]);
+
   const preloadImages = (imageUrls: string[]) => {
     // Clear any previous preloaders
     imagePreloadersRef.current = [];
@@ -104,7 +135,7 @@ const VehicleDetailPage = () => {
       }
       
       // Set up handlers before setting src
-      img.onload = () => handleImageLoad(index);
+      img.onload = () => handleImageLoad(index, { target: imagePreloadersRef.current[index] } as React.SyntheticEvent<HTMLImageElement>));
       img.onerror = (e) => handleImageError(index, e as any);
       
       // Set src after event handlers
@@ -120,41 +151,36 @@ const VehicleDetailPage = () => {
     });
   };
 
-  const handleImageLoad = useCallback((index: number) => {
-    console.log(`Image at index ${index} loaded successfully`);
-    setImagesLoaded(prev => ({ ...prev, [index]: true }));
-    
-    // Log successful loading with dimensions for debugging
-    try {
-      if (imagePreloadersRef.current[index]) {
-        const img = imagePreloadersRef.current[index];
-        console.log(`Image ${index} dimensions: ${img.width}x${img.height}`);
-      }
-    } catch (err) {
-      // Ignore any errors in debugging code
-    }
-  }, []);
-
+  // Enhanced image error handler with detailed logging
   const handleImageError = useCallback((index: number, e: React.SyntheticEvent<HTMLImageElement>) => {
-    console.warn(`Failed to load image at index ${index}`);
     const target = e.target as HTMLImageElement;
+    const originalSrc = target.src;
     
-    // Get vehicle information for better logging
-    const vehicleInfo = vehicle ? `vehicle ${vehicle.id} (${vehicle.name})` : 'unknown vehicle';
-    console.warn(`Failed to load image for ${vehicleInfo}. Using placeholder.`);
+    console.warn(`[VehicleDetailPage] Image load error at index ${index}`, {
+      originalSrc,
+      vehicleId: vehicle?.id,
+      vehicleName: vehicle?.name
+    });
     
-    // Use a guaranteed working Cloudinary placeholder - this is essential for reliability
+    // Use Cloudinary placeholder as fallback with vehicle name
     const fallbackUrl = API_CONFIG.getCloudinaryPlaceholder(
-      vehicle?.name || 'Vehicle',
+      vehicle?.name || `Vehicle ${vehicle?.id || ''}`,
       600,
       400
     );
     
-    // Set a new source only if the current one isn't already the fallback
+    // Only change src if it's different to avoid infinite loops
     if (target.src !== fallbackUrl) {
+      console.log(`[VehicleDetailPage] Replacing failed image with fallback:`, fallbackUrl);
       target.src = fallbackUrl;
     }
   }, [vehicle]);
+  
+  // Debug function to monitor image loading success
+  const handleImageLoad = useCallback((index: number, e: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = e.target as HTMLImageElement;
+    console.log(`[VehicleDetailPage] Image ${index} loaded successfully:`, target.src);
+  }, []);
 
   const fetchVehicleDetails = async (vehicleId: string) => {
     setLoading(true);
@@ -166,6 +192,14 @@ const VehicleDetailPage = () => {
       
       // Debug: Log the original vehicle data
       console.log('Original vehicle data:', vehicleData);
+      console.log('Image URLs from API:', {
+        front: vehicleData.front_image_url,
+        back: vehicleData.back_image_url,
+        left: vehicleData.left_image_url,
+        right: vehicleData.right_image_url,
+        dashboard: vehicleData.dashboard_image_url,
+        imageUrl: vehicleData.imageUrl
+      });
       
       // Get the default image for fallbacks
       const defaultImage = API_CONFIG.getDefaultVehicleImage();
@@ -177,87 +211,44 @@ const VehicleDetailPage = () => {
         name: `${vehicleData.brand} ${vehicleData.model}`,
         // Organize images for the gallery
         images: {
-          main: defaultImage, // Initialize with default image to always have a fallback
-          gallery: []
+          // Use the API-provided front image URL OR the imageUrl field OR default
+          main: vehicleData.front_image_url || vehicleData.imageUrl || defaultImage,
+          // Create a gallery of all available images, filtering out nulls
+          gallery: [
+            vehicleData.front_image_url,
+            vehicleData.back_image_url,
+            vehicleData.left_image_url, 
+            vehicleData.right_image_url,
+            vehicleData.dashboard_image_url
+          ].filter(Boolean) as string[]
         }
       };
       
-      // Try to set the main image if it exists
-      // First check if we already have a CDN URL in imageUrl property
-      if (vehicleData.imageUrl && vehicleData.imageUrl.includes('cloudinary.com')) {
-        processedVehicle.images.main = vehicleData.imageUrl;
-        console.log('Using CDN imageUrl from API response:', vehicleData.imageUrl);
-      } else if (vehicleData.front_image_url) {
-        // Front image should already be processed by marketplaceService
-        processedVehicle.images.main = vehicleData.front_image_url;
-        console.log('Using front_image_url from API response:', vehicleData.front_image_url);
-      } else {
-        // Create an alternate main image
-        const mainImage = API_CONFIG.getImageUrl(vehicleData.front_image_url || vehicleData.photo_front);
-        if (mainImage) {
-          processedVehicle.images.main = mainImage;
-        }
+      // If we don't have any gallery images, add at least the main image
+      if (processedVehicle.images.gallery.length === 0 && processedVehicle.images.main) {
+        processedVehicle.images.gallery = [processedVehicle.images.main];
       }
       
-      // Create an image loading utility function to validate image URLs
-      const tryLoadImage = (url: string | null | undefined): string | null => {
-        if (!url) return null;
-        
-        // If it's already a CDN URL, use it directly
-        if (url.includes('cloudinary.com')) {
-          return url;
-        }
-        
-        try {
-          // Use a proper URL validation rather than just string manipulation
-          const validatedUrl = API_CONFIG.getImageUrl(url);
-          return validatedUrl;
-        } catch (err) {
-          console.warn(`Failed to validate image URL: ${url}`, err);
-          return null;
-        }
-      };
+      // Debug: Log the processed vehicle with image URLs
+      console.log('Processed vehicle for UI:', processedVehicle);
+      console.log('Gallery images:', processedVehicle.images.gallery);
       
-      // Build the gallery array with valid URLs only, with better validation
-      const galleryUrls = [
-        // Prioritize the front image first for consistency
-        vehicleData.front_image_url || tryLoadImage(vehicleData.front_image_url),
-        vehicleData.back_image_url || tryLoadImage(vehicleData.back_image_url),
-        vehicleData.left_image_url || tryLoadImage(vehicleData.left_image_url),
-        vehicleData.right_image_url || tryLoadImage(vehicleData.right_image_url),
-        vehicleData.dashboard_image_url || tryLoadImage(vehicleData.dashboard_image_url)
-      ].filter(Boolean) as string[];
-      
-      // If we have no gallery images, create one with the default
-      if (galleryUrls.length === 0) {
-        console.warn(`No valid image URLs found for vehicle ${vehicleId}. Creating avatar.`);
-        galleryUrls.push(defaultImage);
-      } else {
-        // Always ensure we have the main image in the gallery as well
-        if (!galleryUrls.includes(processedVehicle.images.main)) {
-          galleryUrls.unshift(processedVehicle.images.main);
-        }
+      // Pre-load images if possible
+      if (processedVehicle.images.gallery.length > 0) {
+        preloadImages(processedVehicle.images.gallery);
       }
       
-      // Deduplicate gallery images
-      processedVehicle.images.gallery = [...new Set(galleryUrls)];
-      
-      // Log processed images for debugging
-      console.log('Processed image URLs:', {
-        main: processedVehicle.images.main,
-        gallery: processedVehicle.images.gallery,
-        count: processedVehicle.images.gallery.length
-      });
-      
-      // Reset imagesLoaded state for the new gallery
-      setImagesLoaded({});
+      // Set the processed vehicle to state
       setVehicle(processedVehicle);
+      setActiveImageIndex(0);
+      setShowModal(false);
+      
+      // Reset loading state
       setLoading(false);
-    } catch (error) {
-      console.error('Failed to fetch vehicle details:', error);
-      setError('Failed to fetch vehicle details. Please try again later.');
+    } catch (err) {
+      console.error('Error fetching vehicle details:', err);
+      setError('Failed to load vehicle details. Please try again.');
       setLoading(false);
-      toast.error('Failed to load vehicle details. Please try again.');
     }
   };
 
@@ -553,7 +544,7 @@ const VehicleDetailPage = () => {
                     onClick={() => openModal(activeImageIndex)}
                     loading="eager"
                     decoding="async"
-                    onLoad={() => handleImageLoad(activeImageIndex)}
+                    onLoad={() => handleImageLoad(activeImageIndex, { target: imagePreloadersRef.current[activeImageIndex] } as React.SyntheticEvent<HTMLImageElement>)}
                     onError={(e) => handleImageError(activeImageIndex, e)}
                   />
                   
@@ -608,7 +599,7 @@ const VehicleDetailPage = () => {
                         src={image || API_CONFIG.getDefaultVehicleImage()}
                         alt={`${vehicle.name} thumbnail ${idx + 1}`}
                         className={`w-full h-full object-cover transition-opacity duration-300 ${imagesLoaded[idx] ? 'opacity-100' : 'opacity-0'}`}
-                        onLoad={() => handleImageLoad(idx)}
+                        onLoad={() => handleImageLoad(idx, { target: imagePreloadersRef.current[idx] } as React.SyntheticEvent<HTMLImageElement>)}
                         onError={(e) => handleImageError(idx, e)}
                       />
                     </div>
@@ -874,7 +865,7 @@ const VehicleDetailPage = () => {
                   src={vehicle?.images.gallery[activeImageIndex] || API_CONFIG.getDefaultVehicleImage()}
                   alt={vehicle?.name || "Vehicle"}
                   className={`w-full h-full object-contain transition-opacity duration-300 ${imagesLoaded[activeImageIndex] ? 'opacity-100' : 'opacity-0'}`}
-                  onLoad={() => handleImageLoad(activeImageIndex)}
+                  onLoad={() => handleImageLoad(activeImageIndex, { target: imagePreloadersRef.current[activeImageIndex] } as React.SyntheticEvent<HTMLImageElement>)}
                   onError={(e) => handleImageError(activeImageIndex, e)}
                 />
               </div>

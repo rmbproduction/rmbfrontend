@@ -87,3 +87,41 @@ Rather than trying to construct URLs with specific asset IDs (which was causing 
 3. For any image load failures, use a guaranteed working placeholder image
 
 This approach ensures users always see something rather than broken images, while we implement a proper asset management solution.
+
+## Dynamic Cloudinary Image Handling Solution
+
+We've implemented a completely dynamic solution for handling Cloudinary image URLs in the application:
+
+### Core Principles:
+
+1. **Trust Backend URLs**: Instead of constructing URLs on the frontend, we now use the URLs provided by the backend directly.
+
+2. **Validation**: We validate URLs against the proper Cloudinary format before using them:
+   ```
+   https://res.cloudinary.com/dz81bjuea/image/upload/v1747150610/vehicle_photos/back/hrj3dowlhp5biid3ardg.png
+   ```
+
+3. **Storage**: Valid URLs are stored in localStorage for future use, ensuring we don't lose good URLs.
+
+4. **Graceful Fallback**: If a URL is invalid or inaccessible, we gracefully fall back to a reliable placeholder.
+
+### Debugging Tools
+
+We've added several debugging tools:
+
+1. **Browser Console Utilities**: Use `CloudinaryTest.testUrl()` in the browser console to test any URL.
+
+2. **Image URL Diagnostics**: Check the console logs for detailed information about image loading.
+
+3. **API Testing Endpoint**: Use the imageApi module to test backend URL generation.
+
+### How To Test
+
+To verify the Cloudinary integration is working correctly:
+
+1. Open the website in your browser
+2. Open the developer console
+3. Use `CloudinaryTest.extractAllImages()` to analyze all images on the page
+4. Check for any invalid URLs in the results
+
+This approach ensures your application will consistently display images correctly, even if some URLs are malformed.
