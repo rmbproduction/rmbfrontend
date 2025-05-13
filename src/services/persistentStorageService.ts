@@ -825,6 +825,35 @@ const persistentStorageService = {
     } catch (dbError) {
       console.error('IndexedDB error during cleanup:', dbError);
     }
+  },
+  
+  getVehicleHistory: async (): Promise<any[]> => {
+    try {
+      // First try to get from localStorage
+      const vehicleKeys = Object.keys(localStorage).filter(key => 
+        key.startsWith('vehicle_data_') || key.startsWith('vehicle_summary_')
+      );
+      
+      // Extract all vehicle data
+      const vehicles = vehicleKeys.map(key => {
+        try {
+          const data = JSON.parse(localStorage.getItem(key) || '{}');
+          // Add id from key if not present
+          if (!data.id && key.includes('_')) {
+            data.id = key.split('_').pop();
+          }
+          return data;
+        } catch (e) {
+          console.error(`Error parsing data for key ${key}:`, e);
+          return null;
+        }
+      }).filter(Boolean);
+      
+      return vehicles;
+    } catch (e) {
+      console.error('Error retrieving vehicle history:', e);
+      return [];
+    }
   }
 };
 

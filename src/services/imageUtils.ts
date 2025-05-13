@@ -349,14 +349,45 @@ export const sanitizeUrlsForStorage = (urls: Record<string, string>): Record<str
 };
 
 /**
- * Synchronize image storage for a vehicle across localStorage and Cloudinary
+ * Synchronizes image storage between localStorage and sessionStorage for a vehicle
  * @param vehicleId The vehicle ID
- * @param photoUrls Object containing photo URLs
+ * @param photoUrls Optional photo URLs to sync
  */
 export const syncImageStorageForVehicle = async (
   vehicleId: string,
-  photoUrls: Record<string, string>
+  photoUrls?: Record<string, string>
 ): Promise<void> => {
+  // If photoUrls aren't provided, try to read from localStorage or sessionStorage
+  if (!photoUrls) {
+    try {
+      // Try to get from localStorage
+      const localStorageKey = `vehicle_data_${vehicleId}`;
+      const localData = localStorage.getItem(localStorageKey);
+      if (localData) {
+        const parsedData = JSON.parse(localData);
+        photoUrls = extractPhotoUrls(parsedData);
+      }
+      
+      // If still no photoUrls, try sessionStorage
+      if (!photoUrls || Object.keys(photoUrls).length === 0) {
+        const sessionStorageKey = `vehicle_summary_${vehicleId}`;
+        const sessionData = sessionStorage.getItem(sessionStorageKey);
+        if (sessionData) {
+          const parsedData = JSON.parse(sessionData);
+          photoUrls = extractPhotoUrls(parsedData);
+        }
+      }
+      
+      // If still no photoUrls, use empty object
+      if (!photoUrls) {
+        photoUrls = {};
+      }
+    } catch (e) {
+      console.error('Error getting photo URLs for sync:', e);
+      photoUrls = {};
+    }
+  }
+  
   if (!vehicleId) return;
   
   try {

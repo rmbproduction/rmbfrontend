@@ -2,6 +2,7 @@ import axios from 'axios';
 import { safeRevokeUrl } from './imageUtils';
 import { API_CONFIG } from '../config/api.config';
 import persistentStorageService from './persistentStorageService';
+import { Vehicle } from '../types/vehicles';
 
 // Add debug logging to verify the API URL
 console.log('[DEBUG] MARKETPLACE URL:', API_CONFIG.MARKETPLACE_URL);
@@ -1620,20 +1621,12 @@ const marketplaceService = {
   },
 
   // Get similar vehicles for recommendations
-  getSimilarVehicles: async (vehicleId: string) => {
+  getSimilarVehicles: async (vehicleId: string | number): Promise<Vehicle[]> => {
     try {
-      // Get authentication token
-      const token = localStorage.getItem('accessToken');
-      
-      const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/vehicles/${vehicleId}/similar/`, {
-        headers: {
-          'Authorization': token ? `Bearer ${token}` : ''
-        }
-      });
+      const response = await axios.get(`${API_CONFIG.MARKETPLACE_URL}/vehicles/${vehicleId}/similar/`);
       return response.data;
     } catch (error) {
       console.error('Error fetching similar vehicles:', error);
-      // Return empty array on error
       return [];
     }
   },

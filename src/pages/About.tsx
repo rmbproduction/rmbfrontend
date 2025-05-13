@@ -1,17 +1,30 @@
-import React from 'react';
+import * as React from 'react';
 import { motion } from 'framer-motion';
-import { Award, Users, PenTool as Tool, Clock } from 'lucide-react';
+import { Award, Users, PenTool as Tool, Clock, LucideIcon } from 'lucide-react';
 import OptimizedImage from '../components/OptimizedImage';
 
+interface Stat {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+}
+
+interface TeamMember {
+  name: string;
+  role: string;
+  image: string;
+  bio: string;
+}
+
 const About = () => {
-  const stats = [
+  const stats: Stat[] = [
     // { icon: Users, label: 'Happy Customers', value: '10,000+' },
     // { icon: Tool, label: 'Repairs Completed', value: '25,000+' },
     // { icon: Clock, label: 'Years of Experience', value: '15+' },
     // { icon: Award, label: 'Service Awards', value: '20+' },
   ];
 
-  const team = [
+  const team: TeamMember[] = [
     // {
     //   name: 'John Smith',
     //   role: 'Master Mechanic',

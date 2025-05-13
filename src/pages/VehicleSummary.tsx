@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import * as React from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -6,7 +7,7 @@ import {
   Calendar, DollarSign, CheckCircle, AlertCircle, ImageOff,
   RefreshCw, X, ChevronDown, ChevronUp, Mail
 } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { toast, ToastOptions, ToastContent } from 'react-toastify';
 import marketplaceService from '../services/marketplaceService';
 import axios from 'axios';
 import { API_CONFIG } from '../config/api.config';
@@ -721,23 +722,20 @@ const VehicleSummary = () => {
       syncImageStorageForVehicle(id);
       
       // Also add to window navigation events to handle page transitions
-      const handleNavigation = () => {
-        if (id) {
-          console.log('Navigation event detected, syncing image storage');
-          syncImageStorageForVehicle(id);
-        }
+      const handleNavigation = (path: string, state?: any) => {
+        navigate(path, { state });
       };
       
       // Listen for navigation events
-      window.addEventListener('popstate', handleNavigation);
-      window.addEventListener('pageshow', handleNavigation);
+      window.addEventListener('popstate', () => handleNavigation(window.location.pathname, window.history.state));
+      window.addEventListener('pageshow', () => handleNavigation(window.location.pathname, window.history.state));
       
       return () => {
-        window.removeEventListener('popstate', handleNavigation);
-        window.removeEventListener('pageshow', handleNavigation);
+        window.removeEventListener('popstate', () => handleNavigation(window.location.pathname, window.history.state));
+        window.removeEventListener('pageshow', () => handleNavigation(window.location.pathname, window.history.state));
       };
     }
-  }, [id]);
+  }, [id, navigate]);
   
   // Set up polling for status updates
   useEffect(() => {
@@ -983,17 +981,29 @@ const VehicleSummary = () => {
     if (!id) return;
     
     try {
-      toast.info('Refreshing data...', { autoClose: 2000 });
+      toast.info('Refreshing data...', { 
+        position: 'top-center',
+        autoClose: 2000 
+      });
       
       // Set loading state for UI feedback
       setLoading(true);
-      const loadingToast = toast.loading('Fetching the latest data...');
+      const loadingToastId = toast.info('Fetching the latest data...', {
+        position: 'top-center',
+        autoClose: false,
+        closeOnClick: false,
+        draggable: false,
+        closeButton: false
+      });
       
       // Use the forceRefreshSellRequest method to refresh data
       const { sellRequest: response, statusInfo: statusData } = await marketplaceService.forceRefreshSellRequest(id);
       
-      toast.dismiss(loadingToast);
-      toast.success('Data refreshed successfully!');
+      toast.dismiss(loadingToastId);
+      toast.success('Data refreshed successfully!', {
+        position: 'top-center',
+        autoClose: 3000
+      });
       
       if (!response) {
         setError('Invalid response format from server');
@@ -1016,7 +1026,10 @@ const VehicleSummary = () => {
       setLoading(false);
     } catch (error) {
       console.error('Error in forceFullRefresh:', error);
-      toast.error('Failed to refresh data. Please try again.');
+      toast.error('Failed to refresh data. Please try again.', {
+        position: 'top-center',
+        autoClose: 3000
+      });
       setLoading(false);
     }
   };
@@ -1155,17 +1168,26 @@ const VehicleSummary = () => {
       );
       
       if (result.success) {
-        toast.success(result.message);
+        toast.success(result.message, {
+          position: 'top-center',
+          autoClose: 3000
+        });
         setEmailSent(true);
         
         // Store the email for future use
         localStorage.setItem('userEmail', email);
       } else {
-        toast.error(result.message);
+        toast.error(result.message, {
+          position: 'top-center',
+          autoClose: 3000
+        });
       }
     } catch (error: any) {
       console.error('Failed to send summary email:', error);
-      toast.error(error.message || 'Failed to send email. Please try again.');
+      toast.error(error.message || 'Failed to send email. Please try again.', {
+        position: 'top-center',
+        autoClose: 3000
+      });
     } finally {
       setSendingEmail(false);
       setShowEmailForm(false);

@@ -1,16 +1,23 @@
 import { useEffect, useState } from 'react';
 import { apiService } from '../services/api.service';
 
+interface Service {
+  id: string;
+  name: string;
+  description: string;
+  [key: string]: any;
+}
+
 const TestAPI = () => {
-  const [services, setServices] = useState(null);
+  const [services, setServices] = useState<Service[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const data = await apiService.getServices();
-        setServices(data);
+        const response = await apiService.getServices();
+        setServices(response.data);
         setLoading(false);
       } catch (err: any) {
         setError(err.message);

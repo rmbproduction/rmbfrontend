@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
-import { format } from 'date-fns/format';
-import { parse } from 'date-fns/parse';
-import { startOfWeek } from 'date-fns/startOfWeek';
-import { getDay } from 'date-fns/getDay';
+import * as React from 'react';
+import { Calendar, dateFnsLocalizer, SlotInfo } from 'react-big-calendar';
+import { format } from 'date-fns';
+import { parse } from 'date-fns';
+import { startOfWeek } from 'date-fns';
+import { getDay } from 'date-fns';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { apiService } from '../services/api.service';
 import { showNotification } from './NotificationCenter';
@@ -38,12 +38,12 @@ const ServiceScheduler: React.FC<ServiceSchedulerProps> = ({
   onSchedule,
   className = ''
 }) => {
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
-  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [selectedDate, setSelectedDate] = React.useState<Date>(new Date());
+  const [availableSlots, setAvailableSlots] = React.useState<TimeSlot[]>([]);
+  const [selectedSlot, setSelectedSlot] = React.useState<TimeSlot | null>(null);
+  const [loading, setLoading] = React.useState(false);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (selectedDate) {
       fetchAvailableSlots(selectedDate);
     }
@@ -121,7 +121,7 @@ const ServiceScheduler: React.FC<ServiceSchedulerProps> = ({
           endAccessor="end"
           style={{ height: 400 }}
           selectable
-          onSelectSlot={({ start }) => setSelectedDate(start)}
+          onSelectSlot={(slotInfo: SlotInfo) => setSelectedDate(slotInfo.start)}
           views={['month']}
           defaultView="month"
           min={new Date(new Date().setHours(9, 0, 0))}
