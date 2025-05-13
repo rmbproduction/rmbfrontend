@@ -26,9 +26,9 @@ const CLOUDINARY_VERSION = 'v1747031052';
 
 // Natural dimensions for known assets to prevent distortion
 const ASSET_DIMENSIONS: Record<string, { width: number; height: number; quality: number }> = {
-  'logo.png': { width: 240, height: 80, quality: 100 },
+  'logo.png': { width: 140, height: 50, quality: 100 },
   'bikeExpert.jpg': { width: 800, height: 500, quality: 95 },
-  'founder.jpg': { width: 600, height: 400, quality: 95 }
+  'founder.jpg': { width: 400, height: 300, quality: 95 }
 };
 
 /**

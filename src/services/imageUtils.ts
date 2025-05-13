@@ -97,9 +97,9 @@ export const getCloudinaryUrl = (
   
   // Asset natural dimensions for proper rendering
   const ASSET_DIMENSIONS: Record<string, { width: number; height: number }> = {
-    'logo_jlugzw.jpg': { width: 240, height: 80 },
+    'logo_jlugzw.jpg': { width: 140, height: 50 },
     'bikeExpert_qt2sfa.jpg': { width: 800, height: 500 },
-    'founder_vpnyov.jpg': { width: 600, height: 400 }
+    'founder_vpnyov.jpg': { width: 400, height: 300 }
   };
   
   // Check if this is a known asset
