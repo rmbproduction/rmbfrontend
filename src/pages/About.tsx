@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Award, Users, PenTool as Tool, Clock } from 'lucide-react';
+import OptimizedImage from '../components/OptimizedImage';
 
 const About = () => {
   const stats = [
@@ -79,14 +80,14 @@ const About = () => {
             transition={{ duration: 0.5, delay: 0.4 }}
             className="relative"
           >
-            <img
+            <OptimizedImage
               src="/assets/founder.jpg"
               alt="RepairMyBike Founder"
-              className="rounded-2xl shadow-lg w-full h-full object-cover"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.src = "/assets/bikeExpert.jpg";
-              }}
+              width={600}
+              height={400}
+              quality={75}
+              objectFit="cover"
+              className="rounded-2xl shadow-lg w-full h-full"
             />
           </motion.div>
         </div>

@@ -86,7 +86,7 @@ const Hero = () => {
               >
                 <div className="floating relative w-full h-[500px] rounded-2xl overflow-hidden shadow-2xl transform perspective-1000">
                   <OptimizedImage
-                    src="https://asset.cloudinary.com/dz81bjuea/c82d8ad4b2104e42cdcf4770afd58abb"
+                    src="/assets/bikeExpert.jpg"
                     alt="Bike mechanic working"
                     width={800}
                     height={500}
