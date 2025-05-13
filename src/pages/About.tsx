@@ -84,8 +84,8 @@ const About = () => {
               src="/assets/founder.jpg"
               alt="RepairMyBike Founder"
               width={600}
-              height={400}
-              quality={75}
+              height={800}
+              quality={90}
               objectFit="cover"
               className="rounded-2xl shadow-lg w-full h-full"
             />

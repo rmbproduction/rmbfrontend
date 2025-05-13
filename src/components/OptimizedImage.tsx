@@ -28,7 +28,7 @@ const CLOUDINARY_VERSION = 'v1747031052';
 const ASSET_DIMENSIONS: Record<string, { width: number; height: number; quality: number }> = {
   'logo.png': { width: 48, height: 48, quality: 100 },
   'bikeExpert.jpg': { width: 800, height: 500, quality: 95 },
-  'founder.jpg': { width: 400, height: 300, quality: 95 }
+  'founder.jpg': { width: 600, height: 800, quality: 90 }
 };
 
 /**

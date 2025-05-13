@@ -93,7 +93,7 @@ const AboutUsSection = () => {
                     alt="RepairMyBike Founder" 
                     width={600}
                     height={800}
-                    quality={75}
+                    quality={90}
                     className="w-full h-full"
                     objectFit="cover"
                   />
