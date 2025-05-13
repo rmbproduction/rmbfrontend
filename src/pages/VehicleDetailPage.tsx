@@ -11,6 +11,7 @@ import { API_CONFIG } from '../config/api.config';
 import marketplaceService from '../services/marketplaceService';
 import { Vehicle } from '../types/vehicles';
 import VehicleSuggestions from '../components/VehicleSuggestions';
+import { getOptimizedCloudinaryUrl, getBlurPlaceholder } from '../utils/imageOptimizer';
 
 // Extended vehicle interface with UI-specific properties
 interface UIVehicle extends Omit<Vehicle, 'images'> {
@@ -117,16 +118,39 @@ const VehicleDetailPage = () => {
     }
   }, [vehicle]);
 
+  // Process images to use optimized Cloudinary URLs
+  const processImageUrl = useCallback((url: string) => {
+    if (!url) return API_CONFIG.getDefaultVehicleImage();
+    
+    // Generate optimized URL
+    return getOptimizedCloudinaryUrl(url);
+  }, []);
+
+  // Preprocess image gallery to optimize all URLs
+  const optimizeGalleryImages = useCallback((images: string[]) => {
+    return images.map(url => processImageUrl(url));
+  }, [processImageUrl]);
+
+  // Extended image loading function with blur-up loading technique
   const preloadImages = (imageUrls: string[]) => {
     // Clear any previous preloaders
     imagePreloadersRef.current = [];
     
+    // Create a new state object to track loading status
+    const newImagesLoaded: Record<number, boolean> = {};
+    
     // Create image objects to preload all gallery images
-    imageUrls.forEach((url, index) => {
+    const optimizedUrls = optimizeGalleryImages(imageUrls);
+    
+    optimizedUrls.forEach((url, index) => {
       if (!url) {
         console.warn(`Image URL at index ${index} is undefined or null`);
         return;
       }
+      
+      // First set up a placeholder blur image
+      const placeholderUrl = getBlurPlaceholder(url);
+      newImagesLoaded[index] = false;
       
       const img = new Image();
       
@@ -141,6 +165,7 @@ const VehicleDetailPage = () => {
       
       // Set src after event handlers
       try {
+        // Load the real image
         img.src = url;
       } catch (error) {
         console.error(`Failed to set image source for index ${index}:`, error);
@@ -150,6 +175,9 @@ const VehicleDetailPage = () => {
       
       imagePreloadersRef.current.push(img);
     });
+    
+    // Initialize with all images marked as not loaded
+    setImagesLoaded(newImagesLoaded);
   };
 
   // Enhanced image error handler with detailed logging
@@ -181,6 +209,12 @@ const VehicleDetailPage = () => {
   const handleImageLoad = useCallback((index: number, e: React.SyntheticEvent<HTMLImageElement>) => {
     const target = e.target as HTMLImageElement;
     console.log(`[VehicleDetailPage] Image ${index} loaded successfully:`, target.src);
+    
+    // Update the imagesLoaded state to track which images have loaded
+    setImagesLoaded(prev => ({
+      ...prev,
+      [index]: true
+    }));
   }, []);
 
   const fetchVehicleDetails = async (vehicleId: string) => {
@@ -205,6 +239,9 @@ const VehicleDetailPage = () => {
       // Get the default image for fallbacks
       const defaultImage = API_CONFIG.getDefaultVehicleImage();
       
+      // Check for custom image URLs for specific vehicles (like vehicle #4)
+      const knownVehicleImages = marketplaceService.getFixedImagesForKnownVehicle(vehicleId);
+      
       // Process and normalize the data for UI
       const processedVehicle: UIVehicle = {
         ...vehicleData,
@@ -212,16 +249,24 @@ const VehicleDetailPage = () => {
         name: `${vehicleData.brand} ${vehicleData.model}`,
         // Organize images for the gallery
         images: {
-          // Use the API-provided front image URL OR the imageUrl field OR default
-          main: vehicleData.front_image_url || vehicleData.imageUrl || defaultImage,
+          // Use known vehicle images if available, or API-provided front image URL, or imageUrl field, or default
+          main: knownVehicleImages?.front_image_url || vehicleData.front_image_url || vehicleData.imageUrl || defaultImage,
           // Create a gallery of all available images, filtering out nulls
-          gallery: [
-            vehicleData.front_image_url,
-            vehicleData.back_image_url,
-            vehicleData.left_image_url, 
-            vehicleData.right_image_url,
-            vehicleData.dashboard_image_url
-          ].filter(Boolean) as string[]
+          gallery: knownVehicleImages ? 
+            [
+              knownVehicleImages.front_image_url,
+              knownVehicleImages.back_image_url,
+              knownVehicleImages.left_image_url,
+              knownVehicleImages.right_image_url,
+              knownVehicleImages.dashboard_image_url
+            ].filter(Boolean) :
+            [
+              vehicleData.front_image_url,
+              vehicleData.back_image_url,
+              vehicleData.left_image_url, 
+              vehicleData.right_image_url,
+              vehicleData.dashboard_image_url
+            ].filter(Boolean) as string[]
         }
       };
       
@@ -530,207 +575,109 @@ const VehicleDetailPage = () => {
             <div className="lg:col-span-2">
               <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
                 {/* Main Image */}
-                <div className="relative h-96 bg-gray-100 rounded-t-lg overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    {!imagesLoaded[activeImageIndex] && (
-                      <div className="animate-pulse rounded-md bg-gray-200 h-full w-full flex items-center justify-center">
-                        <span className="text-gray-500">Loading image...</span>
-                      </div>
-                    )}
-                  </div>
-                  <img
-                    src={vehicle.images.gallery[activeImageIndex] || API_CONFIG.getDefaultVehicleImage()}
-                    alt={vehicle.name}
-                    className={`w-full h-full object-contain transition-opacity duration-300 ${imagesLoaded[activeImageIndex] ? 'opacity-100' : 'opacity-0'}`}
-                    onClick={() => openModal(activeImageIndex)}
-                    loading="eager"
-                    decoding="async"
-                    onLoad={() => handleImageLoad(activeImageIndex, { target: imagePreloadersRef.current[activeImageIndex] } as unknown as React.SyntheticEvent<HTMLImageElement>)}
-                    onError={(e) => handleImageError(activeImageIndex, e)}
+                <div className="main-vehicle-image relative aspect-w-4 aspect-h-3 bg-gray-100 rounded-lg overflow-hidden">
+                  {/* Placeholder blur image */}
+                  <img 
+                    src={getBlurPlaceholder(vehicle.images.main)}
+                    alt={`${vehicle.name} blur placeholder`}
+                    className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500"
+                    style={{ opacity: imagesLoaded[activeImageIndex] ? 0 : 0.7 }}
                   />
                   
-                  {/* Status Badge */}
-                  <div className={`absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-medium flex items-center ${getStatusClass(vehicle.status)} z-10`}>
-                    {getStatusIcon(vehicle.status)}
-                    <span className="ml-1">{getStatusText(vehicle.status)}</span>
-                  </div>
-                  
-                  {/* Navigation Arrows */}
-                  {vehicle.images.gallery.length > 1 && (
-                    <>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          prevImage();
-                        }}
-                        className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors z-10"
-                        aria-label="Previous image"
-                      >
-                        <ChevronLeft className="h-5 w-5" />
-                      </button>
-                      
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          nextImage();
-                        }}
-                        className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors z-10"
-                        aria-label="Next image"
-                      >
-                        <ChevronRight className="h-5 w-5" />
-                      </button>
-                    </>
+                  {/* Loading spinner */}
+                  {!imagesLoaded[activeImageIndex] && (
+                    <div className="absolute inset-0 flex items-center justify-center z-10">
+                      <div className="w-12 h-12 border-4 border-t-transparent border-[#FF5733] rounded-full animate-spin"></div>
+                    </div>
                   )}
+                  
+                  {/* Main image with progressive loading */}
+                  <img 
+                    src={getOptimizedCloudinaryUrl(vehicle.images.gallery[activeImageIndex] || vehicle.images.main)}
+                    alt={vehicle.name}
+                    className={`w-full h-full object-cover transition-opacity duration-300 ${imagesLoaded[activeImageIndex] ? 'opacity-100' : 'opacity-0'}`}
+                    onClick={() => openModal(activeImageIndex)}
+                    onLoad={() => handleImageLoad(activeImageIndex, { target: imagePreloadersRef.current[activeImageIndex] } as unknown as React.SyntheticEvent<HTMLImageElement>)}
+                    onError={(e) => handleImageError(activeImageIndex, e)}
+                    loading="eager"
+                    fetchPriority="high"
+                    decoding="async"
+                    width="800" 
+                    height="600"
+                  />
                 </div>
                 
-                {/* Thumbnail Gallery */}
-                <div className="grid grid-cols-5 gap-2 mt-4 px-4 pb-4">
-                  {vehicle.images.gallery.map((image, idx) => (
+                {/* Status Badge */}
+                <div className={`absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-medium flex items-center ${getStatusClass(vehicle.status)} z-10`}>
+                  {getStatusIcon(vehicle.status)}
+                  <span className="ml-1">{getStatusText(vehicle.status)}</span>
+                </div>
+                
+                {/* Navigation Arrows */}
+                {vehicle.images.gallery.length > 1 && (
+                  <>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        prevImage();
+                      }}
+                      className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors z-10"
+                      aria-label="Previous image"
+                    >
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        nextImage();
+                      }}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors z-10"
+                      aria-label="Next image"
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Gallery section */}
+              <div className="mt-4">
+                <div className="grid grid-cols-5 gap-2">
+                  {vehicle.images.gallery.map((img, idx) => (
                     <div 
                       key={idx}
-                      className={`relative cursor-pointer h-16 border rounded overflow-hidden ${activeImageIndex === idx ? 'border-[#FF5733] shadow-md' : 'border-gray-200'}`}
+                      className={`relative aspect-square bg-gray-100 rounded-md overflow-hidden cursor-pointer border-2 transition-all ${idx === activeImageIndex ? 'border-[#FF5733]' : 'border-transparent hover:border-gray-300'}`}
                       onClick={() => selectImage(idx)}
                     >
-                      <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                        {!imagesLoaded[idx] && (
-                          <div className="w-4 h-4 border-2 border-t-transparent border-gray-400 rounded-full animate-spin"></div>
-                        )}
-                      </div>
+                      {/* Placeholder blur image */}
                       <img 
-                        src={image || API_CONFIG.getDefaultVehicleImage()}
+                        src={getBlurPlaceholder(img)}
+                        alt={`${vehicle.name} blur placeholder ${idx + 1}`}
+                        className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500"
+                        style={{ opacity: imagesLoaded[idx] ? 0 : 0.7 }}
+                      />
+                      
+                      {/* Loading spinner */}
+                      {!imagesLoaded[idx] && (
+                        <div className="absolute inset-0 flex items-center justify-center z-10">
+                          <div className="w-5 h-5 border-2 border-t-transparent border-[#FF5733] rounded-full animate-spin"></div>
+                        </div>
+                      )}
+                      
+                      {/* Actual image with progressive loading */}
+                      <img 
+                        src={getOptimizedCloudinaryUrl(img, 150, 150, 80)}
                         alt={`${vehicle.name} thumbnail ${idx + 1}`}
                         className={`w-full h-full object-cover transition-opacity duration-300 ${imagesLoaded[idx] ? 'opacity-100' : 'opacity-0'}`}
                         onLoad={() => handleImageLoad(idx, { target: imagePreloadersRef.current[idx] } as unknown as React.SyntheticEvent<HTMLImageElement>)}
                         onError={(e) => handleImageError(idx, e)}
+                        loading={idx < 5 ? "eager" : "lazy"}
+                        width="150"
+                        height="150"
                       />
                     </div>
                   ))}
-                </div>
-              </div>
-
-              {/* Vehicle Description */}
-              <div className="mt-8 bg-white rounded-2xl shadow-lg p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Description</h2>
-                <p className="text-gray-700">
-                  {vehicle.description || `${vehicle.brand} ${vehicle.model} ${vehicle.year} in ${vehicle.condition || 'good'} condition. 
-                  This ${vehicle.fuel_type} ${vehicle.vehicle_type} has been driven for ${vehicle.kms_driven.toLocaleString()} kilometers.`}
-                </p>
-                
-                {/* Vehicle Features */}
-                {vehicle.features && vehicle.features.length > 0 && (
-                  <div className="mt-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-3">Features</h3>
-                    <ul className="grid grid-cols-2 gap-2">
-                      {vehicle.features.map((feature, index) => (
-                        <li key={index} className="flex items-center">
-                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                          <span className="text-gray-700">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                
-                {/* Vehicle Information */}
-                <div className="mt-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-3">Vehicle Information</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Only show year if not already in features */}
-                    {!vehicle.features?.some(f => f.toLowerCase().includes('year') || f.toLowerCase().includes('2024')) && (
-                      <div className="flex flex-col">
-                        <span className="text-sm text-gray-500">Registration Year</span>
-                        <span className="text-gray-700 font-medium">{vehicle.year}</span>
-                      </div>
-                    )}
-                    
-                    {/* Only show fuel type if not already in features */}
-                    {!vehicle.features?.some(f => f.toLowerCase().includes('fuel') || f.toLowerCase().includes('petrol')) && (
-                      <div className="flex flex-col">
-                        <span className="text-sm text-gray-500">Fuel Type</span>
-                        <span className="text-gray-700 font-medium capitalize">{vehicle.fuel_type}</span>
-                      </div>
-                    )}
-                    
-                    {/* Only show engine capacity if not already in features */}
-                    {!vehicle.features?.some(f => f.toLowerCase().includes('engine') || f.toLowerCase().includes('cc') || f.toLowerCase().includes('400cc')) && (
-                      <div className="flex flex-col">
-                        <span className="text-sm text-gray-500">Engine Capacity</span>
-                        <span className="text-gray-700 font-medium">
-                          {vehicle.engine_capacity ? `${vehicle.engine_capacity} cc` : 'N/A'}
-                        </span>
-                      </div>
-                    )}
-                    
-                    {/* Only show kilometers driven if not already in features */}
-                    {!vehicle.features?.some(f => f.toLowerCase().includes('km') || f.toLowerCase().includes('kilometer') || f.toLowerCase().includes('driven')) && (
-                      <div className="flex flex-col">
-                        <span className="text-sm text-gray-500">Kilometers Driven</span>
-                        <span className="text-gray-700 font-medium">{vehicle.kms_driven.toLocaleString()} km</span>
-                      </div>
-                    )}
-                    
-                    {/* Only show color if not already in features */}
-                    {!vehicle.features?.some(f => f.toLowerCase().includes('color') || f.toLowerCase().includes('blue') || 
-                        f.toLowerCase().includes('red') || f.toLowerCase().includes('black')) && (
-                      <div className="flex flex-col">
-                        <span className="text-sm text-gray-500">Color</span>
-                        <span className="text-gray-700 font-medium capitalize">{vehicle.color || 'N/A'}</span>
-                      </div>
-                    )}
-                    
-                    {/* Only show mileage if not already in features */}
-                    {!vehicle.features?.some(f => f.toLowerCase().includes('mileage') || f.toLowerCase().includes('km/l') || 
-                        f.toLowerCase().match(/\d+\s*km\/l/)) && (
-                      <div className="flex flex-col">
-                        <span className="text-sm text-gray-500">Mileage</span>
-                        <span className="text-gray-700 font-medium">
-                          {vehicle.Mileage ? `${vehicle.Mileage} km/l` : 'N/A'}
-                        </span>
-                      </div>
-                    )}
-                    
-                    {/* Almost always show service date since it's specific */}
-                    {!vehicle.features?.some(f => f.toLowerCase().includes('service date')) && (
-                      <div className="flex flex-col">
-                        <span className="text-sm text-gray-500">Last Service Date</span>
-                        <span className="text-gray-700 font-medium">{formatDate(vehicle.last_service_date)}</span>
-                      </div>
-                    )}
-                    
-                    {/* Almost always show insurance validity since it's specific */}
-                    {!vehicle.features?.some(f => f.toLowerCase().includes('insurance valid') || f.toLowerCase().includes('insurance till')) && (
-                      <div className="flex flex-col">
-                        <span className="text-sm text-gray-500">Insurance Valid Till</span>
-                        <span className="text-gray-700 font-medium">{formatDate(vehicle.insurance_valid_till)}</span>
-                      </div>
-                    )}
-
-                    {/* Include additional useful information not typically in features */}
-                    {vehicle.condition && !vehicle.features?.some(f => f.toLowerCase().includes('condition')) && (
-                      <div className="flex flex-col">
-                        <span className="text-sm text-gray-500">Condition</span>
-                        <span className="text-gray-700 font-medium capitalize">{vehicle.condition}</span>
-                      </div>
-                    )}
-
-                    {vehicle.registration_number && !vehicle.features?.some(f => f.toLowerCase().includes('registration') || f.toLowerCase().includes('reg no')) && (
-                      <div className="flex flex-col">
-                        <span className="text-sm text-gray-500">Registration Number</span>
-                        <span className="text-gray-700 font-medium">{vehicle.registration_number}</span>
-                      </div>
-                    )}
-                    
-                    {/* Only show owner count if it exists and not in features */}
-                    {('owner_count' in vehicle) && 
-                      typeof (vehicle as any).owner_count === 'number' && 
-                      (vehicle as any).owner_count > 0 && 
-                      !vehicle.features?.some(f => f.toLowerCase().includes('owner')) && (
-                      <div className="flex flex-col">
-                        <span className="text-sm text-gray-500">Owner Count</span>
-                        <span className="text-gray-700 font-medium">{(vehicle as any).owner_count}</span>
-                      </div>
-                    )}
-                  </div>
                 </div>
               </div>
             </div>
@@ -857,17 +804,32 @@ const VehicleDetailPage = () => {
             {/* Image */}
             <div className="w-full h-full flex items-center justify-center">
               <div className="relative w-full h-full">
+                {/* Blur placeholder */}
+                <img 
+                  src={getBlurPlaceholder(vehicle?.images.gallery[activeImageIndex] || '')}
+                  alt={vehicle?.name || "Vehicle placeholder"}
+                  className="absolute inset-0 w-full h-full object-contain transition-opacity duration-500"
+                  style={{ opacity: imagesLoaded[activeImageIndex] ? 0 : 0.7 }}
+                />
+                
+                {/* Loading spinner */}
                 {!imagesLoaded[activeImageIndex] && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-12 h-12 border-4 border-t-transparent border-white rounded-full animate-spin"></div>
+                  <div className="absolute inset-0 flex items-center justify-center z-10">
+                    <div className="w-16 h-16 border-4 border-t-transparent border-white rounded-full animate-spin"></div>
                   </div>
                 )}
+                
+                {/* Full size image */}
                 <img
-                  src={vehicle?.images.gallery[activeImageIndex] || API_CONFIG.getDefaultVehicleImage()}
+                  src={getOptimizedCloudinaryUrl(vehicle?.images.gallery[activeImageIndex] || '', 1200, 900, 85)}
                   alt={vehicle?.name || "Vehicle"}
                   className={`w-full h-full object-contain transition-opacity duration-300 ${imagesLoaded[activeImageIndex] ? 'opacity-100' : 'opacity-0'}`}
                   onLoad={() => handleImageLoad(activeImageIndex, { target: imagePreloadersRef.current[activeImageIndex] } as unknown as React.SyntheticEvent<HTMLImageElement>)}
                   onError={(e) => handleImageError(activeImageIndex, e)}
+                  loading="eager"
+                  decoding="async"
+                  width="1200"
+                  height="900"
                 />
               </div>
             </div>

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloudinary Image Debug Tool</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      color: #333;
+    }
+    h1 {
+      color: #FF5733;
+      border-bottom: 2px solid #FF5733;
+      padding-bottom: 10px;
+    }
+    .image-container {
+      margin: 20px 0;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: #f9f9f9;
+    }
+    .image-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    .image-wrapper {
+      position: relative;
+      max-width: 100%;
+      overflow: hidden;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .image-wrapper img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+    .controls {
+      margin-bottom: 20px;
+      padding: 20px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    input, button {
+      padding: 8px 16px;
+      margin-right: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    input {
+      width: 60%;
+      font-size: 16px;
+    }
+    button {
+      background: #FF5733;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #E64A19;
+    }
+    .image-info {
+      font-size: 14px;
+      margin-top: 10px;
+      color: #666;
+    }
+    .timer {
+      font-weight: bold;
+      color: #FF5733;
+    }
+    .loading-indicator {
+      display: none;
+      width: 100%;
+      text-align: center;
+      padding: 20px;
+    }
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #FF5733;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <h1>Cloudinary Image Debug Tool</h1>
+  
+  <div class="controls">
+    <h2>Test Image Loading</h2>
+    <input type="text" id="image-url" placeholder="Paste Cloudinary URL here" 
+      value="https://res.cloudinary.com/dz81bjuea/image/upload/v1747150610/vehicle_photos/back/hrj3dowlhp5biid3ardg.png">
+    <button id="load-image">Load Image</button>
+    <button id="clear-results">Clear Results</button>
+    
+    <div>
+      <label>
+        <input type="checkbox" id="use-optimizations" checked>
+        Apply Cloudinary optimizations
+      </label>
+    </div>
+  </div>
+  
+  <div id="loading-indicator" class="loading-indicator">
+    <div class="spinner"></div>
+    <p>Loading image...</p>
+  </div>
+  
+  <div id="results-container"></div>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const loadButton = document.getElementById('load-image');
+      const clearButton = document.getElementById('clear-results');
+      const resultsContainer = document.getElementById('results-container');
+      const loadingIndicator = document.getElementById('loading-indicator');
+      
+      loadButton.addEventListener('click', testImageLoading);
+      clearButton.addEventListener('click', () => {
+        resultsContainer.innerHTML = '';
+      });
+      
+      async function testImageLoading() {
+        const imageUrl = document.getElementById('image-url').value.trim();
+        const useOptimizations = document.getElementById('use-optimizations').checked;
+        
+        if (!imageUrl) {
+          alert('Please enter a Cloudinary URL');
+          return;
+        }
+        
+        loadingIndicator.style.display = 'block';
+        
+        const imageContainer = document.createElement('div');
+        imageContainer.className = 'image-container';
+        
+        // Add header with the URL
+        const header = document.createElement('h3');
+        header.textContent = 'Test Results';
+        imageContainer.appendChild(header);
+        
+        const urlInfo = document.createElement('p');
+        urlInfo.innerHTML = `<strong>Original URL:</strong> ${imageUrl}`;
+        imageContainer.appendChild(urlInfo);
+        
+        // Create image row
+        const imageRow = document.createElement('div');
+        imageRow.className = 'image-row';
+        
+        // Original image
+        const originalWrapper = createImageWrapper('Original Image');
+        const originalImage = document.createElement('img');
+        
+        // Time the original image load
+        const originalStartTime = performance.now();
+        originalImage.onload = () => {
+          const originalLoadTime = performance.now() - originalStartTime;
+          updateImageInfo(originalWrapper, originalLoadTime, originalImage.naturalWidth, originalImage.naturalHeight);
+        };
+        originalImage.onerror = () => {
+          updateImageError(originalWrapper);
+        };
+        originalImage.src = imageUrl;
+        originalWrapper.querySelector('.image-wrapper').appendChild(originalImage);
+        imageRow.appendChild(originalWrapper);
+        
+        // Optimized image (if checkbox is checked)
+        if (useOptimizations) {
+          const optimizedWrapper = createImageWrapper('Optimized Image');
+          const optimizedImage = document.createElement('img');
+          
+          // Generate optimized URL
+          const optimizedUrl = getOptimizedCloudinaryUrl(imageUrl);
+          
+          // Time the optimized image load
+          const optimizedStartTime = performance.now();
+          optimizedImage.onload = () => {
+            const optimizedLoadTime = performance.now() - optimizedStartTime;
+            updateImageInfo(optimizedWrapper, optimizedLoadTime, optimizedImage.naturalWidth, optimizedImage.naturalHeight);
+          };
+          optimizedImage.onerror = () => {
+            updateImageError(optimizedWrapper);
+          };
+          optimizedImage.src = optimizedUrl;
+          
+          // Show optimized URL
+          const optimizedUrlInfo = document.createElement('p');
+          optimizedUrlInfo.innerHTML = `<strong>Optimized URL:</strong> ${optimizedUrl}`;
+          optimizedWrapper.appendChild(optimizedUrlInfo);
+          
+          optimizedWrapper.querySelector('.image-wrapper').appendChild(optimizedImage);
+          imageRow.appendChild(optimizedWrapper);
+        }
+        
+        imageContainer.appendChild(imageRow);
+        
+        // Prepend the new container to the results
+        resultsContainer.insertBefore(imageContainer, resultsContainer.firstChild);
+        
+        loadingIndicator.style.display = 'none';
+      }
+      
+      function createImageWrapper(label) {
+        const wrapper = document.createElement('div');
+        wrapper.style.flex = '1';
+        
+        const labelElement = document.createElement('h4');
+        labelElement.textContent = label;
+        wrapper.appendChild(labelElement);
+        
+        const imageWrapper = document.createElement('div');
+        imageWrapper.className = 'image-wrapper';
+        wrapper.appendChild(imageWrapper);
+        
+        const infoElement = document.createElement('div');
+        infoElement.className = 'image-info';
+        infoElement.innerHTML = 'Loading...';
+        wrapper.appendChild(infoElement);
+        
+        return wrapper;
+      }
+      
+      function updateImageInfo(wrapper, loadTime, width, height) {
+        const infoElement = wrapper.querySelector('.image-info');
+        infoElement.innerHTML = `
+          Load time: <span class="timer">${loadTime.toFixed(2)}ms</span><br>
+          Dimensions: ${width}x${height} pixels
+        `;
+      }
+      
+      function updateImageError(wrapper) {
+        const infoElement = wrapper.querySelector('.image-info');
+        infoElement.innerHTML = `
+          <span style="color: red;">Error loading image</span>
+        `;
+      }
+      
+      // Utility to generate optimized Cloudinary URL
+      function getOptimizedCloudinaryUrl(url, width = 800, height = 600, quality = 80) {
+        if (!url || !url.includes('cloudinary.com')) {
+          return url;
+        }
+        
+        try {
+          const urlParts = url.split('/upload/');
+          if (urlParts.length !== 2) return url;
+          
+          const baseUrl = urlParts[0] + '/upload/';
+          const transformations = `c_fill,g_auto,w_${width},h_${height},q_${quality},f_auto/`;
+          
+          const pathParts = urlParts[1].split('/');
+          const versionRegex = /^v\d+$/;
+          
+          if (pathParts[0].match(versionRegex)) {
+            const version = pathParts[0] + '/';
+            const remainingPath = urlParts[1].substring(version.length);
+            return `${baseUrl}${transformations}${version}${remainingPath}`;
+          } else {
+            return `${baseUrl}${transformations}${urlParts[1]}`;
+          }
+        } catch (error) {
+          console.error('Error optimizing Cloudinary URL:', error);
+          return url;
+        }
+      }
+    });
+  </script>
+</body>
+</html>
