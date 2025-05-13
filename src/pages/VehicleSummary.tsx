@@ -22,6 +22,7 @@ import {
 } from '../services/imageUtils';
 import persistentStorageService from '../services/persistentStorageService';
 import emailService from '../services/emailService';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 // Helper function to extract and normalize vehicle data from API response
 const normalizeVehicleData = (responseData: any) => {
@@ -1184,9 +1185,8 @@ const VehicleSummary = () => {
   // If loading, show a spinner
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4">
-        <div className="w-12 h-12 border-4 border-t-[#FF5733] border-b-[#FF5733] rounded-full animate-spin"></div>
-        <p className="mt-4 text-gray-700">Loading your vehicle information...</p>
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <LoadingSpinner size="lg" message="Loading your vehicle information..." />
       </div>
     );
   }

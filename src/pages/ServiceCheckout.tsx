@@ -8,6 +8,7 @@ import ThankYouModal from '../components/ThankYouModal';
 import { SubscriptionPlan } from '../models/subscription-plan';
 import { apiService } from '../services/api.service';
 import { API_CONFIG } from '../config/api.config';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 // Declare google maps and initMap on the window object
 declare global {
@@ -1714,8 +1715,8 @@ const ServiceCheckout: React.FC = () => {
   
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#FF5733]"></div>
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="lg" message="Loading checkout details..." />
       </div>
     );
   }
@@ -2173,22 +2174,18 @@ const ServiceCheckout: React.FC = () => {
                       </div>
                     </div>
                     
-                    <button
+                    <button 
                       type="submit"
-                      disabled={isSubmitting || (isSubscription ? !subscriptionPlan : basketItems.length === 0)}
-                      className={`w-full ${
-                        (isSubscription ? !subscriptionPlan : basketItems.length === 0) 
-                          ? 'bg-gray-400 cursor-not-allowed' 
-                          : 'bg-[#FF5733] hover:bg-opacity-90'
-                      } text-white px-6 py-4 rounded-xl font-medium transition-colors shadow-md text-lg flex justify-center items-center`}
+                      disabled={isSubmitting}
+                      className="w-full py-3 bg-[#FF5733] text-white rounded-xl hover:bg-opacity-95 transition-colors flex justify-center items-center"
                     >
                       {isSubmitting ? (
                         <>
-                          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white mr-3"></div>
+                          <LoadingSpinner variant="button" size="sm" color="white" />
                           Processing...
                         </>
                       ) : (
-                        isSubscription ? 'Confirm Subscription' : 'Confirm Booking'
+                        'Complete Booking'
                       )}
                     </button>
                     
@@ -2217,9 +2214,8 @@ const ServiceCheckout: React.FC = () => {
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Select Your Vehicle</h2>
             
             {loadingVehicleOptions ? (
-              <div className="py-8 text-center">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#FF5733] mb-2"></div>
-                <p className="text-gray-600">Loading vehicle options...</p>
+              <div className="text-center p-4">
+                <LoadingSpinner size="md" message="Loading vehicle options..." />
               </div>
             ) : (
               <div className="space-y-4">
@@ -2277,9 +2273,8 @@ const ServiceCheckout: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2 flex justify-between">
                     <span>Model <span className="text-red-500">*</span></span>
                     {loadingModels && (
-                      <span className="text-xs text-blue-600 flex items-center">
-                        <div className="mr-1 h-3 w-3 border-t-1 border-b-1 border-blue-600 rounded-full animate-spin"></div>
-                        Loading models...
+                      <span className="inline-flex items-center">
+                        <LoadingSpinner variant="inline" size="xs" message="Loading models..." />
                       </span>
                     )}
                   </label>
@@ -2291,13 +2286,17 @@ const ServiceCheckout: React.FC = () => {
                   >
                     <option value="">Select Model</option>
                     {loadingModels ? (
-                      <option value="" disabled>Loading models...</option>
-                    ) : filteredModels.length === 0 ? (
-                      <option value="" disabled>No models available for this manufacturer</option>
+                      <option value="" disabled>
+                        <LoadingSpinner variant="inline" size="xs" showMessage={false} /> Loading models...
+                      </option>
                     ) : (
-                      filteredModels.map(model => (
-                        <option key={model.id} value={model.id}>{model.name}</option>
-                      ))
+                      filteredModels.length === 0 ? (
+                        <option value="" disabled>No models available for this manufacturer</option>
+                      ) : (
+                        filteredModels.map(model => (
+                          <option key={model.id} value={model.id}>{model.name}</option>
+                        ))
+                      )
                     )}
                   </select>
                   {vehicleModalErrors.model && (

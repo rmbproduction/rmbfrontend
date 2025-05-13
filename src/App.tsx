@@ -2,7 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Suspense, lazy, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
-import LoadingSpinner from './components/LoadingSpinner';
+import PageLoading from './components/PageLoading';
 import ProtectedRoute from './components/ProtectedRoute';
 import errorReporter from './utils/errorReporter';
 
@@ -41,11 +41,7 @@ const BookingConfirmation = lazy(() => import('./pages/BookingConfirmation'));
 const TestAPI = lazy(() => import('./components/TestAPI'));
 
 // Create a loading fallback component
-const PageLoader = () => (
-  <div className="flex justify-center items-center h-[50vh]">
-    <LoadingSpinner size="lg" message="Loading page..." />
-  </div>
-);
+const PageLoader = () => <PageLoading message="Loading page..." />;
 
 // Handle unhandled promise rejections globally
 const handleUnhandledRejection = (event: PromiseRejectionEvent) => {

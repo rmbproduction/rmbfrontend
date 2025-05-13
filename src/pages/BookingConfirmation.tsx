@@ -3,6 +3,7 @@ import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CheckCircle, Calendar, Clock, Bike, MapPin, ChevronLeft, Home } from 'lucide-react';
 import { toast } from 'react-toastify';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 interface BookingDetails {
   id: number | string;
@@ -75,7 +76,7 @@ const BookingConfirmation: React.FC = () => {
   if (!booking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#FF5733]"></div>
+        <LoadingSpinner size="lg" message="Loading booking details..." />
       </div>
     );
   }

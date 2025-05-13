@@ -6,6 +6,7 @@ import marketplaceService from '../services/marketplaceService';
 import SafeImage from '../components/SafeImage';
 import { extractPhotoUrls, isBase64Image } from '../services/imageUtils';
 import StatusDisplay from '../components/StatusDisplay';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 interface StatusInfo {
   status: string;
@@ -164,11 +165,8 @@ const SellSuccess = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="flex flex-col items-center justify-center">
-          <div className="w-8 h-8 border-t-2 border-b-2 border-[#FF5733] rounded-full animate-spin"></div>
-          <p className="mt-4 text-gray-700">Loading your vehicle information...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <LoadingSpinner size="lg" message="Loading your vehicle information..." />
       </div>
     );
   }

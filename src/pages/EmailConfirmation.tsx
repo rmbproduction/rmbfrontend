@@ -1,13 +1,17 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from '../utils/noToast';
 import { API_CONFIG } from '../config/api.config';
+import { CheckCircle, AlertCircle } from 'lucide-react';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const EmailConfirmation = () => {
   const { key } = useParams();
   const navigate = useNavigate();
   const [verifying, setVerifying] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     const verifyEmail = async () => {
@@ -37,6 +41,8 @@ const EmailConfirmation = () => {
         toast.error(errorMessage);
       } finally {
         setVerifying(false);
+        setLoading(false);
+        setSuccess(true);
       }
     };
 
@@ -44,18 +50,22 @@ const EmailConfirmation = () => {
   }, [key, navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-white to-[#ffe4d4] p-6">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-8 text-center">
-        <h2 className="text-4xl font-extrabold text-gray-800 mb-4">Email Verification</h2>
-        <div className="mt-2 h-1 w-16 bg-[#FF5733] mx-auto mb-6" />
-        
-        {verifying ? (
-          <div>
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#FF5733] mx-auto mb-4"></div>
-            <p className="text-gray-600">Verifying your email...</p>
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
+      <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full">
+        {loading ? (
+          <div className="text-center">
+            <LoadingSpinner size="lg" message="Verifying your email..." />
+          </div>
+        ) : success ? (
+          <div className="text-center">
+            <CheckCircle className="text-green-500 w-16 h-16 mb-4" />
+            <p className="text-gray-600">Redirecting to login page...</p>
           </div>
         ) : (
-          <p className="text-gray-600">Redirecting to login page...</p>
+          <div className="text-center">
+            <AlertCircle className="text-red-500 w-16 h-16 mb-4" />
+            <p className="text-gray-600">An error occurred during email verification. Please try again later.</p>
+          </div>
         )}
       </div>
     </div>
