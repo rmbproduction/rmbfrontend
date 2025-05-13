@@ -69,7 +69,7 @@ const WS_PROTOCOL = HOST_PROTOCOL === 'https' ? 'wss' : 'ws';
 const WEBSOCKET_URL = import.meta.env.VITE_WEBSOCKET_URL || `${WS_PROTOCOL}://${HOST_DOMAIN}/ws`;
 
 // Image fallbacks and helpers
-const DEFAULT_VEHICLE_IMAGE = 'https://placehold.co/600x400?text=Vehicle';
+const DEFAULT_VEHICLE_IMAGE = 'https://placehold.co/600x400?text=Vehicle+Image';
 const DEFAULT_PROFILE_IMAGE = 'https://placehold.co/400x400?text=Profile';
 const DEFAULT_SERVICE_IMAGE = 'https://placehold.co/600x400?text=Service';
 
@@ -246,6 +246,24 @@ export const API_CONFIG = {
    * @returns The URL to the default vehicle image
    */
   getDefaultVehicleImage: () => DEFAULT_VEHICLE_IMAGE,
+  
+  /**
+   * Get a Cloudinary placeholder image that's guaranteed to exist
+   * @param text Optional text to display on the placeholder
+   * @param width Optional width for the placeholder
+   * @param height Optional height for the placeholder
+   * @returns A Cloudinary URL for a placeholder image
+   */
+  getCloudinaryPlaceholder: (text: string = 'Vehicle', width: number = 600, height: number = 400): string => {
+    // Cloudinary's built-in placeholder functionality
+    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dz81bjuea';
+    
+    // URL encode the text
+    const encodedText = encodeURIComponent(text);
+    
+    // Return a Cloudinary placeholder with text overlay - this is guaranteed to work
+    return `https://res.cloudinary.com/${cloudName}/image/upload/w_${width},h_${height},c_fill,g_center/l_text:Arial_32:${encodedText},co_white/e_colorize,co_rgb:FF5733,g_center/sample`;
+  },
   
   /**
    * Perform controlled fetch with timeout

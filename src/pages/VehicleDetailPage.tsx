@@ -143,13 +143,13 @@ const VehicleDetailPage = () => {
     const vehicleInfo = vehicle ? `vehicle ${vehicle.id} (${vehicle.name})` : 'unknown vehicle';
     console.warn(`Failed to load image for ${vehicleInfo}. Creating avatar.`);
     
-    // Use a guaranteed working image for fallback - make sure it's a stable URL
-    const fallbackUrl = API_CONFIG.getDefaultVehicleImage();
+    // Use a guaranteed working Cloudinary placeholder - this is essential for reliability
+    const fallbackUrl = API_CONFIG.getCloudinaryPlaceholder(vehicle?.name || 'Vehicle');
     
     // Set a new source only if the current one isn't already the fallback
     if (target.src !== fallbackUrl) {
       target.src = fallbackUrl;
-      console.log(`Using fallback image: ${fallbackUrl}`);
+      console.log(`Using Cloudinary fallback image: ${fallbackUrl}`);
     }
     
     // Mark as loaded to stop retry attempts

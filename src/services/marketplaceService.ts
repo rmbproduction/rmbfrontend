@@ -1547,14 +1547,17 @@ const marketplaceService = {
         if (!path) return null;
         if (path.startsWith('http')) return path;
         
+        // Extract the filename from the path
+        const filename = path.split('/').pop();
+        if (!filename) return API_CONFIG.getDefaultVehicleImage();
+        
         // Prefer Cloudinary URL for better performance and reliability
         try {
-          if (vehicleId) {
-            return getCloudinaryUrl(`vehicle_photos/${vehicleId}`, {
-              width: 400, // Smaller width for listing thumbnails
-              quality: 80
-            });
-          }
+          return getCloudinaryUrl(filename, {
+            width: 400, // Smaller width for listing thumbnails
+            quality: 80,
+            version: 'v1' // Use a fixed version number
+          });
         } catch (err) {
           console.warn('Error generating Cloudinary URL:', err);
         }
@@ -1565,7 +1568,7 @@ const marketplaceService = {
       
       // Add a helper function to check if an image exists
       const imageExists = async (url: string | null): Promise<string | null> => {
-        if (!url) return null;
+        if (!url) return API_CONFIG.getCloudinaryPlaceholder();
         
         try {
           // Attempt to check if the image exists using a HEAD request
@@ -1574,10 +1577,12 @@ const marketplaceService = {
             return url;
           }
           console.warn(`Image not found: ${url}`);
-          return API_CONFIG.getDefaultVehicleImage();
+          
+          // Use Cloudinary's guaranteed placeholder instead of potentially failing default image
+          return API_CONFIG.getCloudinaryPlaceholder();
         } catch (error) {
           console.warn(`Error checking image: ${url}`, error);
-          return API_CONFIG.getDefaultVehicleImage();
+          return API_CONFIG.getCloudinaryPlaceholder();
         }
       };
       
@@ -1697,20 +1702,23 @@ const marketplaceService = {
           return url;
         }
         
-        // If it's a relative URL, try to create a CDN URL
-        if (vehicleId && !url.startsWith('http')) {
-          // Extract just the filename if it's a path
-          const parts = url.split('/');
-          const filename = parts[parts.length - 1];
+        // If it's a relative URL or path to an image
+        if (!url.startsWith('http')) {
+          // Extract the filename from the path
+          const filename = url.split('/').pop();
           
-          // Generate a Cloudinary URL for the image
+          if (!filename) return API_CONFIG.getDefaultVehicleImage();
+          
+          // Generate a Cloudinary URL for the image, including the actual filename
           try {
-            return getCloudinaryUrl(`vehicle_photos/${vehicleId}`, {
+            return getCloudinaryUrl(filename, {
               width: 800,
-              quality: 85
+              quality: 85,
+              version: 'v1' // Use a fixed version number
             });
           } catch (err) {
             console.warn('Error generating Cloudinary URL:', err);
+            // Fall back to the default image URL processing
           }
         }
         

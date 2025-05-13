@@ -40,3 +40,26 @@ URLs are processed in this order of preference:
 4. Use placeholder images as a last resort
 
 Image URLs are cached in localStorage for offline access and faster loading on subsequent visits.
+
+### Troubleshooting: Fixing 404 Errors with Cloudinary
+
+We've addressed several issues related to image loading that were causing 404 errors:
+
+1. **Incorrect Cloudinary URL Structure**: Fixed the URL format to properly include version numbers and file paths.
+
+2. **Filename-based Approach**: Changed from vehicle ID-based paths to using actual filenames to ensure Cloudinary can locate images.
+
+3. **Reliable Fallbacks**: Implemented a guaranteed working Cloudinary placeholder system using Cloudinary's sample image with text overlay rather than potentially non-existent default images.
+
+4. **Improved Error Handling**: Enhanced error detection and recovery for image loading failures.
+
+Example of correct Cloudinary URL structure:
+```
+https://res.cloudinary.com/[cloud_name]/image/upload/[version]/[transformations]/[folder]/[filename]
+```
+
+When generating Cloudinary URLs, we now:
+1. Extract the actual filename from any path
+2. Include a fixed version number (v1)
+3. Apply appropriate transformations (width, quality, etc.)
+4. Use Cloudinary's sample image feature for guaranteed fallbacks

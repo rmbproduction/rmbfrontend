@@ -56,10 +56,10 @@ export const cleanupBlobUrls = (urlsObject: Record<string, string>): void => {
 };
 
 /**
- * Get the optimized Cloudinary URL for an image with transformations
- * @param path The path of the image on Cloudinary
- * @param options Transformation options
- * @returns Cloudinary URL with transformations
+ * Generate a properly formatted Cloudinary URL
+ * @param path The image path or file name
+ * @param options Options for image transformations
+ * @returns A properly formatted Cloudinary URL
  */
 export const getCloudinaryUrl = (
   path: string,
@@ -72,106 +72,70 @@ export const getCloudinaryUrl = (
     version?: string;
   } = {}
 ): string => {
-  // Remove any leading slashes
-  const cleanPath = path.replace(/^\//, '');
-  
-  // Map for known assets
-  const ASSET_TO_CLOUDINARY_MAP: Record<string, string> = {
-    'static_assets/logo': 'logo_jlugzw.jpg',
-    'static_assets/logo.png': 'logo_jlugzw.jpg',
-    'static_assets/bikeExpert': 'bikeExpert_qt2sfa.jpg',
-    'static_assets/bikeExpert.jpg': 'bikeExpert_qt2sfa.jpg',
-    'static_assets/founder': 'founder_vpnyov.jpg',
-    'static_assets/founder.jpg': 'founder_vpnyov.jpg',
-  };
-  
-  // High quality settings for important assets
-  const HIGH_QUALITY_ASSETS = [
-    'logo_jlugzw.jpg',
-    'bikeExpert_qt2sfa.jpg',
-    'founder_vpnyov.jpg',
-    'logo',
-    'bikeExpert',
-    'founder'
-  ];
-  
-  // Asset natural dimensions for proper rendering
-  const ASSET_DIMENSIONS: Record<string, { width: number; height: number }> = {
-    'logo_jlugzw.jpg': { width: 48, height: 48 },
-    'bikeExpert_qt2sfa.jpg': { width: 800, height: 500 },
-    'founder_vpnyov.jpg': { width: 600, height: 800 }
-  };
-  
-  // Check if this is a known asset
-  const cloudinaryId = ASSET_TO_CLOUDINARY_MAP[cleanPath];
-  const finalPath = cloudinaryId || cleanPath;
-  
-  // Build transformation string
-  const transformations = [];
-  
-  // Check if this is a high-quality asset
-  const isHighQualityAsset = HIGH_QUALITY_ASSETS.some(asset => 
-    finalPath.includes(asset)
-  );
-  
-  // Get natural dimensions for known assets if dimensions not provided
-  const assetDimensions = Object.keys(ASSET_DIMENSIONS).find(key => 
-    finalPath.includes(key)
-  );
-  
-  // Add dimensions with preference to passed options
-  if (options.width) {
-    transformations.push(`w_${options.width}`);
-  } else if (assetDimensions && ASSET_DIMENSIONS[assetDimensions].width) {
-    transformations.push(`w_${ASSET_DIMENSIONS[assetDimensions].width}`);
+  try {
+    // Get the cloud name from environment variables
+    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dz81bjuea';
+    
+    // Extract the filename from the path if it's a full path
+    let filename = path;
+    if (path.includes('/')) {
+      const parts = path.split('/');
+      filename = parts[parts.length - 1];
+    }
+    
+    // Clean the filename to be Cloudinary-friendly
+    const safeFilename = encodeURIComponent(filename).replace(/%20/g, '_');
+    
+    // Determine folder structure - use "vehicle_photos" as the base folder
+    const folder = path.includes('vehicle_photos') ? 'vehicle_photos' : 
+                   path.includes('profile') ? 'profile_images' : 'uploads';
+    
+    // Build transformation parameters
+    const transformations = [];
+    
+    if (options.width) {
+      transformations.push(`w_${options.width}`);
+    }
+    
+    if (options.height) {
+      transformations.push(`h_${options.height}`);
+    }
+    
+    if (options.quality) {
+      transformations.push(`q_${options.quality}`);
+    }
+    
+    if (options.format) {
+      transformations.push(`f_${options.format}`);
+    }
+    
+    if (options.crop) {
+      transformations.push(`c_${options.crop}`);
+    }
+    
+    // Build the URL
+    // Format: https://res.cloudinary.com/CLOUD_NAME/image/upload/[version]/[transformations]/[folder]/[filename]
+    let url = `https://res.cloudinary.com/${cloudName}/image/upload`;
+    
+    // Add version if specified (should come right after /upload/)
+    if (options.version) {
+      url += `/${options.version}`;
+    }
+    
+    // Add transformations if any
+    if (transformations.length > 0) {
+      url += `/${transformations.join(',')}`;
+    }
+    
+    // Add the folder and filename
+    url += `/${folder}/${safeFilename}`;
+    
+    return url;
+  } catch (e) {
+    console.error('Failed to generate Cloudinary URL:', e);
+    // Return a safe fallback URL if generation fails
+    return 'https://placehold.co/600x400?text=Image+Not+Available';
   }
-  
-  if (options.height) {
-    transformations.push(`h_${options.height}`);
-  } else if (assetDimensions && ASSET_DIMENSIONS[assetDimensions].height) {
-    transformations.push(`h_${ASSET_DIMENSIONS[assetDimensions].height}`);
-  }
-  
-  // Set quality based on asset importance
-  if (options.quality) {
-    transformations.push(`q_${options.quality}`);
-  } else if (isHighQualityAsset) {
-    // Use higher quality for important assets
-    transformations.push('q_95');
-  } else {
-    // Use automatic quality for other assets
-    transformations.push('q_auto');
-  }
-  
-  // Set crop mode to preserve aspect ratio
-  if (options.crop) {
-    transformations.push(`c_${options.crop}`);
-  } else if (options.width && options.height) {
-    // If both dimensions provided, use fill to maintain aspect ratio
-    transformations.push('c_fill');
-  }
-  
-  // Special format handling for logo (PNG) vs other images
-  if (finalPath.includes('logo')) {
-    // For logos, prefer PNG for crisp edges
-    transformations.push('f_png');
-  } else if (options.format) {
-    transformations.push(`f_${options.format}`);
-  } else {
-    // Use auto format for other images
-    transformations.push('f_auto');
-  }
-  
-  // Construct the URL
-  const transformationString = transformations.length > 0 
-    ? transformations.join(',') + '/' 
-    : '';
-  
-  // Add version if provided or use hard-coded one for known assets
-  const version = options.version || (cloudinaryId ? 'v1747031052/' : '');
-  const versionString = version ? `${version}` : '';
-  
-  return `${CLOUDINARY_URL}/${transformationString}${versionString}${finalPath}`;
 };
 
 /**
