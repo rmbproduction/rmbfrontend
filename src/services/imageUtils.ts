@@ -69,10 +69,25 @@ export const getCloudinaryUrl = (
     quality?: number;
     format?: string;
     crop?: string;
+    version?: string;
   } = {}
 ): string => {
   // Remove any leading slashes
   const cleanPath = path.replace(/^\//, '');
+  
+  // Map for known assets
+  const ASSET_TO_CLOUDINARY_MAP: Record<string, string> = {
+    'static_assets/logo': 'logo_jlugzw.jpg',
+    'static_assets/logo.png': 'logo_jlugzw.jpg',
+    'static_assets/bikeExpert': 'bikeExpert_qt2sfa.jpg',
+    'static_assets/bikeExpert.jpg': 'bikeExpert_qt2sfa.jpg',
+    'static_assets/founder': 'founder_vpnyov.jpg',
+    'static_assets/founder.jpg': 'founder_vpnyov.jpg',
+  };
+  
+  // Check if this is a known asset
+  const cloudinaryId = ASSET_TO_CLOUDINARY_MAP[cleanPath];
+  const finalPath = cloudinaryId || cleanPath;
   
   // Build transformation string
   const transformations = [];
@@ -93,7 +108,11 @@ export const getCloudinaryUrl = (
     ? transformations.join(',') + '/' 
     : '';
   
-  return `${CLOUDINARY_URL}/${transformationString}${cleanPath}`;
+  // Add version if provided or use hard-coded one for known assets
+  const version = options.version || (cloudinaryId ? 'v1747031052/' : '');
+  const versionString = version ? `${version}` : '';
+  
+  return `${CLOUDINARY_URL}/${transformationString}${versionString}${finalPath}`;
 };
 
 /**

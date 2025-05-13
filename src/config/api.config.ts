@@ -75,12 +75,21 @@ const DEFAULT_SERVICE_IMAGE = 'https://placehold.co/600x400?text=Service';
 
 // Map of fallback images for error recovery
 const IMAGE_FALLBACKS = {
-  'static_assets/bikeExpert': 'https://placehold.co/800x500?text=Bike+Expert', 
-  'static_assets/bikeExpert.jpg': 'https://placehold.co/800x500?text=Bike+Expert',
-  'static_assets/founder': 'https://placehold.co/600x800?text=Founder',
-  'static_assets/founder.jpg': 'https://placehold.co/600x800?text=Founder',
-  'static_assets/logo': 'https://placehold.co/48x48?text=RMB',
-  'static_assets/logo.png': 'https://placehold.co/48x48?text=RMB',
+  'static_assets/bikeExpert': 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747031052/bikeExpert_qt2sfa.jpg',
+  'static_assets/bikeExpert.jpg': 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747031052/bikeExpert_qt2sfa.jpg',
+  'bikeExpert': 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747031052/bikeExpert_qt2sfa.jpg',
+  'bikeExpert_qt2sfa': 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747031052/bikeExpert_qt2sfa.jpg',
+  
+  'static_assets/founder': 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747031052/founder_vpnyov.jpg',
+  'static_assets/founder.jpg': 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747031052/founder_vpnyov.jpg',
+  'founder': 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747031052/founder_vpnyov.jpg',
+  'founder_vpnyov': 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747031052/founder_vpnyov.jpg',
+  
+  'static_assets/logo': 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747031052/logo_jlugzw.jpg',
+  'static_assets/logo.png': 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747031052/logo_jlugzw.jpg',
+  'logo': 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747031052/logo_jlugzw.jpg',
+  'logo_jlugzw': 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747031052/logo_jlugzw.jpg',
+  
   'vehicle_photos': DEFAULT_VEHICLE_IMAGE,
   'service_images': DEFAULT_SERVICE_IMAGE,
   'profile_images': DEFAULT_PROFILE_IMAGE

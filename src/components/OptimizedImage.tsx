@@ -14,6 +14,16 @@ interface OptimizedImageProps {
   objectFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
 }
 
+// Map of local asset names to Cloudinary public IDs
+const ASSET_TO_CLOUDINARY_MAP: Record<string, string> = {
+  'logo.png': 'logo_jlugzw',
+  'bikeExpert.jpg': 'bikeExpert_qt2sfa',
+  'founder.jpg': 'founder_vpnyov'
+};
+
+// Cloudinary version number for these uploads
+const CLOUDINARY_VERSION = 'v1747031052';
+
 /**
  * OptimizedImage - A component for high-performance image delivery
  * Automatically uses Cloudinary for dynamic resizing, format conversion, and compression
@@ -43,20 +53,32 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
   if (isAssetUrl) {
     // Extract the filename from the asset path
     const assetPath = src.split('/').pop() || '';
-    const assetName = assetPath.split('.')[0];
-    // Get the file extension, default to jpg if not present
-    const fileExtension = assetPath.includes('.') ? assetPath.split('.').pop() : 'jpg';
     
-    // Use a dedicated folder for static assets in Cloudinary with proper extension
-    const cloudinaryPath = `static_assets/${assetName}.${fileExtension}`;
-    optimizedSrc = getCloudinaryUrl(cloudinaryPath, { width, height, quality });
+    // Get Cloudinary ID from our mapping or use a fallback
+    const cloudinaryId = ASSET_TO_CLOUDINARY_MAP[assetPath] || assetPath.split('.')[0];
+    
+    // Determine file extension - some Cloudinary IDs already have it embedded
+    const hasExtension = cloudinaryId.includes('_');
+    const fileExtension = hasExtension ? 'jpg' : (assetPath.includes('.') ? assetPath.split('.').pop() : 'jpg');
+    
+    // Build the optimized source URL using direct Cloudinary URL format
+    optimizedSrc = `https://res.cloudinary.com/dz81bjuea/image/upload/${CLOUDINARY_VERSION}/${cloudinaryId}${!hasExtension ? `.${fileExtension}` : ''}`;
+    
+    // If dimensions or quality are provided, use Cloudinary transformations
+    if (width || height || quality) {
+      const transformations = [];
+      if (width) transformations.push(`w_${width}`);
+      if (height) transformations.push(`h_${height}`);
+      if (quality) transformations.push(`q_${quality}`);
+      transformations.push('f_auto'); // Always use automatic format
+      
+      optimizedSrc = `https://res.cloudinary.com/dz81bjuea/image/upload/${transformations.join(',')}/${CLOUDINARY_VERSION}/${cloudinaryId}${!hasExtension ? `.${fileExtension}` : ''}`;
+    }
     
     // Add debug log to help diagnose
     console.debug('Asset URL conversion:', { 
       original: src, 
-      assetName, 
-      fileExtension, 
-      cloudinaryPath, 
+      cloudinaryId,
       optimizedSrc 
     });
   } else if (!isCloudinaryUrl && src) {
