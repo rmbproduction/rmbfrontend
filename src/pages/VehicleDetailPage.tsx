@@ -91,10 +91,31 @@ const VehicleDetailPage = () => {
     
     // Create image objects to preload all gallery images
     imageUrls.forEach((url, index) => {
+      if (!url) {
+        console.warn(`Image URL at index ${index} is undefined or null`);
+        return;
+      }
+      
       const img = new Image();
-      img.src = url;
+      
+      // Add crossorigin attribute for CORS images
+      if (url.includes('cloudinary.com') || url.includes('res.cloudinary.com')) {
+        img.crossOrigin = 'anonymous';
+      }
+      
+      // Set up handlers before setting src
       img.onload = () => handleImageLoad(index);
       img.onerror = (e) => handleImageError(index, e as any);
+      
+      // Set src after event handlers
+      try {
+        img.src = url;
+      } catch (error) {
+        console.error(`Failed to set image source for index ${index}:`, error);
+        // Try fallback immediately for critical errors
+        img.src = API_CONFIG.getDefaultVehicleImage();
+      }
+      
       imagePreloadersRef.current.push(img);
     });
   };
@@ -102,18 +123,38 @@ const VehicleDetailPage = () => {
   const handleImageLoad = useCallback((index: number) => {
     console.log(`Image at index ${index} loaded successfully`);
     setImagesLoaded(prev => ({ ...prev, [index]: true }));
+    
+    // Log successful loading with dimensions for debugging
+    try {
+      if (imagePreloadersRef.current[index]) {
+        const img = imagePreloadersRef.current[index];
+        console.log(`Image ${index} dimensions: ${img.width}x${img.height}`);
+      }
+    } catch (err) {
+      // Ignore any errors in debugging code
+    }
   }, []);
 
   const handleImageError = useCallback((index: number, e: React.SyntheticEvent<HTMLImageElement>) => {
     console.warn(`Failed to load image at index ${index}`);
     const target = e.target as HTMLImageElement;
     
-    // Use a guaranteed working image for fallback
-    target.src = API_CONFIG.getDefaultVehicleImage();
+    // Get vehicle information for better logging
+    const vehicleInfo = vehicle ? `vehicle ${vehicle.id} (${vehicle.name})` : 'unknown vehicle';
+    console.warn(`Failed to load image for ${vehicleInfo}. Creating avatar.`);
+    
+    // Use a guaranteed working image for fallback - make sure it's a stable URL
+    const fallbackUrl = API_CONFIG.getDefaultVehicleImage();
+    
+    // Set a new source only if the current one isn't already the fallback
+    if (target.src !== fallbackUrl) {
+      target.src = fallbackUrl;
+      console.log(`Using fallback image: ${fallbackUrl}`);
+    }
     
     // Mark as loaded to stop retry attempts
     setImagesLoaded(prev => ({ ...prev, [index]: true }));
-  }, []);
+  }, [vehicle]);
 
   const fetchVehicleDetails = async (vehicleId: string) => {
     setLoading(true);
@@ -136,31 +177,60 @@ const VehicleDetailPage = () => {
         name: `${vehicleData.brand} ${vehicleData.model}`,
         // Organize images for the gallery
         images: {
-          main: API_CONFIG.getImageUrl(vehicleData.front_image_url) || defaultImage,
+          main: defaultImage, // Initialize with default image to always have a fallback
           gallery: []
         }
       };
       
-      // Build the gallery array with valid URLs only
-      const gallery = [
-        API_CONFIG.getImageUrl(vehicleData.front_image_url),
-        API_CONFIG.getImageUrl(vehicleData.back_image_url),
-        API_CONFIG.getImageUrl(vehicleData.left_image_url),
-        API_CONFIG.getImageUrl(vehicleData.right_image_url),
-        API_CONFIG.getImageUrl(vehicleData.dashboard_image_url)
-      ].filter(Boolean) as string[];
-      
-      // Add at least one default image if gallery is empty
-      if (gallery.length === 0) {
-        gallery.push(defaultImage);
+      // Try to set the main image if it exists
+      const mainImage = API_CONFIG.getImageUrl(vehicleData.front_image_url);
+      if (mainImage) {
+        processedVehicle.images.main = mainImage;
       }
       
-      processedVehicle.images.gallery = gallery;
+      // Create an image loading utility function to validate image URLs
+      const tryLoadImage = (url: string | null | undefined): string | null => {
+        if (!url) return null;
+        
+        try {
+          // Use a proper URL validation rather than just string manipulation
+          const validatedUrl = API_CONFIG.getImageUrl(url);
+          return validatedUrl;
+        } catch (err) {
+          console.warn(`Failed to validate image URL: ${url}`, err);
+          return null;
+        }
+      };
+      
+      // Build the gallery array with valid URLs only, with better validation
+      const galleryUrls = [
+        // Prioritize the front image first for consistency
+        tryLoadImage(vehicleData.front_image_url),
+        tryLoadImage(vehicleData.back_image_url),
+        tryLoadImage(vehicleData.left_image_url),
+        tryLoadImage(vehicleData.right_image_url),
+        tryLoadImage(vehicleData.dashboard_image_url)
+      ].filter(Boolean) as string[];
+      
+      // If we have no gallery images, create one with the default
+      if (galleryUrls.length === 0) {
+        console.warn(`No valid image URLs found for vehicle ${vehicleId}. Creating avatar.`);
+        galleryUrls.push(defaultImage);
+      } else {
+        // Always ensure we have the main image in the gallery as well
+        if (!galleryUrls.includes(processedVehicle.images.main)) {
+          galleryUrls.unshift(processedVehicle.images.main);
+        }
+      }
+      
+      // Deduplicate gallery images
+      processedVehicle.images.gallery = [...new Set(galleryUrls)];
       
       // Log processed images for debugging
       console.log('Processed image URLs:', {
         main: processedVehicle.images.main,
-        gallery: processedVehicle.images.gallery
+        gallery: processedVehicle.images.gallery,
+        count: processedVehicle.images.gallery.length
       });
       
       // Reset imagesLoaded state for the new gallery
@@ -461,7 +531,7 @@ const VehicleDetailPage = () => {
                     )}
                   </div>
                   <img
-                    src={vehicle.images.gallery[activeImageIndex]}
+                    src={vehicle.images.gallery[activeImageIndex] || API_CONFIG.getDefaultVehicleImage()}
                     alt={vehicle.name}
                     className={`w-full h-full object-contain transition-opacity duration-300 ${imagesLoaded[activeImageIndex] ? 'opacity-100' : 'opacity-0'}`}
                     onClick={() => openModal(activeImageIndex)}
@@ -506,34 +576,28 @@ const VehicleDetailPage = () => {
                 </div>
                 
                 {/* Thumbnail Gallery */}
-                {vehicle.images.gallery.length > 1 && (
-                  <div className="p-4 flex space-x-2 overflow-x-auto">
-                    {vehicle.images.gallery.map((image, index) => (
-                      <div 
-                        key={index}
-                        className={`h-20 w-20 flex-shrink-0 cursor-pointer rounded-md overflow-hidden ${index === activeImageIndex ? 'ring-2 ring-[#FF5733]' : 'ring-1 ring-gray-200'}`}
-                        onClick={() => selectImage(index)}
-                      >
-                        <div className="w-full h-full bg-gray-200 relative flex items-center justify-center">
-                          {!imagesLoaded[index] && (
-                            <div className="absolute inset-0 animate-pulse bg-gray-200 flex items-center justify-center">
-                              <span className="text-xs text-gray-400">Loading</span>
-                            </div>
-                          )}
-                          <img
-                            src={image}
-                            alt={`${vehicle.name} view ${index + 1}`}
-                            className={`h-full w-full object-cover transition-opacity duration-300 ${imagesLoaded[index] ? 'opacity-100' : 'opacity-0'}`}
-                            loading={index < 3 ? "eager" : "lazy"}
-                            decoding="async"
-                            onLoad={() => handleImageLoad(index)}
-                            onError={(e) => handleImageError(index, e)}
-                          />
-                        </div>
+                <div className="grid grid-cols-5 gap-2 mt-4 px-4 pb-4">
+                  {vehicle.images.gallery.map((image, idx) => (
+                    <div 
+                      key={idx}
+                      className={`relative cursor-pointer h-16 border rounded overflow-hidden ${activeImageIndex === idx ? 'border-[#FF5733] shadow-md' : 'border-gray-200'}`}
+                      onClick={() => selectImage(idx)}
+                    >
+                      <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                        {!imagesLoaded[idx] && (
+                          <div className="w-4 h-4 border-2 border-t-transparent border-gray-400 rounded-full animate-spin"></div>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <img 
+                        src={image || API_CONFIG.getDefaultVehicleImage()}
+                        alt={`${vehicle.name} thumbnail ${idx + 1}`}
+                        className={`w-full h-full object-cover transition-opacity duration-300 ${imagesLoaded[idx] ? 'opacity-100' : 'opacity-0'}`}
+                        onLoad={() => handleImageLoad(idx)}
+                        onError={(e) => handleImageError(idx, e)}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Vehicle Description */}
@@ -767,71 +831,66 @@ const VehicleDetailPage = () => {
         </motion.div>
       </div>
 
-      {/* Image Modal */}
+      {/* Full-screen Image Modal */}
       {showModal && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+          className="fixed inset-0 z-50 bg-black bg-opacity-90 flex items-center justify-center"
           onClick={closeModal}
         >
-          <div className="relative max-w-4xl w-full max-h-screen p-4">
+          <div className="relative w-full max-w-6xl h-[80vh] max-h-[80vh]">
             {/* Close button */}
             <button 
-              className="absolute top-4 right-4 z-10 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors"
+              className="absolute top-4 right-4 z-10 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70"
               onClick={closeModal}
             >
               <X className="h-6 w-6" />
             </button>
             
-            {/* Image loading placeholder */}
-            <div className="w-full h-[85vh] flex items-center justify-center">
-              {!imagesLoaded[activeImageIndex] && (
-                <div className="animate-pulse bg-gray-800 rounded w-full h-full max-w-4xl max-h-[85vh] flex items-center justify-center">
-                  <span className="text-white text-lg">Loading image...</span>
-                </div>
-              )}
-              
-              {/* Main modal image */}
-              <img 
-                key={`modal-${activeImageIndex}`}
-                src={vehicle.images.gallery[activeImageIndex]} 
-                alt={vehicle.name}
-                className={`max-h-[85vh] w-auto mx-auto object-contain transition-opacity duration-300 ${imagesLoaded[activeImageIndex] ? 'opacity-100' : 'opacity-0'}`}
-                onClick={(e) => e.stopPropagation()}
-                onLoad={() => handleImageLoad(activeImageIndex)}
-                onError={(e) => handleImageError(activeImageIndex, e)}
-              />
+            {/* Image */}
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="relative w-full h-full">
+                {!imagesLoaded[activeImageIndex] && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-12 h-12 border-4 border-t-transparent border-white rounded-full animate-spin"></div>
+                  </div>
+                )}
+                <img
+                  src={vehicle?.images.gallery[activeImageIndex] || API_CONFIG.getDefaultVehicleImage()}
+                  alt={vehicle?.name || "Vehicle"}
+                  className={`w-full h-full object-contain transition-opacity duration-300 ${imagesLoaded[activeImageIndex] ? 'opacity-100' : 'opacity-0'}`}
+                  onLoad={() => handleImageLoad(activeImageIndex)}
+                  onError={(e) => handleImageError(activeImageIndex, e)}
+                />
+              </div>
             </div>
             
-            {/* Navigation arrows */}
-            {vehicle.images.gallery.length > 1 && (
+            {/* Navigation buttons */}
+            {vehicle?.images.gallery.length > 1 && (
               <>
                 <button 
+                  className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-50 p-3 rounded-full text-white hover:bg-opacity-70 focus:outline-none"
                   onClick={(e) => {
                     e.stopPropagation();
                     prevImage();
                   }}
-                  className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-3 rounded-full hover:bg-black/70 transition-colors z-20"
-                  aria-label="Previous image"
                 >
                   <ChevronLeft className="h-8 w-8" />
                 </button>
-                
                 <button 
+                  className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-50 p-3 rounded-full text-white hover:bg-opacity-70 focus:outline-none"
                   onClick={(e) => {
                     e.stopPropagation();
                     nextImage();
                   }}
-                  className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-3 rounded-full hover:bg-black/70 transition-colors z-20"
-                  aria-label="Next image"
                 >
                   <ChevronRight className="h-8 w-8" />
                 </button>
               </>
             )}
             
-            {/* Image counter */}
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded-full text-sm z-20">
-              {activeImageIndex + 1} / {vehicle.images.gallery.length}
+            {/* Image count indicator */}
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 px-3 py-1 rounded-full text-white text-sm">
+              {activeImageIndex + 1} / {vehicle?.images.gallery.length || 0}
             </div>
           </div>
         </div>
