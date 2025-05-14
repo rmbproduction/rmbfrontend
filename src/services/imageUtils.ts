@@ -432,7 +432,7 @@ export const getImageUrlWithFallback = (
   }
   
   // Use the provided fallback or a default placeholder
-  return fallbackUrl || API_CONFIG.getCloudinaryPlaceholder();
+  return fallbackUrl || API_CONFIG.getCloudinaryPlaceholder('Vehicle Image');
 };
 
 /**
