@@ -320,8 +320,38 @@ const marketplaceService = {
         return [];
       }
       
+      // Validate each item in the array before enrichment
+      const validatedData = response.data.map((item: any) => {
+        if (typeof item !== 'object' || item === null) {
+          console.warn(`Received invalid item in sell-requests response:`, item);
+          // Create a placeholder object with the ID if possible
+          return {
+            id: typeof item === 'string' || typeof item === 'number' ? String(item) : 'unknown',
+            vehicle: {
+              brand: 'Unknown',
+              model: 'Unknown'
+            }
+          };
+        }
+        return item;
+      });
+      
       // Enrich each vehicle in the data
-      const enrichedData: VehicleData[] = response.data.map((vehicleData: VehicleData) => marketplaceService.enrichVehicleData(vehicleData));
+      const enrichedData: VehicleData[] = validatedData.map((vehicleData: VehicleData) => {
+        try {
+          return marketplaceService.enrichVehicleData(vehicleData);
+        } catch (enrichError) {
+          console.error('Error enriching vehicle data:', enrichError, vehicleData);
+          // Return a basic valid object if enrichment fails
+          return {
+            id: vehicleData.id || 'unknown',
+            vehicle: {
+              brand: 'Unknown',
+              model: 'Error loading details'
+            }
+          };
+        }
+      });
       
       // Cache the results
       sessionStorage.setItem(cacheKey, JSON.stringify({
@@ -2367,6 +2397,24 @@ const marketplaceService = {
   enrichVehicleData: (data: VehicleData): VehicleData => {
     // If data is null or undefined, return empty object
     if (data == null) return {};
+    
+    // Check if data is a primitive value (like a number) and wrap it in an object
+    if (typeof data !== 'object') {
+      console.warn(`Received non-object value in enrichVehicleData: ${data}. Converting to object.`);
+      return {
+        id: String(data),
+        vehicle: {
+          brand: 'Unknown',
+          model: 'Unknown',
+          registration_number: 'Unknown',
+          year: new Date().getFullYear(),
+          fuel_type: 'Petrol',
+          color: 'Not Available',
+          kms_driven: 0,
+          engine_capacity: 0
+        }
+      };
+    }
     
     // Make a deep copy to avoid modifying the original
     const enriched: VehicleData = JSON.parse(JSON.stringify(data));

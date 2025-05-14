@@ -12,12 +12,23 @@ export const formatDateForBackend = (dateString: string): string => {
 };
 
 // Format price with commas
-export const formatPrice = (price: string | number): string => {
-  return Number(price).toLocaleString('en-IN');
+export const formatPrice = (price: string | number | null | undefined): string => {
+  if (price === null || price === undefined) return '0';
+  
+  // Ensure we have a valid number
+  const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+  if (isNaN(numPrice)) return '0';
+  
+  return Number(numPrice).toLocaleString('en-IN');
 };
 
 // Helper functions for vehicle data extraction
 export const getVehicleBrand = (vehicle: any): string => {
+  // Handle non-object vehicles
+  if (typeof vehicle !== 'object' || vehicle === null) {
+    return 'Unknown';
+  }
+  
   return vehicle.vehicle?.brand || 
         vehicle.vehicle_details?.brand || 
         vehicle.brand ||
@@ -25,6 +36,11 @@ export const getVehicleBrand = (vehicle: any): string => {
 };
 
 export const getVehicleModel = (vehicle: any): string => {
+  // Handle non-object vehicles
+  if (typeof vehicle !== 'object' || vehicle === null) {
+    return 'Unknown';
+  }
+  
   return vehicle.vehicle?.model || 
         vehicle.vehicle_details?.model || 
         vehicle.model ||
@@ -32,6 +48,11 @@ export const getVehicleModel = (vehicle: any): string => {
 };
 
 export const getVehicleRegistration = (vehicle: any): string => {
+  // Handle non-object vehicles
+  if (typeof vehicle !== 'object' || vehicle === null) {
+    return 'N/A';
+  }
+  
   return vehicle.vehicle?.registration_number || 
         vehicle.vehicle_details?.registration_number || 
         vehicle.registration_number ||
@@ -39,6 +60,11 @@ export const getVehicleRegistration = (vehicle: any): string => {
 };
 
 export const getVehicleCondition = (vehicle: any): string => {
+  // Handle non-object vehicles
+  if (typeof vehicle !== 'object' || vehicle === null) {
+    return 'Good';
+  }
+  
   // Get raw condition value from all possible sources
   const rawCondition = vehicle.condition || 
         vehicle.vehicle?.condition || 
@@ -59,14 +85,23 @@ export const getVehicleCondition = (vehicle: any): string => {
 
 // Get the expected price with fallbacks
 export const getExpectedPrice = (vehicle: any): number => {
+  // Handle non-object vehicles
+  if (typeof vehicle !== 'object' || vehicle === null) {
+    return 0;
+  }
+  
   // Check all possible locations for expected price
-  return vehicle.vehicle?.expected_price || 
+  const price = vehicle.vehicle?.expected_price || 
          vehicle.vehicle?.price || 
          vehicle.expected_price || 
          vehicle.price || 
          vehicle.vehicle_details?.expected_price ||
          vehicle.vehicle_details?.price ||
          0;
+         
+  // Ensure we return a valid number
+  return typeof price === 'number' ? price : 
+         typeof price === 'string' ? parseFloat(price) || 0 : 0;
 };
 
 // Format summary value based on key type

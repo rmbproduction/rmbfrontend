@@ -7,7 +7,12 @@ import {
 /**
  * Get the appropriate icon component for a given sell request status
  */
-export const getStatusIcon = (status: string): React.ReactNode => {
+export const getStatusIcon = (status?: string | null): React.ReactNode => {
+  // Handle null or undefined status
+  if (status === null || status === undefined) {
+    return React.createElement(AlertCircle, { className: "w-5 h-5 text-gray-500" });
+  }
+  
   switch(status) {
     case 'submitted':
       return React.createElement(Clock, { className: "w-5 h-5 text-yellow-500" });
@@ -37,7 +42,12 @@ export const getStatusIcon = (status: string): React.ReactNode => {
 /**
  * Get the background and border colors for status container
  */
-export const getStatusColor = (status: string): string => {
+export const getStatusColor = (status?: string | null): string => {
+  // Handle null or undefined status
+  if (status === null || status === undefined) {
+    return 'bg-gray-50 border-gray-300';
+  }
+  
   switch(status) {
     case 'submitted':
       return 'bg-yellow-50 border-yellow-300';
@@ -64,7 +74,12 @@ export const getStatusColor = (status: string): string => {
 /**
  * Get the badge color for status display
  */
-export const getStatusBadgeColor = (status: string): string => {
+export const getStatusBadgeColor = (status?: string | null): string => {
+  // Handle null or undefined status
+  if (status === null || status === undefined) {
+    return 'bg-gray-100 text-gray-800';
+  }
+  
   switch(status) {
     case 'submitted':
       return 'bg-yellow-100 text-yellow-800';

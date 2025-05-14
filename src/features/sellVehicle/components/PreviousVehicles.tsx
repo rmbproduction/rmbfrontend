@@ -13,6 +13,7 @@ const PreviousVehicles: React.FC<PreviousVehicleProps> = ({ onClose }) => {
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [vehicleStatuses, setVehicleStatuses] = useState<VehicleStatusInfo>({});
+  const [error, setError] = useState<string | null>(null);
 
   // Add polling interval for status updates
   useEffect(() => {
@@ -30,15 +31,72 @@ const PreviousVehicles: React.FC<PreviousVehicleProps> = ({ onClose }) => {
     };
   }, []);
 
+  // Validate vehicle object before processing
+  const isValidVehicle = (vehicle: any): boolean => {
+    // Check if the vehicle is a primitive value (like a number)
+    if (typeof vehicle !== 'object' || vehicle === null) {
+      console.warn(`Received invalid vehicle data: ${vehicle}. Expected object.`);
+      return false;
+    }
+    
+    // Ensure it has an id
+    if (!vehicle.id) {
+      console.warn('Received vehicle without id:', vehicle);
+      return false;
+    }
+    
+    return true;
+  };
+  
+  // Transform primitive values into proper vehicle objects
+  const normalizeVehicleData = (data: any): any => {
+    // If it's already a valid object, just return it
+    if (typeof data === 'object' && data !== null) {
+      return data;
+    }
+    
+    // If it's a primitive value (like number 5), convert to a proper object
+    console.warn(`Converting primitive value ${data} to vehicle object`);
+    return {
+      id: String(data),
+      vehicle: {
+        brand: 'Unknown',
+        model: 'Unknown',
+        registration_number: 'Unknown',
+        year: new Date().getFullYear(),
+        status: 'unknown'
+      },
+      status: 'unknown',
+      created_at: new Date().toISOString()
+    };
+  };
+
   // Fetch sell requests and their status information
   const fetchVehicles = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const sellRequests = await marketplaceService.getSellRequests();
+      let sellRequests = await marketplaceService.getSellRequests();
       console.log('Retrieved sell requests:', sellRequests);
       
+      // Ensure we have an array
+      if (!Array.isArray(sellRequests)) {
+        console.error('Expected array of sell requests, got:', typeof sellRequests);
+        sellRequests = [];
+      }
+      
+      // Normalize any primitive values in the response
+      const normalizedRequests = sellRequests.map(normalizeVehicleData);
+      
+      // Filter out invalid vehicle objects
+      const validRequests = normalizedRequests.filter(isValidVehicle);
+      
+      if (validRequests.length < normalizedRequests.length) {
+        console.warn(`Filtered out ${normalizedRequests.length - validRequests.length} invalid vehicles`);
+      }
+      
       // CRITICAL FIX: Sync with vehicle summary data to get latest condition values
-      const enhancedSellRequests = await Promise.all(sellRequests.map(async (request: any) => {
+      const enhancedSellRequests = await Promise.all(validRequests.map(async (request: any) => {
         try {
           // Try to get the latest data from sessionStorage first (fastest)
           const sessionData = sessionStorage.getItem(`vehicle_summary_${request.id}`);
@@ -108,6 +166,7 @@ const PreviousVehicles: React.FC<PreviousVehicleProps> = ({ onClose }) => {
       await refreshVehicleStatuses(enhancedSellRequests);
     } catch (fetchError) {
       console.error('Error fetching vehicles:', fetchError);
+      setError('Failed to load your vehicles. Please try again.');
       toast.error('Failed to load your vehicles');
     } finally {
       setLoading(false);
@@ -120,11 +179,22 @@ const PreviousVehicles: React.FC<PreviousVehicleProps> = ({ onClose }) => {
       // Use provided sell requests or the current state
       const sellRequests = sellRequestsData || vehicles;
       
-      if (sellRequests.length === 0) return;
+      if (!Array.isArray(sellRequests) || sellRequests.length === 0) return;
       
       // Fetch status information for each sell request
-      const statusPromises = sellRequests.map((request: any) => 
-        marketplaceService.getSellRequestStatus(request.id)
+      const statusPromises = sellRequests.map((request: any) => {
+        // Ensure request is a valid object with an id
+        if (!request || typeof request !== 'object' || !request.id) {
+          return Promise.resolve({
+            id: typeof request === 'string' || typeof request === 'number' ? String(request) : 'unknown',
+            statusInfo: { 
+              status: 'unknown', 
+              message: 'Invalid vehicle data'
+            }
+          });
+        }
+        
+        return marketplaceService.getSellRequestStatus(request.id)
           .then(statusInfo => ({
             id: request.id,
             statusInfo
@@ -132,11 +202,11 @@ const PreviousVehicles: React.FC<PreviousVehicleProps> = ({ onClose }) => {
           .catch(() => ({
             id: request.id,
             statusInfo: { 
-              status: request.status, 
+              status: request.status || 'unknown', 
               message: 'Status information unavailable'
             }
-          }))
-      );
+          }));
+      });
       
       const statuses = await Promise.all(statusPromises);
       
@@ -164,7 +234,110 @@ const PreviousVehicles: React.FC<PreviousVehicleProps> = ({ onClose }) => {
     }
     
     // Fallback to vehicle status
-    return vehicle.status === 'sale_vehicle' ? 'For Sale' : vehicle.status;
+    return vehicle?.status === 'sale_vehicle' ? 'For Sale' : vehicle?.status || 'Unknown';
+  };
+
+  // Safe rendering wrapper
+  const renderVehicle = (vehicle: any) => {
+    if (typeof vehicle !== 'object' || vehicle === null) {
+      console.error('Attempted to render invalid vehicle:', vehicle);
+      return null;
+    }
+
+    try {
+      const status = vehicle.status || 'unknown';
+      const expectedPrice = getExpectedPrice(vehicle);
+      
+      return (
+        <div key={vehicle.id} className="border rounded-lg p-5 hover:shadow-md transition-shadow bg-white">
+          <div className="flex">
+            <div className="flex-shrink-0 mr-5">
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center border-2 shadow-sm ${getStatusColor(status)}`}>
+                {vehicle.vehicle?.photo_front ? (
+                  <SafeImage 
+                    src={vehicle.vehicle.photo_front} 
+                    alt={`${getVehicleBrand(vehicle)} ${getVehicleModel(vehicle)}`}
+                    className="w-16 h-16 rounded-full object-cover"
+                    fallbackComponent={
+                      <div className="w-16 h-16 rounded-full flex items-center justify-center bg-gray-100">
+                        {getStatusIcon(status)}
+                      </div>
+                    }
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center bg-gray-100">
+                    {getStatusIcon(status)}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex-1">
+              <div className="flex justify-between mb-2">
+                <h4 className="font-semibold text-gray-800 text-lg">
+                  {getVehicleBrand(vehicle)} {getVehicleModel(vehicle)} {vehicle.vehicle?.year || vehicle.vehicle_details?.year || vehicle.year}
+                </h4>
+                <span className={`px-3 py-1 text-xs rounded-full font-medium ${getStatusBadgeColor(status)}`}>
+                  {getStatusDisplay(vehicle, vehicle.id)}
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-y-2 text-sm mb-3">
+                <div className="flex items-center text-gray-600">
+                  <Tag className="w-4 h-4 mr-1 text-[#FF5733]" />
+                  <span className="font-medium">Registration: </span>
+                  <span className="ml-1">
+                    {getVehicleRegistration(vehicle)}
+                  </span>
+                </div>
+                <div className="flex items-center text-gray-600">
+                  <Clock className="w-4 h-4 mr-1 text-[#FF5733]" />
+                  <span className="font-medium">Listed: </span>
+                  <span className="ml-1">{vehicle.created_at ? new Date(vehicle.created_at).toLocaleDateString() : 'Unknown'}</span>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-y-2 text-sm mb-3">
+                <div className="flex items-center text-gray-600">
+                  <span className="font-medium">Condition: </span>
+                  <span className="ml-1 capitalize">
+                    <span title={`Sources: direct=${vehicle.condition}, vehicle=${vehicle.vehicle?.condition}, details=${vehicle.vehicle_details?.condition}`}>
+                      {getVehicleCondition(vehicle)}
+                    </span>
+                  </span>
+                </div>
+              </div>
+              
+              <p className="text-sm text-gray-600 mb-3">
+                {vehicleStatuses[vehicle.id]?.message || 'Status loading...'}
+              </p>
+              
+              <div className="flex justify-between items-center pt-3 border-t">
+                <div className="flex items-baseline">
+                  <span className="text-sm text-gray-500 mr-2">Expected Price:</span>
+                  <span className="font-bold text-lg text-[#FF5733]">₹{formatPrice(expectedPrice)}</span>
+                </div>
+                
+                <Link 
+                  to={`/sell-vehicle/${vehicle.id}/summary`}
+                  className="flex items-center bg-[#FF5733] text-white px-3 py-1.5 rounded-md hover:bg-[#ff4019] transition-colors text-sm font-medium"
+                >
+                  <Eye className="w-4 h-4 mr-1" />
+                  View Details
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    } catch (error) {
+      console.error('Error rendering vehicle:', error, vehicle);
+      return (
+        <div key={vehicle.id || 'unknown'} className="border rounded-lg p-5 bg-red-50">
+          <p className="text-red-600">Error displaying this vehicle. Please try refreshing the page.</p>
+        </div>
+      );
+    }
   };
 
   return (
@@ -184,98 +357,23 @@ const PreviousVehicles: React.FC<PreviousVehicleProps> = ({ onClose }) => {
           <div className="flex justify-center items-center h-40">
             <Loader className="w-8 h-8 animate-spin text-[#FF5733]" />
           </div>
+        ) : error ? (
+          <div className="bg-red-50 rounded-lg p-4 text-center">
+            <p className="text-red-600">{error}</p>
+            <button 
+              onClick={() => fetchVehicles()}
+              className="mt-3 px-4 py-2 bg-[#FF5733] text-white rounded-md text-sm"
+            >
+              Try Again
+            </button>
+          </div>
         ) : vehicles.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-gray-500">You haven't listed any vehicles yet.</p>
           </div>
         ) : (
           <div className="space-y-5">
-            {vehicles.map(vehicle => {
-              const status = vehicle.status;
-              const expectedPrice = getExpectedPrice(vehicle);
-              return (
-                <div key={vehicle.id} className="border rounded-lg p-5 hover:shadow-md transition-shadow bg-white">
-                  <div className="flex">
-                    <div className="flex-shrink-0 mr-5">
-                      <div className={`w-20 h-20 rounded-full flex items-center justify-center border-2 shadow-sm ${getStatusColor(status)}`}>
-                        {vehicle.vehicle?.photo_front ? (
-                          <SafeImage 
-                            src={vehicle.vehicle.photo_front} 
-                            alt={`${vehicle.vehicle?.brand} ${vehicle.vehicle?.model}`}
-                            className="w-16 h-16 rounded-full object-cover"
-                            fallbackComponent={
-                              <div className="w-16 h-16 rounded-full flex items-center justify-center bg-gray-100">
-                                {getStatusIcon(status)}
-                              </div>
-                            }
-                          />
-                        ) : (
-                          <div className="w-16 h-16 rounded-full flex items-center justify-center bg-gray-100">
-                            {getStatusIcon(status)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="flex-1">
-                      <div className="flex justify-between mb-2">
-                        <h4 className="font-semibold text-gray-800 text-lg">
-                          {getVehicleBrand(vehicle)} {getVehicleModel(vehicle)} {vehicle.vehicle?.year || vehicle.vehicle_details?.year || vehicle.year}
-                        </h4>
-                        <span className={`px-3 py-1 text-xs rounded-full font-medium ${getStatusBadgeColor(status)}`}>
-                          {getStatusDisplay(vehicle, vehicle.id)}
-                        </span>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-y-2 text-sm mb-3">
-                        <div className="flex items-center text-gray-600">
-                          <Tag className="w-4 h-4 mr-1 text-[#FF5733]" />
-                          <span className="font-medium">Registration: </span>
-                          <span className="ml-1">
-                            {getVehicleRegistration(vehicle)}
-                          </span>
-                        </div>
-                        <div className="flex items-center text-gray-600">
-                          <Clock className="w-4 h-4 mr-1 text-[#FF5733]" />
-                          <span className="font-medium">Listed: </span>
-                          <span className="ml-1">{new Date(vehicle.created_at).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-y-2 text-sm mb-3">
-                        <div className="flex items-center text-gray-600">
-                          <span className="font-medium">Condition: </span>
-                          <span className="ml-1 capitalize">
-                            <span title={`Sources: direct=${vehicle.condition}, vehicle=${vehicle.vehicle?.condition}, details=${vehicle.vehicle_details?.condition}`}>
-                              {getVehicleCondition(vehicle)}
-                            </span>
-                          </span>
-                        </div>
-                      </div>
-                      
-                      <p className="text-sm text-gray-600 mb-3">
-                        {vehicleStatuses[vehicle.id]?.message || 'Status loading...'}
-                      </p>
-                      
-                      <div className="flex justify-between items-center pt-3 border-t">
-                        <div className="flex items-baseline">
-                          <span className="text-sm text-gray-500 mr-2">Expected Price:</span>
-                          <span className="font-bold text-lg text-[#FF5733]">₹{formatPrice(expectedPrice)}</span>
-                        </div>
-                        
-                        <Link 
-                          to={`/sell-vehicle/${vehicle.id}/summary`}
-                          className="flex items-center bg-[#FF5733] text-white px-3 py-1.5 rounded-md hover:bg-[#ff4019] transition-colors text-sm font-medium"
-                        >
-                          <Eye className="w-4 h-4 mr-1" />
-                          View Details
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {vehicles.map(vehicle => renderVehicle(vehicle))}
           </div>
         )}
       </div>
