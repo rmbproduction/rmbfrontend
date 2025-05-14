@@ -45,36 +45,41 @@ export const getOptimizedCloudinaryUrl = (
   }
   
   try {
-    // Parse the URL to find the version and path
+    // Parse the URL to extract components
     const urlParts = url.split('/upload/');
     if (urlParts.length !== 2) return url;
     
     // Format: https://res.cloudinary.com/cloud-name/image/upload/v1234567890/path/to/image.jpg
     const baseUrl = urlParts[0] + '/upload/';
     
-    // Add transformation parameters before the version
+    // Add transformation parameters 
     // c_fill = crop and fill to exact dimensions
+    // g_auto = automatic gravity (focus on the important part of the image)
     // q_auto = automatic quality determination (or specify with q_80)
     // f_auto = automatic format selection based on browser
     const transformations = `c_fill,g_auto,w_${width},h_${height},q_${quality},f_auto/`;
     
-    // Check if there's a version tag (v1234567890 or v1/)
-    const pathParts = urlParts[1].split('/');
-    // Fix: Match both numbered version (v1234567890) and API versioning format (v1/)
-    const versionRegex = /^v\d+$|^v\d+\/$/;
+    const pathPart = urlParts[1];
     
-    if (pathParts[0].match(versionRegex)) {
-      // URL has version, insert transformations after version
-      const version = pathParts[0] + (pathParts[0].endsWith('/') ? '' : '/');
-      const remainingPath = pathParts.slice(1).join('/');
-      return `${baseUrl}${transformations}${version}${remainingPath}`;
-    } else {
-      // URL doesn't have version, just add transformations
-      return `${baseUrl}${transformations}${urlParts[1]}`;
+    // CASE 1: URLs with /v1/ format (API versioning)
+    if (pathPart.startsWith('v1/')) {
+      return `${baseUrl}${transformations}${pathPart}`;
     }
+    
+    // CASE 2: URLs with version numbers (v1234567890)
+    const versionMatch = pathPart.match(/^(v\d+)(\/|$)/);
+    if (versionMatch) {
+      const version = versionMatch[1];
+      const needsSlash = !pathPart.substring(version.length).startsWith('/') && pathPart.length > version.length;
+      const remainingPath = pathPart.substring(version.length + (needsSlash ? 0 : 1));
+      return `${baseUrl}${transformations}${version}/${remainingPath}`;
+    }
+    
+    // CASE 3: Standard path without version
+    return `${baseUrl}${transformations}${pathPart}`;
   } catch (error) {
     console.error('Error optimizing Cloudinary URL:', error);
-    return url; // Return original URL if something goes wrong
+    return url; // Return original URL if processing fails
   }
 };
 
@@ -101,18 +106,24 @@ export const getBlurPlaceholder = (url: string): string => {
     // e_blur:800 = heavy blur effect
     const transformations = 'w_100,q_10,e_blur:800/';
     
-    // Check if there's a version tag
-    const pathParts = urlParts[1].split('/');
-    // Fix: Match both numbered version (v1234567890) and API versioning format (v1/)
-    const versionRegex = /^v\d+$|^v\d+\/$/;
+    const pathPart = urlParts[1];
     
-    if (pathParts[0].match(versionRegex)) {
-      const version = pathParts[0] + (pathParts[0].endsWith('/') ? '' : '/');
-      const remainingPath = pathParts.slice(1).join('/');
-      return `${baseUrl}${transformations}${version}${remainingPath}`;
-    } else {
-      return `${baseUrl}${transformations}${urlParts[1]}`;
+    // CASE 1: URLs with /v1/ format (API versioning)
+    if (pathPart.startsWith('v1/')) {
+      return `${baseUrl}${transformations}${pathPart}`;
     }
+    
+    // CASE 2: URLs with version numbers (v1234567890)
+    const versionMatch = pathPart.match(/^(v\d+)(\/|$)/);
+    if (versionMatch) {
+      const version = versionMatch[1];
+      const needsSlash = !pathPart.substring(version.length).startsWith('/') && pathPart.length > version.length;
+      const remainingPath = pathPart.substring(version.length + (needsSlash ? 0 : 1));
+      return `${baseUrl}${transformations}${version}/${remainingPath}`;
+    }
+    
+    // CASE 3: Standard path without version
+    return `${baseUrl}${transformations}${pathPart}`;
   } catch (error) {
     console.error('Error creating blur placeholder:', error);
     return API_CONFIG.getDefaultVehicleImage();

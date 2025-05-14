@@ -131,8 +131,99 @@ const VehicleDetailPage = () => {
     return images.map(url => processImageUrl(url));
   }, [processImageUrl]);
 
-  // Extended image loading function with blur-up loading technique
-  const preloadImages = (imageUrls: string[]) => {
+  // Enhanced image loading handler for better performance tracking
+  const handleImageLoad = useCallback((index: number, e: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = e.target as HTMLImageElement;
+    const loadedSrc = target.src;
+    
+    console.log(`[VehicleDetailPage] Image ${index} loaded successfully`);
+    
+    // Cache this successful image URL for the current vehicle
+    if (vehicle?.id) {
+      try {
+        // Determine image type based on URL patterns or index
+        let imageType = 'unknown';
+        if (loadedSrc.includes('/front/')) imageType = 'front';
+        else if (loadedSrc.includes('/back/')) imageType = 'back';
+        else if (loadedSrc.includes('/left/')) imageType = 'left';
+        else if (loadedSrc.includes('/right/')) imageType = 'right';
+        else if (loadedSrc.includes('/dashboard/')) imageType = 'dashboard';
+        else imageType = `image_${index}`;
+        
+        // Store in localStorage for future loads
+        localStorage.setItem(`vehicle_image_${vehicle.id}_${imageType}`, loadedSrc);
+      } catch (e) {
+        console.warn('Failed to cache successful image URL:', e);
+      }
+    }
+    
+    // Update loading status for this image
+    setImagesLoaded(prev => ({
+      ...prev,
+      [index]: true
+    }));
+    
+    // Track loading performance
+    const loadTime = performance.now();
+    console.log(`[VehicleDetailPage] Image ${index} loaded in ${Math.round(loadTime)}ms`);
+  }, [vehicle]);
+
+  // Enhanced image error handler with detailed logging and smarter fallbacks
+  const handleImageError = useCallback((index: number, e: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = e.target as HTMLImageElement;
+    const originalSrc = target.src;
+    
+    console.warn(`[VehicleDetailPage] Image load error at index ${index}`, {
+      originalSrc,
+      vehicleId: vehicle?.id,
+      vehicleName: vehicle?.name
+    });
+    
+    // Determine what type of image this is based on URL patterns
+    let imageType = 'unknown';
+    if (originalSrc.includes('/front/')) imageType = 'front';
+    else if (originalSrc.includes('/back/')) imageType = 'back';
+    else if (originalSrc.includes('/left/')) imageType = 'left';
+    else if (originalSrc.includes('/right/')) imageType = 'right';
+    else if (originalSrc.includes('/dashboard/')) imageType = 'dashboard';
+    
+    // Extract the cloud name from the original URL if possible
+    const cloudNameMatch = originalSrc.match(/res\.cloudinary\.com\/([^/]+)\//);
+    const cloudName = cloudNameMatch ? cloudNameMatch[1] : 'dz81bjuea';
+    
+    // Generate a descriptive fallback with vehicle details and image position
+    const vehicleText = vehicle?.name || `Vehicle ${vehicle?.id || ''}`;
+    const imageTypeLabel = imageType !== 'unknown' ? ` (${imageType})` : '';
+    const fallbackText = `${vehicleText}${imageTypeLabel}`;
+    
+    // Create a reliable fallback URL directly with Cloudinary
+    const fallbackUrl = `https://res.cloudinary.com/${cloudName}/image/upload/w_800,h_600,c_fill,g_center/l_text:Arial_32_bold:${encodeURIComponent(fallbackText)},co_white/e_colorize,co_rgb:FF5733,g_center/sample`;
+    
+    // Save this fallback for future reference
+    try {
+      if (vehicle?.id) {
+        localStorage.setItem(`vehicle_image_${vehicle.id}_${imageType}_fallback`, fallbackUrl);
+      }
+    } catch (e) {
+      console.warn('Failed to cache fallback URL:', e);
+    }
+    
+    // Only change src if it's different to avoid infinite loops
+    if (target.src !== fallbackUrl) {
+      console.log(`[VehicleDetailPage] Replacing failed image with fallback:`, fallbackUrl);
+      target.src = fallbackUrl;
+    }
+  }, [vehicle]);
+
+  // Enhanced image preloading with progress tracking and error handling
+  const preloadImages = useCallback((imageUrls: string[]) => {
+    if (!imageUrls.length) {
+      console.warn('[VehicleDetailPage] No images to preload');
+      return;
+    }
+    
+    console.log(`[VehicleDetailPage] Preloading ${imageUrls.length} images`);
+    
     // Clear any previous preloaders
     imagePreloadersRef.current = [];
     
@@ -140,12 +231,26 @@ const VehicleDetailPage = () => {
     const newImagesLoaded: Record<number, boolean> = {};
     
     // Create image objects to preload all gallery images
-    const optimizedUrls = optimizeGalleryImages(imageUrls);
-    
-    optimizedUrls.forEach((url, index) => {
+    imageUrls.forEach((url, index) => {
       if (!url) {
-        console.warn(`Image URL at index ${index} is undefined or null`);
+        console.warn(`[VehicleDetailPage] Image URL at index ${index} is undefined or null`);
+        newImagesLoaded[index] = false;
         return;
+      }
+      
+      // Check for cached versions first
+      if (vehicle?.id) {
+        try {
+          // Try to get a cached version by index
+          const cachedUrl = localStorage.getItem(`vehicle_image_${vehicle.id}_image_${index}`);
+          if (cachedUrl && cachedUrl.includes('cloudinary.com')) {
+            console.log(`[VehicleDetailPage] Using cached image for index ${index}`);
+            newImagesLoaded[index] = true;
+            return; // Skip preloading for cached images
+          }
+        } catch (e) {
+          // Continue with normal preloading
+        }
       }
       
       // First set up a placeholder blur image
@@ -160,82 +265,47 @@ const VehicleDetailPage = () => {
       }
       
       // Set up handlers before setting src
-      img.onload = () => handleImageLoad(index, { target: imagePreloadersRef.current[index] } as unknown as React.SyntheticEvent<HTMLImageElement>);
-      img.onerror = () => handleImageError(index, { target: img } as unknown as React.SyntheticEvent<HTMLImageElement>);
+      img.onload = () => {
+        console.log(`[VehicleDetailPage] Preloaded image ${index}`);
+        handleImageLoad(index, { target: img } as unknown as React.SyntheticEvent<HTMLImageElement>);
+      };
+      
+      img.onerror = () => {
+        console.warn(`[VehicleDetailPage] Failed to preload image ${index}`);
+        handleImageError(index, { target: img } as unknown as React.SyntheticEvent<HTMLImageElement>);
+      };
+      
+      // Set proper loading attributes for performance
+      img.loading = 'eager';
+      img.decoding = 'async';
       
       // Set src after event handlers
       try {
-        // Load the real image
-        img.src = url;
+        // Apply Cloudinary optimizations
+        img.src = getOptimizedCloudinaryUrl(url);
       } catch (error) {
-        console.error(`Failed to set image source for index ${index}:`, error);
-        // Try fallback immediately for critical errors
-        img.src = API_CONFIG.getDefaultVehicleImage();
+        console.error(`[VehicleDetailPage] Failed to set image source for index ${index}:`, error);
+        img.src = placeholderUrl;
       }
       
       imagePreloadersRef.current.push(img);
     });
     
-    // Initialize with all images marked as not loaded
+    // Initialize with all images marked as loading
     setImagesLoaded(newImagesLoaded);
-  };
-
-  // Enhanced image error handler with detailed logging
-  const handleImageError = useCallback((index: number, e: React.SyntheticEvent<HTMLImageElement>) => {
-    const target = e.target as HTMLImageElement;
-    const originalSrc = target.src;
     
-    console.warn(`[VehicleDetailPage] Image load error at index ${index}`, {
-      originalSrc,
-      vehicleId: vehicle?.id,
-      vehicleName: vehicle?.name
-    });
-    
-    // Check if the URL is a Cloudinary URL with v1/ path that might be causing the issue
-    const isCloudinaryWithV1Path = originalSrc.includes('cloudinary.com') && originalSrc.includes('/v1/');
-    
-    let fallbackUrl;
-    
-    if (isCloudinaryWithV1Path) {
-      // Try to fix the URL by using a different path format
-      // Convert from: .../upload/v1/path/to/image.jpg to .../upload/sample
-      const baseUrlParts = originalSrc.split('/upload/');
-      if (baseUrlParts.length > 1) {
-        const cloudName = baseUrlParts[0].includes('res.cloudinary.com/') ? 
-          baseUrlParts[0].split('res.cloudinary.com/')[1] : 'dz81bjuea';
-        
-        // Create a fallback with vehicle name text overlay
-        fallbackUrl = `https://res.cloudinary.com/${cloudName}/image/upload/w_600,h_400,c_fill,g_center/l_text:Arial_32:${encodeURIComponent(vehicle?.name || 'Vehicle')},co_white/e_colorize,co_rgb:FF5733,g_center/sample`;
-      }
-    }
-    
-    // If we couldn't create a specific fallback, use the default vehicle image with text
-    if (!fallbackUrl) {
-      fallbackUrl = API_CONFIG.getCloudinaryPlaceholder(
-        vehicle?.name || `Vehicle ${vehicle?.id || ''}`,
-        600,
-        400
-      );
-    }
-    
-    // Only change src if it's different to avoid infinite loops
-    if (target.src !== fallbackUrl) {
-      console.log(`[VehicleDetailPage] Replacing failed image with fallback:`, fallbackUrl);
-      target.src = fallbackUrl;
-    }
-  }, [vehicle]);
-  
-  // Debug function to monitor image loading success
-  const handleImageLoad = useCallback((index: number, e: React.SyntheticEvent<HTMLImageElement>) => {
-    const target = e.target as HTMLImageElement;
-    console.log(`[VehicleDetailPage] Image ${index} loaded successfully:`, target.src);
-    
-    // Update the imagesLoaded state to track which images have loaded
-    setImagesLoaded(prev => ({
-      ...prev,
-      [index]: true
-    }));
-  }, []);
+    // Trigger progressive loading and cache updates
+    setTimeout(() => {
+      // Check load state after a delay and force update any stuck images
+      Object.entries(imagesLoaded).forEach(([indexStr, isLoaded]) => {
+        const index = parseInt(indexStr, 10);
+        if (!isLoaded && imagePreloadersRef.current[index]) {
+          console.warn(`[VehicleDetailPage] Image ${index} still loading after timeout, applying fallback`);
+          handleImageError(index, { target: imagePreloadersRef.current[index] } as unknown as React.SyntheticEvent<HTMLImageElement>);
+        }
+      });
+    }, 5000); // 5 second timeout for image loading
+  }, [vehicle, imagesLoaded, handleImageLoad, handleImageError]);
 
   const fetchVehicleDetails = async (vehicleId: string) => {
     setLoading(true);
@@ -246,8 +316,8 @@ const VehicleDetailPage = () => {
       const vehicleData = await marketplaceService.getVehicleDetails(vehicleId);
       
       // Debug: Log the original vehicle data
-      console.log('Original vehicle data:', vehicleData);
-      console.log('Image URLs from API:', {
+      console.log('[VehicleDetailPage] Original vehicle data:', vehicleData);
+      console.log('[VehicleDetailPage] Image URLs from API:', {
         front: vehicleData.front_image_url,
         back: vehicleData.back_image_url,
         left: vehicleData.left_image_url,
@@ -264,80 +334,102 @@ const VehicleDetailPage = () => {
       
       // If we have fixed images for this vehicle, use them
       if (knownVehicleImages) {
+        console.log('[VehicleDetailPage] Using fixed images for vehicle:', vehicleId);
         Object.assign(vehicleData, knownVehicleImages);
       }
       
-      // Create cloudinary placeholder image with vehicle name as backup
-      const cloudinaryPlaceholder = API_CONFIG.getCloudinaryPlaceholder(
-        `${vehicleData.brand} ${vehicleData.model}`, 
-        800, 
-        600
-      );
-      
-      // Safely process image URLs with guaranteed placeholders
-      const getImageWithFallbacks = (url: string | null | undefined): string => {
-        // If URL is completely missing, use placeholder
-        if (!url) return cloudinaryPlaceholder;
-        
-        // If URL has placeholder or undefined or null in it, it's invalid
-        if (url.includes('undefined') || url.includes('null') || url.includes('[object Object]')) {
-          return cloudinaryPlaceholder;
-        }
-        
-        // If valid URL, process it with Cloudinary optimizer
-        return processImageUrl(url) || cloudinaryPlaceholder;
+      // Set up a systematic image mapping for better organization
+      const imageMapping = {
+        front: vehicleData.front_image_url,
+        back: vehicleData.back_image_url,
+        left: vehicleData.left_image_url,
+        right: vehicleData.right_image_url,
+        dashboard: vehicleData.dashboard_image_url
       };
       
-      // Process all image URLs with strict validation
-      const mainImage = getImageWithFallbacks(vehicleData.front_image_url || vehicleData.imageUrl);
+      // Create a descriptive vehicle name
+      const vehicleName = `${vehicleData.brand} ${vehicleData.model}`;
       
-      // Collect all valid gallery images
-      const galleryUrls = [
-        vehicleData.front_image_url,
-        vehicleData.back_image_url, 
-        vehicleData.left_image_url,
-        vehicleData.right_image_url, 
-        vehicleData.dashboard_image_url
-      ]
-      .filter(url => url && url.length > 10) // Basic validation
-      .map(url => getImageWithFallbacks(url));
+      // Create cloudinary placeholder image with vehicle name as backup
+      const cloudinaryPlaceholder = API_CONFIG.getCloudinaryPlaceholder(vehicleName, 800, 600);
       
-      // Add main image to gallery if not already included
-      if (!galleryUrls.includes(mainImage)) {
-        galleryUrls.unshift(mainImage);
+      // Process all image URLs with validation and optimization
+      const processedImages: Record<string, string> = {};
+      
+      // Process each image type with proper validation
+      Object.entries(imageMapping).forEach(([type, url]) => {
+        if (!url || typeof url !== 'string' || url.length < 10) {
+          return; // Skip invalid URLs
+        }
+        
+        // Check for cached successful URLs first
+        try {
+          const cachedUrl = localStorage.getItem(`vehicle_image_${vehicleId}_${type}`);
+          if (cachedUrl && cachedUrl.includes('cloudinary.com')) {
+            processedImages[type] = cachedUrl;
+            return;
+          }
+        } catch (e) {
+          console.warn('Error reading from localStorage:', e);
+        }
+        
+        // Process URL through Cloudinary optimizer
+        try {
+          const optimizedUrl = processImageUrl(url);
+          if (optimizedUrl) {
+            processedImages[type] = optimizedUrl;
+            
+            // Cache this successful URL
+            try {
+              localStorage.setItem(`vehicle_image_${vehicleId}_${type}`, optimizedUrl);
+            } catch (e) {
+              console.warn('Failed to cache image URL:', e);
+            }
+          }
+        } catch (e) {
+          console.warn(`Failed to process ${type} image:`, e);
+        }
+      });
+      
+      // Ensure we have images by adding placeholders if needed
+      if (Object.keys(processedImages).length === 0) {
+        // No valid images found, use placeholder
+        processedImages.main = cloudinaryPlaceholder;
       }
       
-      // Ensure we have at least one image in gallery by adding placeholder if empty
-      if (galleryUrls.length === 0) {
-        galleryUrls.push(cloudinaryPlaceholder);
+      // Create the gallery array from the processed images
+      const galleryUrls = Object.values(processedImages);
+      
+      // Add main image if not already in gallery
+      if (processedImages.front && !galleryUrls.includes(processedImages.front)) {
+        galleryUrls.unshift(processedImages.front);
       }
       
-      // Process and normalize the data for UI
+      // Create a well-structured vehicle object for the UI
       const processedVehicle: UIVehicle = {
         ...vehicleData,
-        // Create a readable name
-        name: `${vehicleData.brand} ${vehicleData.model}`,
-        // Organize images for the gallery
+        name: vehicleName,
         images: {
-          main: mainImage,
-          gallery: galleryUrls
+          // Use front image as main, fallback to first gallery image
+          main: processedImages.front || galleryUrls[0] || cloudinaryPlaceholder,
+          gallery: galleryUrls.length > 0 ? galleryUrls : [cloudinaryPlaceholder]
         }
       };
       
-      // Store successful URLs for future use
-      if (processedVehicle.images.main) {
-        marketplaceService.storeVehicleImage(vehicleId, 'main', processedVehicle.images.main);
-      }
-      
-      processedVehicle.images.gallery.forEach((url, index) => {
-        marketplaceService.storeVehicleImage(vehicleId, `gallery_${index}`, url);
+      // Log the processed vehicle for debugging
+      console.log('[VehicleDetailPage] Processed vehicle data:', {
+        id: processedVehicle.id,
+        name: processedVehicle.name,
+        imageCount: processedVehicle.images.gallery.length,
+        mainImage: processedVehicle.images.main.substring(0, 100) + '...'
       });
       
       setVehicle(processedVehicle);
     } catch (err: any) {
       console.error('Error fetching vehicle details:', err);
       setError(err.message || 'Error loading vehicle details');
-      // Try to load placeholder if API fails 
+      
+      // Create a fallback vehicle with placeholder
       const fallbackVehicle = {
         id: parseInt(vehicleId, 10), // Convert string ID to number
         brand: 'Unknown',
@@ -362,7 +454,7 @@ const VehicleDetailPage = () => {
         }
       };
       
-      // Use setVehicle with the fallback vehicle - use a double type assertion to bypass type checking
+      // Set the fallback vehicle
       setVehicle(fallbackVehicle as unknown as UIVehicle);
     } finally {
       setLoading(false);
@@ -647,28 +739,32 @@ const VehicleDetailPage = () => {
               <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
                 {/* Main Image */}
                 <div className="main-vehicle-image relative aspect-w-4 aspect-h-3 bg-gray-100 rounded-lg overflow-hidden">
-                  {/* Placeholder blur image */}
+                  {/* Placeholder blur image for progressive loading */}
                   <img 
-                    src={getBlurPlaceholder(vehicle.images.main)}
+                    src={getBlurPlaceholder(vehicle.images.gallery[activeImageIndex] || vehicle.images.main)}
                     alt={`${vehicle.name} blur placeholder`}
                     className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500"
                     style={{ opacity: imagesLoaded[activeImageIndex] ? 0 : 0.7 }}
+                    aria-hidden="true"
                   />
                   
-                  {/* Loading spinner */}
+                  {/* Loading spinner shown while image is loading */}
                   {!imagesLoaded[activeImageIndex] && (
                     <div className="absolute inset-0 flex items-center justify-center z-10">
                       <div className="w-12 h-12 border-4 border-t-transparent border-[#FF5733] rounded-full animate-spin"></div>
                     </div>
                   )}
                   
-                  {/* Main image with progressive loading */}
+                  {/* Main image with optimized loading and error handling */}
                   <img 
-                    src={getOptimizedCloudinaryUrl(vehicle.images.gallery[activeImageIndex] || vehicle.images.main)}
-                    alt={vehicle.name}
+                    src={getOptimizedCloudinaryUrl(
+                      vehicle.images.gallery[activeImageIndex] || vehicle.images.main,
+                      800, 600, 85
+                    )}
+                    alt={`${vehicle.name} - ${activeImageIndex === 0 ? 'Main view' : `View ${activeImageIndex + 1}`}`}
                     className={`w-full h-full object-cover transition-opacity duration-300 ${imagesLoaded[activeImageIndex] ? 'opacity-100' : 'opacity-0'}`}
                     onClick={() => openModal(activeImageIndex)}
-                    onLoad={() => handleImageLoad(activeImageIndex, { target: imagePreloadersRef.current[activeImageIndex] } as unknown as React.SyntheticEvent<HTMLImageElement>)}
+                    onLoad={(e) => handleImageLoad(activeImageIndex, e)}
                     onError={(e) => handleImageError(activeImageIndex, e)}
                     loading="eager"
                     fetchPriority="high"
@@ -720,32 +816,36 @@ const VehicleDetailPage = () => {
                       key={idx}
                       className={`relative aspect-square bg-gray-100 rounded-md overflow-hidden cursor-pointer border-2 transition-all ${idx === activeImageIndex ? 'border-[#FF5733]' : 'border-transparent hover:border-gray-300'}`}
                       onClick={() => selectImage(idx)}
+                      role="button"
+                      aria-label={`View image ${idx + 1} of ${vehicle.images.gallery.length}`}
                     >
-                      {/* Placeholder blur image */}
+                      {/* Blur placeholder while loading */}
                       <img 
                         src={getBlurPlaceholder(img)}
                         alt={`${vehicle.name} blur placeholder ${idx + 1}`}
                         className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500"
                         style={{ opacity: imagesLoaded[idx] ? 0 : 0.7 }}
+                        aria-hidden="true"
                       />
                       
-                      {/* Loading spinner */}
+                      {/* Loading spinner for images not yet loaded */}
                       {!imagesLoaded[idx] && (
                         <div className="absolute inset-0 flex items-center justify-center z-10">
                           <div className="w-5 h-5 border-2 border-t-transparent border-[#FF5733] rounded-full animate-spin"></div>
                         </div>
                       )}
                       
-                      {/* Actual image with progressive loading */}
+                      {/* Actual thumbnail image with optimized loading */}
                       <img 
                         src={getOptimizedCloudinaryUrl(img, 150, 150, 80)}
                         alt={`${vehicle.name} thumbnail ${idx + 1}`}
                         className={`w-full h-full object-cover transition-opacity duration-300 ${imagesLoaded[idx] ? 'opacity-100' : 'opacity-0'}`}
-                        onLoad={() => handleImageLoad(idx, { target: imagePreloadersRef.current[idx] } as unknown as React.SyntheticEvent<HTMLImageElement>)}
+                        onLoad={(e) => handleImageLoad(idx, e)}
                         onError={(e) => handleImageError(idx, e)}
                         loading={idx < 5 ? "eager" : "lazy"}
                         width="150"
                         height="150"
+                        fetchPriority={idx < 2 ? "high" : "auto"}
                       />
                     </div>
                   ))}
