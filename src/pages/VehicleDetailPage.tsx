@@ -191,12 +191,32 @@ const VehicleDetailPage = () => {
       vehicleName: vehicle?.name
     });
     
-    // Use Cloudinary placeholder as fallback with vehicle name
-    const fallbackUrl = API_CONFIG.getCloudinaryPlaceholder(
-      vehicle?.name || `Vehicle ${vehicle?.id || ''}`,
-      600,
-      400
-    );
+    // Check if the URL is a Cloudinary URL with v1/ path that might be causing the issue
+    const isCloudinaryWithV1Path = originalSrc.includes('cloudinary.com') && originalSrc.includes('/v1/');
+    
+    let fallbackUrl;
+    
+    if (isCloudinaryWithV1Path) {
+      // Try to fix the URL by using a different path format
+      // Convert from: .../upload/v1/path/to/image.jpg to .../upload/sample
+      const baseUrlParts = originalSrc.split('/upload/');
+      if (baseUrlParts.length > 1) {
+        const cloudName = baseUrlParts[0].includes('res.cloudinary.com/') ? 
+          baseUrlParts[0].split('res.cloudinary.com/')[1] : 'dz81bjuea';
+        
+        // Create a fallback with vehicle name text overlay
+        fallbackUrl = `https://res.cloudinary.com/${cloudName}/image/upload/w_600,h_400,c_fill,g_center/l_text:Arial_32:${encodeURIComponent(vehicle?.name || 'Vehicle')},co_white/e_colorize,co_rgb:FF5733,g_center/sample`;
+      }
+    }
+    
+    // If we couldn't create a specific fallback, use the default vehicle image with text
+    if (!fallbackUrl) {
+      fallbackUrl = API_CONFIG.getCloudinaryPlaceholder(
+        vehicle?.name || `Vehicle ${vehicle?.id || ''}`,
+        600,
+        400
+      );
+    }
     
     // Only change src if it's different to avoid infinite loops
     if (target.src !== fallbackUrl) {
@@ -242,6 +262,56 @@ const VehicleDetailPage = () => {
       // Check for custom image URLs for specific vehicles (like vehicle #4)
       const knownVehicleImages = marketplaceService.getFixedImagesForKnownVehicle(vehicleId);
       
+      // If we have fixed images for this vehicle, use them
+      if (knownVehicleImages) {
+        Object.assign(vehicleData, knownVehicleImages);
+      }
+      
+      // Create cloudinary placeholder image with vehicle name as backup
+      const cloudinaryPlaceholder = API_CONFIG.getCloudinaryPlaceholder(
+        `${vehicleData.brand} ${vehicleData.model}`, 
+        800, 
+        600
+      );
+      
+      // Safely process image URLs with guaranteed placeholders
+      const getImageWithFallbacks = (url: string | null | undefined): string => {
+        // If URL is completely missing, use placeholder
+        if (!url) return cloudinaryPlaceholder;
+        
+        // If URL has placeholder or undefined or null in it, it's invalid
+        if (url.includes('undefined') || url.includes('null') || url.includes('[object Object]')) {
+          return cloudinaryPlaceholder;
+        }
+        
+        // If valid URL, process it with Cloudinary optimizer
+        return processImageUrl(url) || cloudinaryPlaceholder;
+      };
+      
+      // Process all image URLs with strict validation
+      const mainImage = getImageWithFallbacks(vehicleData.front_image_url || vehicleData.imageUrl);
+      
+      // Collect all valid gallery images
+      const galleryUrls = [
+        vehicleData.front_image_url,
+        vehicleData.back_image_url, 
+        vehicleData.left_image_url,
+        vehicleData.right_image_url, 
+        vehicleData.dashboard_image_url
+      ]
+      .filter(url => url && url.length > 10) // Basic validation
+      .map(url => getImageWithFallbacks(url));
+      
+      // Add main image to gallery if not already included
+      if (!galleryUrls.includes(mainImage)) {
+        galleryUrls.unshift(mainImage);
+      }
+      
+      // Ensure we have at least one image in gallery by adding placeholder if empty
+      if (galleryUrls.length === 0) {
+        galleryUrls.push(cloudinaryPlaceholder);
+      }
+      
       // Process and normalize the data for UI
       const processedVehicle: UIVehicle = {
         ...vehicleData,
@@ -249,51 +319,52 @@ const VehicleDetailPage = () => {
         name: `${vehicleData.brand} ${vehicleData.model}`,
         // Organize images for the gallery
         images: {
-          // Use known vehicle images if available, or API-provided front image URL, or imageUrl field, or default
-          main: knownVehicleImages?.front_image_url || vehicleData.front_image_url || vehicleData.imageUrl || defaultImage,
-          // Create a gallery of all available images, filtering out nulls
-          gallery: knownVehicleImages ? 
-            [
-              knownVehicleImages.front_image_url,
-              knownVehicleImages.back_image_url,
-              knownVehicleImages.left_image_url,
-              knownVehicleImages.right_image_url,
-              knownVehicleImages.dashboard_image_url
-            ].filter(Boolean) :
-            [
-              vehicleData.front_image_url,
-              vehicleData.back_image_url,
-              vehicleData.left_image_url, 
-              vehicleData.right_image_url,
-              vehicleData.dashboard_image_url
-            ].filter(Boolean) as string[]
+          main: mainImage,
+          gallery: galleryUrls
         }
       };
       
-      // If we don't have any gallery images, add at least the main image
-      if (processedVehicle.images.gallery.length === 0 && processedVehicle.images.main) {
-        processedVehicle.images.gallery = [processedVehicle.images.main];
+      // Store successful URLs for future use
+      if (processedVehicle.images.main) {
+        marketplaceService.storeVehicleImage(vehicleId, 'main', processedVehicle.images.main);
       }
       
-      // Debug: Log the processed vehicle with image URLs
-      console.log('Processed vehicle for UI:', processedVehicle);
-      console.log('Gallery images:', processedVehicle.images.gallery);
+      processedVehicle.images.gallery.forEach((url, index) => {
+        marketplaceService.storeVehicleImage(vehicleId, `gallery_${index}`, url);
+      });
       
-      // Pre-load images if possible
-      if (processedVehicle.images.gallery.length > 0) {
-        preloadImages(processedVehicle.images.gallery);
-      }
-      
-      // Set the processed vehicle to state
       setVehicle(processedVehicle);
-      setActiveImageIndex(0);
-      setShowModal(false);
-      
-      // Reset loading state
-      setLoading(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching vehicle details:', err);
-      setError('Failed to load vehicle details. Please try again.');
+      setError(err.message || 'Error loading vehicle details');
+      // Try to load placeholder if API fails 
+      const fallbackVehicle = {
+        id: parseInt(vehicleId, 10), // Convert string ID to number
+        brand: 'Unknown',
+        model: 'Vehicle',
+        name: 'Unknown Vehicle',
+        year: new Date().getFullYear(),
+        price: 0,
+        status: 'available', // Valid status value
+        registration_number: 'Unknown',
+        fuel_type: 'petrol', // Valid fuel type
+        color: 'Unknown',
+        kms_driven: 0,
+        condition: 'Used',
+        seller_notes: 'Vehicle information temporarily unavailable',
+        vehicle_type: 'other', // Valid vehicle type
+        engine_capacity: 0,
+        mileage: 'Unknown',
+        location: 'Unknown',
+        images: {
+          main: API_CONFIG.getCloudinaryPlaceholder(`Vehicle ${vehicleId}`, 800, 600),
+          gallery: [API_CONFIG.getCloudinaryPlaceholder(`Vehicle ${vehicleId}`, 800, 600)]
+        }
+      };
+      
+      // Use setVehicle with the fallback vehicle - use a double type assertion to bypass type checking
+      setVehicle(fallbackVehicle as unknown as UIVehicle);
+    } finally {
       setLoading(false);
     }
   };

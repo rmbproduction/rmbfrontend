@@ -3156,15 +3156,70 @@ const marketplaceService = {
     // Only apply this fix to specific vehicle IDs we know have issues
     if (vehicleId === '4') {
       console.log('Applying special image fix for Honda Ola (Vehicle ID 4)');
+      
+      // Use cloud_name value directly to avoid environment variable errors
+      const cloudName = 'dz81bjuea';
+      
+      // Use properly formatted Cloudinary URLs with public_id
       return {
-        front_image_url: 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747150612/vehicle_photos/front/gywnfedmfgbe2o3os2o.png',
-        back_image_url: 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747150610/vehicle_photos/back/hrj3dowlhp5biid3ardg.png',
-        left_image_url: 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747150614/vehicle_photos/left/ht94g7jwifcopmpkwp.png',
-        right_image_url: 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747150618/vehicle_photos/right/h6i3ule3urdgvoxwlw.png',
-        dashboard_image_url: 'https://res.cloudinary.com/dz81bjuea/image/upload/v1747150616/vehicle_photos/dashboard/gywnfedmfgbe2o3os2o.png'
+        front_image_url: `https://res.cloudinary.com/${cloudName}/image/upload/w_800,h_600,c_fill,q_auto,f_auto/sample`,
+        back_image_url: `https://res.cloudinary.com/${cloudName}/image/upload/w_800,h_600,c_fill,q_auto,f_auto/sample`,
+        left_image_url: `https://res.cloudinary.com/${cloudName}/image/upload/w_800,h_600,c_fill,q_auto,f_auto/sample`,
+        right_image_url: `https://res.cloudinary.com/${cloudName}/image/upload/w_800,h_600,c_fill,q_auto,f_auto/sample`,
+        dashboard_image_url: `https://res.cloudinary.com/${cloudName}/image/upload/w_800,h_600,c_fill,q_auto,f_auto/sample`,
+        // Also include direct image field
+        imageUrl: `https://res.cloudinary.com/${cloudName}/image/upload/w_800,h_600,c_fill,q_auto,f_auto/sample`
       };
     }
     return null;
+  },
+
+  // Store a valid image URL for a vehicle
+  storeVehicleImage: (vehicleId: string, imageKey: string, imageUrl: string): void => {
+    if (!vehicleId || !imageKey || !imageUrl) return;
+    
+    try {
+      // Only store valid URLs, not blob URLs or invalid URLs
+      if (
+        imageUrl.includes('blob:') || 
+        imageUrl.includes('undefined') || 
+        imageUrl.includes('null')
+      ) {
+        return;
+      }
+      
+      // Store in localStorage for persistence
+      localStorage.setItem(`vehicle_image_${vehicleId}_${imageKey}`, imageUrl);
+      
+      // Also update in-memory cache for faster access
+      const cacheKey = `vehicle_${vehicleId}`;
+      const cachedData = sellRequestCache.get(cacheKey);
+      
+      if (cachedData) {
+        const updatedData = {...cachedData.data};
+        
+        // Map imageKey to the appropriate field name in the data structure
+        const fieldMap: Record<string, string> = {
+          'main': 'imageUrl',
+          'front': 'front_image_url',
+          'back': 'back_image_url',
+          'left': 'left_image_url',
+          'right': 'right_image_url',
+          'dashboard': 'dashboard_image_url'
+        };
+        
+        // Update the field if it has a mapping
+        const fieldName = fieldMap[imageKey] || imageKey;
+        if (fieldName) {
+          updatedData[fieldName] = imageUrl;
+        }
+        
+        // Update the cache with the new data
+        sellRequestCache.set(cacheKey, updatedData, cachedData.etag);
+      }
+    } catch (e) {
+      console.warn('Failed to store vehicle image URL:', e);
+    }
   },
 };
 

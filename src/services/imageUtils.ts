@@ -351,54 +351,73 @@ export const syncImageStorageForVehicle = async (
 };
 
 /**
- * Validate if a URL is a proper Cloudinary URL with version number
- * @param url The URL to validate
- * @returns boolean indicating if it's a valid Cloudinary URL
+ * Checks if a URL is a valid Cloudinary URL
+ * @param url The URL to check
+ * @returns Boolean indicating if it's a valid Cloudinary URL
  */
 export const isValidCloudinaryUrl = (url: string | null | undefined): boolean => {
   if (!url || typeof url !== 'string') return false;
   
-  // Check if it's a properly formatted Cloudinary URL with version number
-  // Example: https://res.cloudinary.com/dz81bjuea/image/upload/v1747150610/vehicle_photos/back/hrj3dowlhp5biid3ardg.png
-  return url.includes('cloudinary.com') && 
-         url.includes('/upload/v') && 
-         !url.includes('/v1/') && // avoid the common error format
-         url.match(/\/v\d+\//) !== null; // ensure it has a numeric version
+  // Check for malformed URLs
+  if (url.includes('undefined') || url.includes('[object Object]') || url.includes('null')) {
+    return false;
+  }
+  
+  // Basic check for Cloudinary domain
+  const isCloudinaryDomain = url.includes('res.cloudinary.com') || 
+                            url.includes('cloudinary.com');
+  
+  // Check for common path structures
+  const hasUploadPath = url.includes('/image/upload/');
+  
+  return isCloudinaryDomain && hasUploadPath;
 };
 
 /**
- * Process an image URL to ensure it's properly formatted
- * @param url The original URL from API or other source
- * @returns A properly formatted URL or null
+ * Process a Cloudinary URL to ensure it's valid and optimized
+ * @param url The URL to process
+ * @returns The processed URL or null if invalid
  */
 export const processCloudinaryUrl = (url: string | null | undefined): string | null => {
   if (!url) return null;
   
-  // If it's already a properly formatted Cloudinary URL, use it directly
-  if (isValidCloudinaryUrl(url)) {
+  // Handle malformed URLs
+  if (!isValidCloudinaryUrl(url)) {
+    console.warn('Invalid Cloudinary URL detected:', url);
+    // Try to fix common URL issues
+    if (url.includes('cloudinary.com') && !url.startsWith('http')) {
+      // Add protocol if missing
+      return 'https://' + url;
+    }
+    return null;
+  }
+  
+  try {
+    // Ensure the URL has HTTPS protocol
+    if (url.startsWith('http://')) {
+      url = url.replace('http://', 'https://');
+    }
+    
+    // Ensure proper format for v1/v2 paths
+    if (url.includes('/upload/v1/')) {
+      // Fix version path with trailing slash if needed
+      if (!url.includes('/upload/v1/')) {
+        url = url.replace('/upload/v1', '/upload/v1/');
+      }
+    }
+    
     return url;
+  } catch (e) {
+    console.error('Error processing Cloudinary URL:', e);
+    return null;
   }
-  
-  // If it's a URL with hostname but not properly formatted, log for debugging
-  if (url.includes('cloudinary.com')) {
-    console.warn('Potentially malformed Cloudinary URL:', url);
-  }
-  
-  // If it's a relative media URL, complete it
-  if (url.startsWith('/media/')) {
-    return `${API_CONFIG.MEDIA_URL}${url}`;
-  }
-  
-  // Return the original URL - don't try to fix it
-  // The backend should provide proper URLs
-  return url;
 };
 
 /**
- * Get an image URL with guaranteed fallback
- * @param url The primary URL to try
- * @param fallbackUrl Optional specific fallback URL
- * @returns A URL that should work
+ * Get image URL with fallback if the original is invalid
+ * @param url The original URL
+ * @param fallbackUrl Optional custom fallback URL
+ * @returns A valid image URL
  */
 export const getImageUrlWithFallback = (
   url: string | null | undefined, 

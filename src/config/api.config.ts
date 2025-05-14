@@ -248,21 +248,20 @@ export const API_CONFIG = {
   getDefaultVehicleImage: () => DEFAULT_VEHICLE_IMAGE,
   
   /**
-   * Get a Cloudinary placeholder image that's guaranteed to exist
-   * @param text Optional text to display on the placeholder
-   * @param width Optional width for the placeholder
-   * @param height Optional height for the placeholder
-   * @returns A Cloudinary URL for a placeholder image
+   * Creates a dynamic Cloudinary placeholder image with text
+   * @param text Text to display on the placeholder
+   * @param width Width of the placeholder
+   * @param height Height of the placeholder
+   * @returns URL to a Cloudinary-generated placeholder image
    */
-  getCloudinaryPlaceholder: (text: string = 'Vehicle', width: number = 600, height: number = 400): string => {
-    // Cloudinary's built-in placeholder functionality
-    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dz81bjuea';
-    
+  getCloudinaryPlaceholder: (text: string, width = 600, height = 400): string => {
     // URL encode the text
     const encodedText = encodeURIComponent(text);
+    // Get Cloudinary cloud name from environment or use default
+    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || CLOUDINARY_CLOUD_NAME;
     
-    // Return a Cloudinary placeholder with text overlay - this is guaranteed to work
-    return `https://res.cloudinary.com/${cloudName}/image/upload/w_${width},h_${height},c_fill,g_center/l_text:Arial_32:${encodedText},co_white/e_colorize,co_rgb:FF5733,g_center/sample`;
+    // Generate a Cloudinary placeholder with text overlay
+    return `https://res.cloudinary.com/${cloudName}/image/upload/w_${width},h_${height},c_fill,g_center/l_text:Arial_32_bold:${encodedText},co_white/e_colorize,co_rgb:FF5733,g_center/sample`;
   },
   
   /**

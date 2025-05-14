@@ -58,14 +58,15 @@ export const getOptimizedCloudinaryUrl = (
     // f_auto = automatic format selection based on browser
     const transformations = `c_fill,g_auto,w_${width},h_${height},q_${quality},f_auto/`;
     
-    // Check if there's a version tag (v1234567890)
+    // Check if there's a version tag (v1234567890 or v1/)
     const pathParts = urlParts[1].split('/');
-    const versionRegex = /^v\d+$/;
+    // Fix: Match both numbered version (v1234567890) and API versioning format (v1/)
+    const versionRegex = /^v\d+$|^v\d+\/$/;
     
     if (pathParts[0].match(versionRegex)) {
       // URL has version, insert transformations after version
-      const version = pathParts[0] + '/';
-      const remainingPath = urlParts[1].substring(version.length);
+      const version = pathParts[0] + (pathParts[0].endsWith('/') ? '' : '/');
+      const remainingPath = pathParts.slice(1).join('/');
       return `${baseUrl}${transformations}${version}${remainingPath}`;
     } else {
       // URL doesn't have version, just add transformations
@@ -102,11 +103,12 @@ export const getBlurPlaceholder = (url: string): string => {
     
     // Check if there's a version tag
     const pathParts = urlParts[1].split('/');
-    const versionRegex = /^v\d+$/;
+    // Fix: Match both numbered version (v1234567890) and API versioning format (v1/)
+    const versionRegex = /^v\d+$|^v\d+\/$/;
     
     if (pathParts[0].match(versionRegex)) {
-      const version = pathParts[0] + '/';
-      const remainingPath = urlParts[1].substring(version.length);
+      const version = pathParts[0] + (pathParts[0].endsWith('/') ? '' : '/');
+      const remainingPath = pathParts.slice(1).join('/');
       return `${baseUrl}${transformations}${version}${remainingPath}`;
     } else {
       return `${baseUrl}${transformations}${urlParts[1]}`;
