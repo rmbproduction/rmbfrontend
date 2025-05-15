@@ -247,8 +247,16 @@ const ServiceCheckout: React.FC = () => {
     
     // Use the enhanced data loading function that combines all sources
     loadAllUserData()
-      .finally(() => {
+      .then(() => {
+        // Successfully loaded data
         setLoading(false);
+      })
+      .catch((error) => {
+        console.error('Error loading user data:', error);
+        // Still set loading to false to prevent infinite loading state
+        setLoading(false);
+        // Show error notification
+        toast.error('Some data could not be loaded. Please refresh or try again later.');
       });
       
     // No Google Maps cleanup needed

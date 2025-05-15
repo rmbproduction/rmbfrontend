@@ -46,9 +46,24 @@ const RepairsBasketIcon: React.FC = () => {
                 setLoading(false);
                 return;
               }
+            } else if (response.status === 404) {
+              // Cart ID not found - it might have been deleted on the server
+              console.warn('Cart not found on server, removing from session');
+              sessionStorage.removeItem('cartId');
+              // Show a notification to the user
+              toast.info('Your shopping cart has been reset');
+            } else {
+              // Handle other error status codes
+              console.error('Error loading cart:', response.status, response.statusText);
+              // Show error notification if it's a server error
+              if (response.status >= 500) {
+                toast.error('Server error loading cart. Please try again later.');
+              }
             }
           } catch (error) {
             console.error('Error loading cart from server:', error);
+            // Show user-friendly error
+            toast.error('Unable to load your cart. Please check your connection.');
           }
         }
         
@@ -99,18 +114,31 @@ const RepairsBasketIcon: React.FC = () => {
                   });
                   
                   console.log('Added service to new cart');
+                } else {
+                  console.error('Failed to create cart:', createResponse.status, createResponse.statusText);
+                  // Only show error for server errors
+                  if (createResponse.status >= 500) {
+                    toast.error('Server error creating cart. Please try again later.');
+                  }
                 }
               } catch (cartError) {
                 console.error('Failed to create cart from pending data:', cartError);
+                toast.error('Unable to create cart. Please check your connection.');
               }
             }
           } catch (parseError) {
             console.error('Failed to parse pending service data:', parseError);
+            // This is likely a corruption issue - clean it up
+            sessionStorage.removeItem('pendingServiceData');
+            toast.error('There was an issue with your cart data. Cart has been reset.');
           }
         } else {
           console.log('No pending service data found');
           setBasketItems([]);
         }
+      } catch (error) {
+        console.error('Unexpected error in fetchCartData:', error);
+        toast.error('An unexpected error occurred. Please try refreshing the page.');
       } finally {
         setLoading(false);
       }
@@ -119,18 +147,20 @@ const RepairsBasketIcon: React.FC = () => {
     fetchCartData();
     
     // Refresh cart data when cartId changes
-    window.addEventListener('storage', (event) => {
+    const handleStorageChange = (event: StorageEvent) => {
       if (event.key === 'cartId' || event.key === 'pendingServiceData') {
         fetchCartData();
       }
-    });
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
     
     // Add custom event listener for cart updates
     const handleCartUpdate = () => fetchCartData();
     window.addEventListener('cartUpdated', handleCartUpdate);
     
     return () => {
-      window.removeEventListener('storage', () => {});
+      window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('cartUpdated', handleCartUpdate);
     };
   }, []);

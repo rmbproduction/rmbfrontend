@@ -64,23 +64,26 @@ const SuggestedVehicleItem: React.FC<SuggestedVehicleItemProps> = ({
       img.src = processedUrl;
       img.onload = () => setImageLoaded(true);
       img.onerror = () => {
-        console.warn(`Failed to load image for vehicle ${id}. Creating avatar image.`);
         setImageError(true);
-        // Create a branded avatar image with initials as fallback
+        // Fall back to avatar image on error
         const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(brand.charAt(0))}+${encodeURIComponent(model.charAt(0))}&background=FF5733&color=fff&size=256`;
         setFinalImageUrl(avatarUrl);
         setIsAvatarImage(true);
-        setImageLoaded(true); // Consider avatar images pre-loaded
+        setImageLoaded(true);
       };
-    } catch (err) {
-      console.error('Error processing image URL:', err);
+    } catch (e) {
+      console.error('Error processing image URL:', e);
       setImageError(true);
-      // Create a fallback avatar
-      setFinalImageUrl(`https://ui-avatars.com/api/?name=${encodeURIComponent(brand.charAt(0))}+${encodeURIComponent(model.charAt(0))}&background=FF5733&color=fff&size=256`);
-      setIsAvatarImage(true);
-      setImageLoaded(true);
     }
-  }, [imageUrl, id, brand, model]);
+    
+    // Clean up function to cancel any pending image loads
+    return () => {
+      // Create a clean reference so we don't create a closure on too many objects
+      const cleanupImg = new Image();
+      cleanupImg.onload = null;
+      cleanupImg.onerror = null;
+    };
+  }, [imageUrl, brand, model]);
 
   const handleClick = () => {
     navigate(`/vehicles/${id}`);

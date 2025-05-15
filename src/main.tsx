@@ -49,7 +49,27 @@ const setupApiDefaults = () => {
   // Initialize axios with authentication token if available
   const token = localStorage.getItem('accessToken');
   if (token) {
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    const tokenExpiration = localStorage.getItem('tokenExpiration');
+    
+    // Only set the token if it's not expired
+    if (tokenExpiration) {
+      const expirationTime = parseInt(tokenExpiration, 10);
+      const currentTime = Date.now();
+      
+      if (currentTime < expirationTime) {
+        // Token is valid, set the header
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      } else {
+        // Token is expired, remove it
+        console.log('[API] Token expired, removing from headers');
+        delete axios.defaults.headers.common['Authorization'];
+        // Don't remove from storage here - the auth system will handle that
+      }
+    } else {
+      // No expiration time, but we have a token - set it anyway
+      // Auth system will validate and refresh/remove as needed
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    }
   }
   
   // Set default timeout
@@ -61,6 +81,14 @@ const setupApiDefaults = () => {
     error => {
       // Log API errors but don't interrupt application flow
       console.error('[API] Request failed:', error?.response?.status || 'Network Error');
+      
+      // Handle 401 unauthorized errors automatically
+      if (error.response && error.response.status === 401) {
+        console.log('[API] Unauthorized request, clearing auth state');
+        // Dispatch event to notify auth system
+        window.dispatchEvent(new Event('auth-state-changed'));
+      }
+      
       return Promise.reject(error);
     }
   );
@@ -87,9 +115,16 @@ const cleanupExpiredItems = () => {
   
   try {
     // Clean up any expired items from sessionStorage
-    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+    // Get all keys first, then iterate
+    const sessionKeys = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
       const key = sessionStorage.key(i);
-      if (key && key.startsWith('vehicle_')) {
+      if (key) sessionKeys.push(key);
+    }
+    
+    // Now that we have all keys, process them
+    sessionKeys.forEach(key => {
+      if (key.startsWith('vehicle_')) {
         try {
           const item = sessionStorage.getItem(key);
           if (item) {
@@ -97,18 +132,26 @@ const cleanupExpiredItems = () => {
             // Check if item has expired
             if (data.expiry && now > data.expiry) {
               sessionStorage.removeItem(key);
+              console.log(`[App] Removed expired item from sessionStorage: ${key}`);
             }
           }
         } catch (e) {
           // Skip items that can't be parsed
+          console.warn(`[App] Failed to parse sessionStorage item: ${key}`, e);
         }
       }
+    });
+    
+    // Do the same for localStorage - collect keys first
+    const localKeys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key) localKeys.push(key);
     }
     
-    // Do the same for localStorage
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('vehicle_')) {
+    // Process localStorage keys
+    localKeys.forEach(key => {
+      if (key.startsWith('vehicle_')) {
         try {
           const item = localStorage.getItem(key);
           if (item) {
@@ -116,13 +159,15 @@ const cleanupExpiredItems = () => {
             // Check if item has expired
             if (data.expiry && now > data.expiry) {
               localStorage.removeItem(key);
+              console.log(`[App] Removed expired item from localStorage: ${key}`);
             }
           }
         } catch (e) {
           // Skip items that can't be parsed
+          console.warn(`[App] Failed to parse localStorage item: ${key}`, e);
         }
       }
-    }
+    });
     
     console.log('[App] Cache maintenance complete');
   } catch (error) {
@@ -132,8 +177,10 @@ const cleanupExpiredItems = () => {
 
 // Register service worker in the background
 const registerServiceWorker = () => {
+  // Only register if service workers are supported
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
+    // Defer registration to avoid competing with main app initialization
+    setTimeout(() => {
       navigator.serviceWorker.register('/service-worker.js')
         .then(registration => {
           console.log('[SW] ServiceWorker registered:', registration);
@@ -141,7 +188,9 @@ const registerServiceWorker = () => {
         .catch(error => {
           console.error('[SW] ServiceWorker registration failed:', error);
         });
-    });
+    }, 3000); // Delay by 3 seconds to prioritize app loading
+  } else {
+    console.log('[SW] Service workers are not supported in this browser');
   }
 };
 

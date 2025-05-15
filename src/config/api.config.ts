@@ -150,9 +150,16 @@ export const API_CONFIG = {
    * @returns The complete API URL
    */
   getApiUrl: (endpoint: string): string => {
-    // Make sure endpoint starts with a slash if it doesn't already
+    // Normalize endpoint to always start with a slash
     const formattedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    const url = `${API_CONFIG.BASE_URL}${formattedEndpoint}`;
+    
+    // Normalize base URL to not end with a slash
+    const baseUrl = API_CONFIG.BASE_URL.endsWith('/') 
+      ? API_CONFIG.BASE_URL.slice(0, -1) 
+      : API_CONFIG.BASE_URL;
+    
+    // Combine them to avoid double slashes
+    const url = `${baseUrl}${formattedEndpoint}`;
     
     if (import.meta.env.DEV) {
       console.log(`[API] Request URL: ${url}`);

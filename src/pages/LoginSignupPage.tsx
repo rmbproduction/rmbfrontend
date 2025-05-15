@@ -119,11 +119,21 @@ const LoginSignupPage = () => {
         navigate("/verify-email");
 
       } else if (mode === "forgot") {
-        await axios.post(`${API_CONFIG.BASE_URL}/accounts/password-reset/`, {
+        // Wait for server response before navigating
+        const response = await axios.post(`${API_CONFIG.BASE_URL}/accounts/password-reset/`, {
           email: formData.email,
         });
 
-        navigate("/Password-reset-confirmation");
+        // Only navigate if the request was successful
+        if (response.status === 200 || response.status === 201 || response.status === 202) {
+          // Store the email in sessionStorage to display on confirmation page
+          sessionStorage.setItem('resetPasswordEmail', formData.email);
+          // Navigate to confirmation page
+          navigate("/Password-reset-confirmation");
+        } else {
+          // Handle unexpected status codes
+          setError(`Unexpected response from server: ${response.status}`);
+        }
       }
     } catch (error: any) {
       // Handle errors without exposing sensitive data

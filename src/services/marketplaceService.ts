@@ -53,6 +53,9 @@ interface VehicleData {
 // WebSocket singleton for vehicle updates
 let vehicleUpdateSocket: WebSocket | null = null;
 const subscriptions = new Map<string, Array<() => void>>();
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY = 5000; // 5 seconds
 
 // Utility to create and manage WebSocket connection
 const createWebSocketConnection = (): WebSocket => {
@@ -74,6 +77,8 @@ const createWebSocketConnection = (): WebSocket => {
   
   socket.onopen = () => {
     console.log('WebSocket connection established for vehicle updates');
+    // Reset reconnect attempts on successful connection
+    reconnectAttempts = 0;
     
     // Authenticate if needed
     const token = localStorage.getItem('accessToken');
@@ -123,12 +128,20 @@ const createWebSocketConnection = (): WebSocket => {
   socket.onclose = (event) => {
     console.log(`WebSocket closed with code ${event.code}. Reason: ${event.reason}`);
     
-    // Attempt to reconnect after a delay
-    if (subscriptions.size > 0) {
+    // Attempt to reconnect after a delay, but only if we have subscribers
+    // and haven't exceeded max attempts
+    if (subscriptions.size > 0 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      reconnectAttempts++;
+      console.log(`Attempting to reconnect WebSocket... Attempt ${reconnectAttempts} of ${MAX_RECONNECT_ATTEMPTS}`);
+      
       setTimeout(() => {
-        console.log('Attempting to reconnect WebSocket...');
+        console.log('Reconnecting WebSocket...');
         vehicleUpdateSocket = createWebSocketConnection();
-      }, 5000); // 5 second reconnection delay
+      }, RECONNECT_DELAY * reconnectAttempts); // Exponential backoff
+    } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      console.warn('Maximum WebSocket reconnection attempts reached. Giving up.');
+      // Clean up subscriptions to prevent memory leak
+      subscriptions.clear();
     }
   };
   
@@ -229,7 +242,9 @@ const marketplaceService = {
     }
     
     // Add this callback to the list of subscribers
-    subscriptions.get(vehicleId)?.push(callback);
+    const callbacks = subscriptions.get(vehicleId) || [];
+    callbacks.push(callback);
+    subscriptions.set(vehicleId, callbacks);
     
     // Return unsubscribe function
     return () => {
@@ -241,6 +256,7 @@ const marketplaceService = {
         }
         
         // If no more callbacks for this vehicle, unsubscribe from updates
+        // and remove it from the subscriptions map
         if (callbacks.length === 0) {
           subscriptions.delete(vehicleId);
           
@@ -254,8 +270,10 @@ const marketplaceService = {
           
           // If no more subscriptions at all, close the WebSocket
           if (subscriptions.size === 0 && vehicleUpdateSocket) {
+            console.log('No more subscriptions, closing WebSocket');
             vehicleUpdateSocket.close();
             vehicleUpdateSocket = null;
+            reconnectAttempts = 0;
           }
         }
       }

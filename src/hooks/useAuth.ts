@@ -108,7 +108,8 @@ export const useAuth = () => {
             const refreshed = await refreshToken();
             
             if (!refreshed) {
-              // If refresh failed, log the user out
+              // If refresh failed, log the user out and return early to prevent further processing
+              console.warn('Token refresh failed, logging out');
               logout();
               return;
             }
@@ -125,6 +126,14 @@ export const useAuth = () => {
             // Ensure axios headers are set
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
             return;
+          } else {
+            // Token has expired, try to refresh once
+            const refreshed = await refreshToken();
+            if (!refreshed) {
+              // Clear tokens and auth state if refresh fails
+              logout();
+              return;
+            }
           }
         } else {
           // Legacy token with no expiration, try to validate against backend
@@ -149,7 +158,7 @@ export const useAuth = () => {
             const refreshed = await refreshToken();
             
             if (!refreshed) {
-              // If refresh failed, log the user out
+              // If refresh failed, log the user out and return early
               logout();
               return;
             }
@@ -165,6 +174,9 @@ export const useAuth = () => {
         }
       } catch (e) {
         console.error('Error parsing user data', e);
+        // Clear invalid data
+        logout();
+        return;
       }
     }
     

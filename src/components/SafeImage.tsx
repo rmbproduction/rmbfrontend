@@ -176,26 +176,51 @@ const SafeImage: React.FC<SafeImageProps> = memo(({
   
   // If we have a URL that might be a blob, try to find a better source
   useEffect(() => {
+    // Create refs for cleanup
+    let isMounted = true;
+    let preloadImage: HTMLImageElement | null = null;
+    
     const fetchBetterSource = async () => {
       // Only try to find a better source if the current one is a blob URL or missing
       if (src && !src.startsWith('blob:')) {
         // Use the provided source directly
-        setImageSrc(src);
+        if (isMounted) setImageSrc(src);
         return;
       }
       
       // Try to find a non-blob source
       const betterSource = await findBestNonBlobSource();
-      if (betterSource) {
-        setImageSrc(betterSource);
-      } else {
+      if (betterSource && isMounted) {
+        // Preload image to verify it works
+        if (betterSource) {
+          preloadImage = new Image();
+          preloadImage.onload = () => {
+            if (isMounted) setImageSrc(betterSource);
+          };
+          preloadImage.onerror = () => {
+            if (isMounted) setImageSrc(smartFallbackSrc);
+          };
+          preloadImage.src = betterSource;
+        }
+      } else if (isMounted) {
         // If we couldn't find a better source, use the original or fallback
         setImageSrc(src || smartFallbackSrc);
       }
     };
     
     fetchBetterSource();
-  }, [src, vehicleId, imageKey]);
+    
+    // Return cleanup function
+    return () => {
+      isMounted = false;
+      // Clean up any preload image to prevent memory leaks
+      if (preloadImage) {
+        preloadImage.onload = null;
+        preloadImage.onerror = null;
+        preloadImage.src = '';
+      }
+    };
+  }, [src, vehicleId, imageKey, smartFallbackSrc, findBestNonBlobSource]);
   
   // Clean up the current source
   const actualSrc = src || smartFallbackSrc;
