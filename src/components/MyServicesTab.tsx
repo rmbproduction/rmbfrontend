@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, Suspense, useRef } from 'react';
-import { Bike, Calendar, Clock, MapPin, Check, X, AlertTriangle, ExternalLink, AlertCircle, Trash2 } from 'lucide-react';
+import { Bike, Calendar, Clock, MapPin, Check, X, AlertTriangle, ExternalLink, AlertCircle, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Link, useNavigate } from 'react-router-dom';
 import { API_CONFIG } from '../config/api.config';
+import { sendMessageToSW } from '../utils/serviceWorkerUtils';
+import { forceRefresh } from '../forceRefresh';
 
 // Add proper typing for service item
 interface ServiceItem {
@@ -318,6 +320,49 @@ const MyServicesTab: React.FC = () => {
     }
   }, []);
 
+  // Add a function to process booking data before displaying
+  const processBookingData = (booking: ServiceBooking): ServiceBooking => {
+    // Make a deep copy to avoid mutation issues
+    const processedBooking = { ...booking };
+    
+    // Ensure services array exists and has at least an empty array
+    if (!processedBooking.services || !Array.isArray(processedBooking.services)) {
+      processedBooking.services = [];
+    }
+    
+    // If booking has pending status, add placeholder service if empty
+    if (processedBooking.services.length === 0 && 
+        (processedBooking.status === 'pending' || processedBooking.status_display?.toLowerCase() === 'pending')) {
+      processedBooking.services.push({
+        id: 0,
+        name: 'Service booking details pending',
+        quantity: 1,
+        price: '0.00'
+      });
+    }
+    
+    // Process each service
+    processedBooking.services = processedBooking.services.map((service: ServiceItem) => {
+      // Ensure all required properties have values
+      return {
+        id: service.id || 0,
+        name: service.name || 'Service',
+        quantity: service.quantity || 1,
+        price: service.price || '0.00'
+      };
+    });
+    
+    // Calculate total_amount if needed
+    if (!processedBooking.total_amount && processedBooking.services.length > 0) {
+      processedBooking.total_amount = processedBooking.services.reduce(
+        (sum: number, item: ServiceItem) => sum + parseFloat(item.price || '0') * (item.quantity || 1),
+        0
+      ).toFixed(2);
+    }
+    
+    return processedBooking;
+  };
+
   // Use a safe API fetch for bookings
   useEffect(() => {
     let isMounted = true;
@@ -348,21 +393,13 @@ const MyServicesTab: React.FC = () => {
               console.log('[DEBUG] Fetched service bookings from API:', apiBookings);
               
               if (Array.isArray(apiBookings)) {
-                // Ensure all required fields are present
-                const validatedBookings = apiBookings.map(booking => {
-                  // Make sure services array is always defined
-                  return {
-                    ...booking,
-                    services: Array.isArray(booking.services) 
-                      ? booking.services.map((s: any) => ({ ...DEFAULT_SERVICE_ITEM, ...s }))
-                      : []
-                  };
-                });
+                // Process each booking to ensure data consistency
+                const processedBookings = apiBookings.map(booking => processBookingData(booking));
                 
-                allBookings.push(...validatedBookings);
+                allBookings.push(...processedBookings);
                 
                 // Cache the successful API response
-                updateSessionStorage('user_service_bookings', validatedBookings);
+                updateSessionStorage('user_service_bookings', processedBookings);
                 sessionStorage.setItem('user_service_bookings_timestamp', Date.now().toString());
               }
             } else {
@@ -382,27 +419,30 @@ const MyServicesTab: React.FC = () => {
         
         // If API call failed or returned no results, try to load from sessionStorage
         if (allBookings.length === 0) {
-        try {
-          console.log('[DEBUG] Checking sessionStorage for bookings');
-          const storedBookings = sessionStorage.getItem('user_service_bookings');
-          if (storedBookings) {
-            const parsedBookings = JSON.parse(storedBookings);
-            console.log('[DEBUG] Found stored service bookings:', parsedBookings);
-            
-            if (Array.isArray(parsedBookings)) {
+          try {
+            console.log('[DEBUG] Checking sessionStorage for bookings');
+            const storedBookings = sessionStorage.getItem('user_service_bookings');
+            if (storedBookings) {
+              const parsedBookings = JSON.parse(storedBookings);
+              console.log('[DEBUG] Found stored service bookings:', parsedBookings);
+              
+              if (Array.isArray(parsedBookings)) {
+                // Process each stored booking
+                const processedStoredBookings = parsedBookings.map(booking => processBookingData(booking));
+                  
                 // Add timestamp to each booking for sorting
-                const bookingsWithTimestamp = parsedBookings.map(booking => ({
+                const bookingsWithTimestamp = processedStoredBookings.map(booking => ({
                   ...booking,
                   timestamp: booking.timestamp || new Date(booking.created_at || Date.now()).getTime()
                 }));
                 
                 allBookings.push(...bookingsWithTimestamp);
+              }
+            } else {
+              console.log('[DEBUG] No stored bookings found in sessionStorage');
             }
-          } else {
-            console.log('[DEBUG] No stored bookings found in sessionStorage');
-          }
-        } catch (storageError) {
-          console.error('[ERROR] Error loading stored service bookings:', storageError);
+          } catch (storageError) {
+            console.error('[ERROR] Error loading stored service bookings:', storageError);
             // If we couldn't load from storage either, let's set the error
             if (fetchError && allBookings.length === 0) {
               if (isMounted) setError(fetchError);
@@ -421,9 +461,9 @@ const MyServicesTab: React.FC = () => {
         
         if (isMounted) {
           if (allBookings.length > 0) {
-        setBookings(allBookings);
+            setBookings(allBookings);
             // Clear error if we have bookings
-        setError(null);
+            setError(null);
           } else if (fetchError) {
             // Only set error if we have no bookings
             setError(fetchError);
@@ -432,11 +472,11 @@ const MyServicesTab: React.FC = () => {
       } catch (err) {
         console.error('[ERROR] Error fetching service bookings:', err);
         if (isMounted) {
-        setError('Failed to load your service bookings. Please try again later.');
+          setError('Failed to load your service bookings. Please try again later.');
         }
       } finally {
         if (isMounted) {
-        setLoading(false);
+          setLoading(false);
         }
       }
     };
@@ -603,6 +643,59 @@ const MyServicesTab: React.FC = () => {
     }
   }, [navigate]);
 
+  // Add state for clearing cache
+  const [clearingCache, setClearingCache] = useState(false);
+  
+  // Clear cache and reset data
+  const clearCache = useCallback(async () => {
+    try {
+      setClearingCache(true);
+      
+      // First clear session storage
+      sessionStorage.removeItem('user_service_bookings');
+      sessionStorage.removeItem('user_service_bookings_timestamp');
+      
+      // Then clear service worker cache
+      if ('serviceWorker' in navigator) {
+        try {
+          const result = await sendMessageToSW({ 
+            action: 'clearCache',
+            cacheName: 'rmb-api-v3'
+          });
+          console.log('[DEBUG] Service worker cache cleared:', result);
+        } catch (e) {
+          console.warn('[WARN] Failed to clear service worker cache:', e);
+        }
+      }
+      
+      // Reset state and force a refresh
+      setBookings([]);
+      toast.success('Cache cleared. Refreshing data...');
+      
+      // Fetch new data
+      setTimeout(() => {
+        refreshBookings();
+      }, 500);
+    } catch (error) {
+      console.error('[ERROR] Failed to clear cache:', error);
+      toast.error('Failed to clear cache. Please try reloading the page.');
+    } finally {
+      setClearingCache(false);
+    }
+  }, [refreshBookings]);
+
+  // Add force refresh handler
+  const handleForceRefresh = useCallback(async () => {
+    if (window.confirm('This will clear all cached data and refresh the app. Continue?')) {
+      try {
+        await forceRefresh();
+      } catch (error) {
+        console.error('[ERROR] Force refresh failed:', error);
+        toast.error('Force refresh failed. Please try reloading the page manually.');
+      }
+    }
+  }, []);
+
   // Display a loading state
   if (loading) {
     return (
@@ -617,25 +710,49 @@ const MyServicesTab: React.FC = () => {
     <ErrorBoundary>
     <div className="bg-white rounded-xl shadow p-6">
       <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">My Services</h2>
-          <div className="flex space-x-2">
-            {hasCancelledBookings && (
-              <button
-                onClick={clearCancelledBookings}
-                className="flex items-center bg-red-50 text-red-600 px-3 py-1 rounded-md text-sm hover:bg-red-100 transition-colors"
-              >
-                <Trash2 size={16} className="mr-2" />
-                Clear Cancelled
-              </button>
+        <h2 className="text-2xl font-bold text-gray-800">My Services</h2>
+        <div className="flex space-x-2">
+          {hasCancelledBookings && (
+            <button
+              onClick={clearCancelledBookings}
+              className="flex items-center bg-red-50 text-red-600 px-3 py-1 rounded-md text-sm hover:bg-red-100 transition-colors"
+            >
+              <Trash2 size={16} className="mr-2" />
+              Clear Cancelled
+            </button>
+          )}
+          <button
+            onClick={clearCache}
+            disabled={clearingCache}
+            className="flex items-center bg-orange-50 text-orange-600 px-3 py-1 rounded-md text-sm hover:bg-orange-100 transition-colors"
+          >
+            {clearingCache ? (
+              <>
+                <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-orange-600 mr-2"></div>
+                Clearing...
+              </>
+            ) : (
+              <>
+                <AlertCircle size={16} className="mr-2" />
+                Clear Cache
+              </>
             )}
-        <button
-          onClick={refreshBookings}
-              className="flex items-center bg-blue-50 text-blue-600 px-3 py-1 rounded-md text-sm hover:bg-blue-100 transition-colors"
-        >
-              <RefreshIcon className="mr-2" />
-          Refresh
-        </button>
-          </div>
+          </button>
+          <button
+            onClick={handleForceRefresh}
+            className="flex items-center bg-purple-50 text-purple-600 px-3 py-1 rounded-md text-sm hover:bg-purple-100 transition-colors"
+          >
+            <RefreshCw size={16} className="mr-2" />
+            Force Refresh
+          </button>
+          <button
+            onClick={refreshBookings}
+            className="flex items-center bg-blue-50 text-blue-600 px-3 py-1 rounded-md text-sm hover:bg-blue-100 transition-colors"
+          >
+            <RefreshIcon className="mr-2" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -644,6 +761,12 @@ const MyServicesTab: React.FC = () => {
           <div>
             <p className="font-medium">Error</p>
             <p className="text-sm">{error}</p>
+            <button 
+              onClick={handleForceRefresh}
+              className="mt-2 text-sm bg-red-100 px-3 py-1 rounded text-red-800 hover:bg-red-200"
+            >
+              Force Refresh App
+            </button>
           </div>
         </div>
       )}
@@ -720,29 +843,50 @@ const MyServicesTab: React.FC = () => {
               <div className="mt-4 border-t border-gray-100 pt-4">
                 <span className="text-sm text-gray-500 block mb-2">Services</span>
                 <div className="space-y-2">
-                  {booking.services?.map((service, idx) => (
-                    <div key={idx} className="flex justify-between text-sm">
-                      <span>
-                        {service.name || `Service #${service.id}`}
-                        {service.quantity > 1 && ` (x${service.quantity})`}
-                      </span>
-                      <span className="font-medium">
-                        ₹{parseFloat(service.price).toFixed(2)}
-                      </span>
+                  {booking.services && booking.services.length > 0 ? (
+                    booking.services.map((service, idx) => (
+                      <div key={idx} className="flex justify-between text-sm">
+                        <span>
+                          {service.name || `Service #${service.id}`}
+                          {service.quantity > 1 && ` (x${service.quantity})`}
+                        </span>
+                        <span className="font-medium">
+                          ₹{parseFloat(service.price || '0').toFixed(2)}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-sm text-gray-500 italic">
+                      Service details will be updated soon
                     </div>
-                  ))}
+                  )}
                 </div>
 
                 <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between">
                   <span className="font-medium">Total Amount</span>
                   <span className="font-bold text-[#FF5733]">
                     ₹
-                      {typeof booking.total_amount === 'string' || typeof booking.total_amount === 'number'
-                        ? parseFloat(booking.total_amount as string).toFixed(2)
-                        : booking.services?.reduce(
-                        (sum, item) => sum + parseFloat(item.price) * (item.quantity || 1),
-                        0
-                          ).toFixed(2) || '0.00'}
+                    {(() => {
+                      // First try to use the total_amount field if it exists and is valid
+                      if (booking.total_amount !== undefined && booking.total_amount !== null) {
+                        const amount = parseFloat(booking.total_amount.toString());
+                        if (!isNaN(amount)) {
+                          return amount.toFixed(2);
+                        }
+                      }
+                      
+                      // If total_amount is not available or invalid, calculate from services
+                      if (booking.services && booking.services.length > 0) {
+                        const calculated = booking.services.reduce(
+                          (sum, item) => sum + parseFloat(item.price || '0') * (item.quantity || 1),
+                          0
+                        );
+                        return calculated.toFixed(2);
+                      }
+                      
+                      // Default fallback
+                      return '0.00';
+                    })()}
                   </span>
                 </div>
               </div>

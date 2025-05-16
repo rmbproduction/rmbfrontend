@@ -113,6 +113,9 @@ async function retryFetch(request, retries = API_RETRY_CONFIG.MAX_RETRIES, backo
 
 // Fetch API with better error handling and retries
 async function fetchApi(request, cache) {
+  // Check if this is a service booking request
+  const isServiceBookingRequest = request.url.includes('/repairing-service/bookings');
+  
   // Start with cached response
   const cachedResponse = await cache.match(request);
   
@@ -122,6 +125,58 @@ async function fetchApi(request, cache) {
     
     // Cache successful responses
     if (networkResponse.ok) {
+      // Check if it's service bookings and ensure it has valid data before caching
+      if (isServiceBookingRequest) {
+        // Clone response for checking content
+        const clonedResponse = networkResponse.clone();
+        const responseData = await clonedResponse.json();
+        
+        // Validate response data before caching
+        if (Array.isArray(responseData)) {
+          // Ensure each booking has the required fields
+          const validatedData = responseData.map(booking => {
+            // Make sure services is an array
+            if (!booking.services || !Array.isArray(booking.services)) {
+              booking.services = [];
+            }
+            
+            // Ensure each service has required fields
+            if (booking.services.length > 0) {
+              booking.services = booking.services.map(service => {
+                return {
+                  id: service.id || 0,
+                  name: service.name || 'Unknown Service',
+                  quantity: service.quantity || 1,
+                  price: service.price || '0.00'
+                };
+              });
+            }
+            
+            // Calculate total amount if not present
+            if (!booking.total_amount && booking.services.length > 0) {
+              booking.total_amount = booking.services.reduce(
+                (sum, service) => sum + (parseFloat(service.price) * (service.quantity || 1)), 
+                0
+              ).toFixed(2);
+            }
+            
+            return booking;
+          });
+          
+          // Create a new response with the validated data
+          const validatedResponse = new Response(JSON.stringify(validatedData), {
+            headers: networkResponse.headers,
+            status: networkResponse.status,
+            statusText: networkResponse.statusText
+          });
+          
+          // Cache the validated response
+          await cache.put(request, validatedResponse);
+          return validatedResponse;
+        }
+      }
+      
+      // For non-booking responses, cache as normal
       await cache.put(request, networkResponse.clone());
       return networkResponse;
     } else {
