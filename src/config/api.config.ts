@@ -5,14 +5,12 @@
  * It defines base URLs, helper functions, and commonly used endpoints.
  */
 
-// Default timeout for API requests in milliseconds
-export const DEFAULT_TIMEOUT = 15000; // 15 seconds
+// Default timeout for API requests in milliseconds - reduced from 15 seconds to 10 seconds
+export const DEFAULT_TIMEOUT = 10000;
 
-// Maximum number of retries for failed requests
-export const MAX_RETRIES = 2;
-
-// Retry delay multiplier in milliseconds
-export const RETRY_DELAY = 1000; // 1 second initial, doubles each retry
+// Retry configuration
+export const MAX_RETRIES = 2; // Number of retry attempts
+export const RETRY_DELAY = 1000; // Initial delay between retries in milliseconds
 
 // Helper to determine if running in production
 const isProduction = () => {

@@ -735,6 +735,12 @@ const persistentStorageService = {
         const key = sessionStorage.key(i);
         if (key && key.startsWith('vehicle_')) {
           try {
+            // Skip image URL keys that shouldn't be parsed as JSON
+            if (key.includes('vehicle_image_')) {
+              // These are direct URL strings, not JSON objects
+              continue;
+            }
+            
             const item = sessionStorage.getItem(key);
             if (item) {
               const data = JSON.parse(item);
@@ -744,6 +750,7 @@ const persistentStorageService = {
             }
           } catch (e) {
             // Skip items that can't be parsed
+            console.warn(`Failed to parse sessionStorage item: ${key}`, e);
           }
         }
       }
@@ -757,6 +764,12 @@ const persistentStorageService = {
         const key = localStorage.key(i);
         if (key && key.startsWith('vehicle_')) {
           try {
+            // Skip image URL keys that shouldn't be parsed as JSON
+            if (key.includes('vehicle_image_')) {
+              // These are direct URL strings, not JSON objects
+              continue;
+            }
+            
             const item = localStorage.getItem(key);
             if (item) {
               const data = JSON.parse(item);
@@ -766,6 +779,7 @@ const persistentStorageService = {
             }
           } catch (e) {
             // Skip items that can't be parsed
+            console.warn(`Failed to parse localStorage item: ${key}`, e);
           }
         }
       }

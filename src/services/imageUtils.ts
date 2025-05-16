@@ -158,9 +158,14 @@ export const extractPhotoUrls = (
 export const getBestImageSource = (vehicleId: string, imageKey: string): string | null => {
   // First try to get from localStorage (may contain Cloudinary URL)
   try {
-    const storedUrl = localStorage.getItem(`vehicle_image_${vehicleId}_${imageKey}`);
-    if (isValidImageUrl(storedUrl)) {
-      return storedUrl;
+    const storageKey = `vehicle_image_${vehicleId}_${imageKey}`;
+    const storedUrl = localStorage.getItem(storageKey);
+    
+    // Check if we have a stored URL that looks valid
+    if (storedUrl && storedUrl.startsWith('http')) {
+      if (isValidImageUrl(storedUrl)) {
+        return storedUrl;
+      }
     }
   } catch (e) {
     console.warn('Error accessing localStorage:', e);
@@ -191,7 +196,12 @@ export const persistImageUrl = (vehicleId: string, imageKey: string, url: string
   if (!isValidImageUrl(url)) return;
   
   try {
+    // Store directly as a URL string (not as JSON)
     localStorage.setItem(`vehicle_image_${vehicleId}_${imageKey}`, url);
+    
+    // Mark this item in a way that lets us know it's a direct URL, not JSON data
+    const flagKey = `vehicle_image_${vehicleId}_${imageKey}_type`;
+    localStorage.setItem(flagKey, 'url');
   } catch (e) {
     console.warn('Error storing URL in localStorage:', e);
   }
@@ -467,8 +477,31 @@ export const getStoredCloudinaryUrl = (
   imageType: string
 ): string | null => {
   try {
-    const storedUrl = localStorage.getItem(`vehicle_image_${vehicleId}_${imageType}`);
-    return isValidCloudinaryUrl(storedUrl) ? storedUrl : null;
+    const storageKey = `vehicle_image_${vehicleId}_${imageType}`;
+    const storedUrl = localStorage.getItem(storageKey);
+    
+    // If no stored URL, return null
+    if (!storedUrl) return null;
+    
+    // Check if this looks like a URL (not a JSON object)
+    if (storedUrl.startsWith('http')) {
+      return isValidCloudinaryUrl(storedUrl) ? storedUrl : null;
+    }
+    
+    // If it doesn't start with http, it might be JSON or invalid data
+    try {
+      // If it's valid JSON, we don't want it (should be a direct URL)
+      JSON.parse(storedUrl);
+      console.warn(`Found JSON data instead of URL in ${storageKey}`);
+      return null;
+    } catch (e) {
+      // If it's not valid JSON and not a URL, it's probably invalid
+      if (!storedUrl.startsWith('http')) {
+        return null;
+      }
+      // Otherwise it's probably a URL
+      return isValidCloudinaryUrl(storedUrl) ? storedUrl : null;
+    }
   } catch (e) {
     console.warn('Error retrieving URL from localStorage:', e);
     return null;

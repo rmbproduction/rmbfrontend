@@ -323,6 +323,12 @@ const StorageManager = {
           const key = sessionStorage.key(i);
           if (key && key.startsWith(SESSION_PREFIX)) {
             try {
+              // Skip image URL keys that shouldn't be parsed as JSON
+              if (key.includes('vehicle_image_') || key.includes('image_url')) {
+                // These are direct URL strings, not JSON objects
+                continue;
+              }
+              
               const item = sessionStorage.getItem(key);
               if (item) {
                 const parsedItem = JSON.parse(item) as StoredItem<any>;
@@ -343,6 +349,12 @@ const StorageManager = {
           const key = localStorage.key(i);
           if (key && key.startsWith(LOCAL_PREFIX)) {
             try {
+              // Skip image URL keys that shouldn't be parsed as JSON
+              if (key.includes('vehicle_image_') || key.includes('image_url')) {
+                // These are direct URL strings, not JSON objects
+                continue;
+              }
+              
               const item = localStorage.getItem(key);
               if (item) {
                 const parsedItem = JSON.parse(item) as StoredItem<any>;
@@ -381,6 +393,12 @@ const StorageManager = {
           const key = sessionStorage.key(i);
           if (key && key.startsWith(SESSION_PREFIX)) {
             try {
+              // Skip image URL keys that shouldn't be parsed as JSON
+              if (key.includes('vehicle_image_') || key.includes('image_url')) {
+                // These are direct URL strings, not JSON objects
+                continue;
+              }
+              
               const item = sessionStorage.getItem(key);
               if (item) {
                 const parsedItem = JSON.parse(item) as StoredItem<any>;
@@ -391,6 +409,7 @@ const StorageManager = {
               }
             } catch (e) {
               // Skip items that can't be parsed
+              console.warn(`Skipping invalid sessionStorage item: ${key}`);
             }
           }
         }
@@ -400,6 +419,12 @@ const StorageManager = {
           const key = localStorage.key(i);
           if (key && key.startsWith(LOCAL_PREFIX)) {
             try {
+              // Skip image URL keys that shouldn't be parsed as JSON
+              if (key.includes('vehicle_image_') || key.includes('image_url')) {
+                // These are direct URL strings, not JSON objects
+                continue;
+              }
+              
               const item = localStorage.getItem(key);
               if (item) {
                 const parsedItem = JSON.parse(item) as StoredItem<any>;
@@ -410,6 +435,7 @@ const StorageManager = {
               }
             } catch (e) {
               // Skip items that can't be parsed
+              console.warn(`Skipping invalid localStorage item: ${key}`);
             }
           }
         }

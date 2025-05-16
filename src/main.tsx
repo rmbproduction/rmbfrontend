@@ -126,6 +126,12 @@ const cleanupExpiredItems = () => {
     sessionKeys.forEach(key => {
       if (key.startsWith('vehicle_')) {
         try {
+          // Skip image URL keys that shouldn't be parsed as JSON
+          if (key.includes('vehicle_image_')) {
+            // These are direct URL strings, not JSON objects
+            return;
+          }
+          
           const item = sessionStorage.getItem(key);
           if (item) {
             const data = JSON.parse(item);
@@ -153,6 +159,12 @@ const cleanupExpiredItems = () => {
     localKeys.forEach(key => {
       if (key.startsWith('vehicle_')) {
         try {
+          // Skip image URL keys that shouldn't be parsed as JSON
+          if (key.includes('vehicle_image_')) {
+            // These are direct URL strings, not JSON objects
+            return;
+          }
+          
           const item = localStorage.getItem(key);
           if (item) {
             const data = JSON.parse(item);
@@ -171,7 +183,7 @@ const cleanupExpiredItems = () => {
     
     console.log('[App] Cache maintenance complete');
   } catch (error) {
-    console.warn('[App] Error during cache maintenance:', error);
+    console.error('[App] Error during cache maintenance:', error);
   }
 };
 
