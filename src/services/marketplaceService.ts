@@ -1373,13 +1373,18 @@ const marketplaceService = {
   
   // Get user's sell requests
   getUserSellRequests: async () => {
-    const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/sell-requests/`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-      }
-    });
-    
-    return response.data;
+    try {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/sell-requests/`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        }
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching user sell requests:', error);
+      throw error;
+    }
   },
   
   // Add this method to update an existing sell request
@@ -2159,77 +2164,109 @@ const marketplaceService = {
 
       while (retryCount < maxRetries) {
         try {
-          console.log(`Attempt ${retryCount + 1} to fetch bookings from API`);
-          
-          const response = await axios.get(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.BOOKINGS}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            },
-            // Add timeout to prevent hanging requests
-            timeout: 10000
-          });
-          
-          // Transform the data to ensure all required fields are present
-          const transformedBookings = response.data.map((booking: any) => {
-            // Create a properly structured vehicle object
-            const vehicle = {
-              id: booking.vehicle?.id || `vehicle-${booking.id}`,
-              brand: booking.vehicle?.manufacturer_name || 'Unknown',
-              model: booking.vehicle?.model_name || 'Unknown',
-              year: booking.vehicle?.year || new Date().getFullYear(),
-              vehicle_type: booking.vehicle?.vehicle_type_name || 'Unknown',
-              // Ensure front_image_url exists
-              front_image_url: booking.vehicle?.image_url || null,
-              registration_number: booking.vehicle?.registration_number || '',
-              color: booking.vehicle?.color || '',
-            };
+          // Make API call to get user bookings
+          const response = await axios.get(
+            `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.BOOKINGS}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            }
+          );
 
-            // Ensure all required fields exist
-            return {
-              id: booking.id,
-              vehicle: vehicle,
-              status: booking.status || 'pending',
-              status_display: booking.status_display || 'Pending',
-              // Format booking date properly
-              booking_date: booking.created_at || new Date().toISOString(),
-              booking_date_display: new Date(booking.created_at || Date.now()).toLocaleDateString(),
-              // Ensure contact_number is present
-              contact_number: booking.contact_number || booking.phone || '',
-              // Ensure notes field exists
-              notes: booking.notes || booking.address || '',
-              // Add schedule date and time if available
-              schedule_date: booking.schedule_date,
-              schedule_time: booking.schedule_time,
-              referrer: booking.referrer || null
-            };
-          });
-          
-          // Store in sessionStorage for quick access
-          try {
-            sessionStorage.setItem('user_vehicle_bookings', JSON.stringify(transformedBookings));
-          } catch (e) {
-            console.error('Failed to store bookings in sessionStorage:', e);
+          // Make sure we have valid data
+          if (
+            response.data && 
+            Array.isArray(response.data) || 
+            (response.data.results && Array.isArray(response.data.results))
+          ) {
+            // Normalize response data
+            let bookings = Array.isArray(response.data) ? response.data : response.data.results;
+            
+            // Enhance bookings with complete vehicle data
+            const enhancedBookings = await Promise.all(
+              bookings.map(async (booking: any) => {
+                try {
+                  // If booking already has proper vehicle data, use it
+                  if (
+                    booking.vehicle && 
+                    typeof booking.vehicle === 'object' && 
+                    booking.vehicle.brand && 
+                    booking.vehicle.model
+                  ) {
+                    // Just ensure image URL is formatted correctly
+                    if (booking.vehicle.id && !booking.vehicle.front_image_url) {
+                      booking.vehicle.front_image_url = API_CONFIG.getVehicleImageUrl(booking.vehicle.id);
+                    }
+                    return booking;
+                  }
+                  
+                  // If vehicle is just an ID, fetch complete vehicle data
+                  if (booking.vehicle && typeof booking.vehicle === 'number') {
+                    const vehicleId = booking.vehicle;
+                    try {
+                      const vehicleResponse = await axios.get(
+                        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.VEHICLES.LIST}${vehicleId}/`,
+                        {
+                          headers: {
+                            'Authorization': `Bearer ${token}`
+                          }
+                        }
+                      );
+                      
+                      // Add full vehicle data to booking
+                      return {
+                        ...booking,
+                        vehicle: vehicleResponse.data
+                      };
+                    } catch (vehicleError) {
+                      console.warn(`Error fetching vehicle ${vehicleId} details:`, vehicleError);
+                      // Create a placeholder vehicle object with ID
+                      return {
+                        ...booking,
+                        vehicle: {
+                          id: vehicleId,
+                          front_image_url: API_CONFIG.getVehicleImageUrl(vehicleId)
+                        }
+                      };
+                    }
+                  }
+                  
+                  return booking;
+                } catch (err) {
+                  console.warn('Error enhancing booking data:', err);
+                  return booking;
+                }
+              })
+            );
+            
+            // Store in sessionStorage for quick access
+            try {
+              sessionStorage.setItem('user_vehicle_bookings', JSON.stringify(enhancedBookings));
+            } catch (storageError) {
+              console.warn('Error storing bookings in sessionStorage:', storageError);
+            }
+            
+            return enhancedBookings;
           }
           
-          return transformedBookings;
-        } catch (error: any) {
+          // Handle empty response
+          return [];
+        } catch (error) {
           lastError = error;
           retryCount++;
+          console.warn(`Attempt ${retryCount} failed:`, error);
           
-          // Log the error but don't throw yet if we have more retries
-          console.warn(`Error fetching bookings (attempt ${retryCount}/${maxRetries}):`, error.message);
-          
+          // Wait with exponential backoff before retrying
           if (retryCount < maxRetries) {
-            // Exponential backoff: 1s, 2s, 4s, etc.
-            const delay = 1000 * Math.pow(2, retryCount - 1);
-            console.log(`Retrying in ${delay}ms...`);
+            const delay = 1000 * Math.pow(2, retryCount);
             await new Promise(resolve => setTimeout(resolve, delay));
           }
         }
       }
       
-      // All retries failed, check if we should return an empty array instead of throwing
-      console.error('All attempts to fetch bookings failed:', lastError);
+      // All retries failed
+      console.error('All booking fetch attempts failed:', lastError);
       
       // Return empty array as fallback instead of throwing
       return [];

@@ -155,6 +155,26 @@ const MyBookingsTab: React.FC = () => {
     return specs.join(' • ');
   };
 
+  // Get vehicle name with proper fallback
+  const getVehicleName = (booking: Booking) => {
+    const { vehicle } = booking;
+    if (!vehicle) return 'Vehicle';
+    
+    const brand = vehicle.brand || '';
+    const model = vehicle.model || '';
+    
+    if (brand && model) {
+      return `${brand} ${model}`;
+    } else if (brand) {
+      return brand;
+    } else if (model) {
+      return model;
+    } else {
+      // Check if there's a registration number to use
+      return vehicle.registration_number ? `Vehicle ${vehicle.registration_number}` : 'Vehicle';
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-64">
@@ -223,7 +243,7 @@ const MyBookingsTab: React.FC = () => {
               <div className="w-full md:w-2/5 lg:w-1/3 h-60 md:h-auto relative">
                 <img
                   src={getVehicleImage(booking)}
-                  alt={`${booking.vehicle?.brand || 'Vehicle'} ${booking.vehicle?.model || ''}`}
+                  alt={getVehicleName(booking)}
                   className="w-full h-full object-cover"
                   onError={(e) => {
                     // Use the same default image used in the vehicle detail page
@@ -245,11 +265,11 @@ const MyBookingsTab: React.FC = () => {
                 {/* Vehicle Caption */}
                 <div className="absolute bottom-0 left-0 w-full p-3 text-white">
                   <div className="text-lg font-bold drop-shadow-md">
-                    {booking.vehicle?.brand || 'Unknown'} {booking.vehicle?.model || 'Model'}
+                    {getVehicleName(booking)}
                   </div>
                   <div className="text-sm font-medium drop-shadow-md">
                     {booking.vehicle?.year || ''}
-                    {booking.vehicle?.color && ` · ${booking.vehicle.color}`}
+                    {booking.vehicle?.color && ` • ${booking.vehicle.color}`}
                   </div>
                 </div>
               </div>
