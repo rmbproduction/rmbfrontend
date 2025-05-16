@@ -1,12 +1,14 @@
 // Cache names
-const STATIC_CACHE = 'rmb-static-v2';
-const API_CACHE = 'rmb-api-v2';
-const IMAGE_CACHE = 'rmb-images-v2';
+const STATIC_CACHE = 'rmb-static-v3';
+const API_CACHE = 'rmb-api-v3';
+const IMAGE_CACHE = 'rmb-images-v3';
+const FONT_CACHE = 'rmb-fonts-v1';
 
 // Static assets to cache - only include essential files
 const STATIC_ASSETS = [
   '/',
   '/index.html',
+  '/offline.html'
 ];
 
 // API retry configuration
@@ -41,7 +43,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (![STATIC_CACHE, API_CACHE, IMAGE_CACHE].includes(cacheName)) {
+          if (![STATIC_CACHE, API_CACHE, IMAGE_CACHE, FONT_CACHE].includes(cacheName)) {
             return caches.delete(cacheName);
           }
         })
@@ -59,6 +61,32 @@ function isApiUrl(url) {
 // Check if a URL is an image
 function isImageUrl(url) {
   return url.pathname.match(/\.(jpe?g|png|gif|webp|avif|svg)$/i);
+}
+
+// Check if a URL is a font file
+function isFontUrl(url) {
+  return url.pathname.match(/\.(woff2?|ttf|otf|eot)$/i) || 
+         url.hostname.includes('fonts.gstatic.com') || 
+         url.hostname.includes('fonts.googleapis.com');
+}
+
+// Check if request is a cross-origin request (for special handling)
+function isCrossOrigin(url) {
+  return url.origin !== self.location.origin;
+}
+
+// Check if the URL is for a page (HTML) rather than an asset
+function isPageRequest(url, request) {
+  // Check if the request accepts HTML
+  const acceptHeader = request.headers.get('Accept');
+  const wantsHTML = acceptHeader && acceptHeader.includes('text/html');
+  
+  // Check for page-like paths (no extension or .html)
+  const isHTMLPath = url.pathname.endsWith('/') || 
+                    url.pathname.endsWith('.html') || 
+                    !url.pathname.includes('.');
+                    
+  return wantsHTML || isHTMLPath;
 }
 
 // Retry function with exponential backoff
@@ -124,6 +152,45 @@ async function fetchApi(request, cache) {
   }
 }
 
+// Handle font requests with cache-first strategy
+async function handleFontRequest(request, cache) {
+  try {
+    // Check cache first
+    const cachedResponse = await cache.match(request);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+    
+    // Not in cache, fetch from network
+    const response = await fetch(request, { 
+      mode: 'cors',
+      credentials: 'omit' // Important for cross-origin font requests
+    });
+    
+    if (response.ok) {
+      await cache.put(request, response.clone());
+      return response;
+    }
+    
+    // If response is not OK, return the response anyway
+    return response;
+  } catch (error) {
+    console.error(`Error fetching font: ${request.url}`, error);
+    // For font errors, we should pass through to browser's default handling
+    // rather than providing our own response
+    throw error;
+  }
+}
+
+// Get the offline page
+async function getOfflinePage() {
+  const cache = await caches.open(STATIC_CACHE);
+  return await cache.match('/offline.html') || new Response(
+    'You are offline. Please check your connection.',
+    { headers: { 'Content-Type': 'text/html' } }
+  );
+}
+
 // Fetch event
 self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
@@ -133,6 +200,22 @@ self.addEventListener('fetch', (event) => {
 
   try {
     const url = new URL(event.request.url);
+    
+    // Pass through requests to Google Fonts CSS (we'll cache the font files themselves)
+    if (url.hostname.includes('fonts.googleapis.com')) {
+      // Don't try to cache or manipulate the Google Fonts CSS requests
+      return;
+    }
+    
+    // Handle font files specially
+    if (isFontUrl(url)) {
+      event.respondWith(
+        caches.open(FONT_CACHE)
+          .then(cache => handleFontRequest(event.request, cache))
+          .catch(() => fetch(event.request))
+      );
+      return;
+    }
     
     // Handle API requests - using the path pattern instead of hardcoded origins
     if (isApiUrl(url)) {
@@ -198,6 +281,29 @@ self.addEventListener('fetch', (event) => {
           return fetch(event.request);
         })
       );
+      return;
+    }
+
+    // Handle page requests with network-first but offline fallback
+    if (isPageRequest(url, event.request)) {
+      event.respondWith(
+        fetch(event.request)
+          .catch(async () => {
+            console.log('Page fetch failed, falling back to cache or offline page');
+            // Try to get from cache
+            const cache = await caches.open(STATIC_CACHE);
+            const cachedResponse = await cache.match(event.request);
+            
+            // Return cached version or fallback to offline page
+            return cachedResponse || getOfflinePage();
+          })
+      );
+      return;
+    }
+    
+    // Special handling for cross-origin requests - pass through without interference
+    if (isCrossOrigin(url)) {
+      // Don't intercept cross-origin requests by default
       return;
     }
 
