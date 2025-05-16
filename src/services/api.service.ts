@@ -9,8 +9,9 @@ import {
   VisitSchedule
 } from '../models/subscription-plan';
 import { UserProfile } from '../models/user';
-import { withRetry } from '../utils/apiUtils';
+import { withRetry, withTimeout, isNetworkError } from '../utils/apiUtils';
 import * as apiHelpers from '../utils/apiHelpers';
+import { isOnline, checkNetworkStatus } from '../utils/networkUtils';
 
 // Base API configuration
 const { BASE_URL, DEFAULT_TIMEOUT } = API_CONFIG;
@@ -32,15 +33,89 @@ if (existingToken) {
   apiClient.defaults.headers.common['Authorization'] = `Bearer ${existingToken}`;
 }
 
-// Standard error handling function
-export const handleApiError = (error: any): Error => {
-  if (axios.isAxiosError(error)) {
-    const axiosError = error as AxiosError;
-    const status = axiosError.response?.status;
-    const data = axiosError.response?.data as any;
+// Add request interceptor to check network status
+apiClient.interceptors.request.use(
+  async (config) => {
+    // Check if we're offline before making requests
+    if (!isOnline()) {
+      console.warn(`[API] Device is offline, request to ${config.url} may fail`);
+      
+      // Add a custom header to track offline requests
+      config.headers = config.headers || {};
+      config.headers['X-Offline-Request'] = 'true';
+      
+      // Increase timeout for offline requests
+      config.timeout = DEFAULT_TIMEOUT * 2;
+    }
+    
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor for offline handling
+apiClient.interceptors.response.use(
+  (response) => {
+    // Clear any previous offline status
+    if (document.body.classList.contains('offline-mode')) {
+      checkNetworkStatus().then(status => {
+        if (status.online) {
+          document.body.classList.remove('offline-mode');
+        }
+      });
+    }
+    return response;
+  },
+  async (error) => {
+    // Check if error is network-related
+    if (isNetworkError(error)) {
+      console.warn('[API] Network error detected:', error.message);
+      
+      // Mark UI as offline
+      document.body.classList.add('offline-mode');
+      
+      // Check if we should retry based on error type
+      const request = error.config;
+      if (request && !request._isRetry) {
+        request._isRetry = true;
+        
+        // When we come back online, retry the request
+        return new Promise(resolve => {
+          const onlineListener = async () => {
+            window.removeEventListener('online', onlineListener);
+            console.log('[API] Network connection restored, retrying request');
+            
+            try {
+              // Verify we're really back online with a quick check
+              const status = await checkNetworkStatus();
+              if (status.online) {
+                // We're back online, retry the request
+                resolve(apiClient(request));
+              } else {
+                // Still offline, reject with the original error
+                resolve(Promise.reject(error));
+              }
+            } catch (e) {
+              // Error checking network status, reject original error
+              resolve(Promise.reject(error));
+            }
+          };
+          
+          window.addEventListener('online', onlineListener);
+          
+          // If we're actually online already, trigger the listener
+          if (navigator.onLine) {
+            onlineListener();
+          }
+        });
+      }
+    }
     
     // Handle authentication errors
-    if (status === 401 || status === 403) {
+    if (error.response && error.response.status === 401) {
+      console.log('[API] Unauthorized request, clearing auth state');
       // Clear auth token on unauthorized
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
@@ -55,8 +130,22 @@ export const handleApiError = (error: any): Error => {
           }, 100);
         }
       }
-      
-      return new Error('Authentication failed. Please log in again.');
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
+// Standard error handling function
+export const handleApiError = (error: any): Error => {
+  if (axios.isAxiosError(error)) {
+    const axiosError = error as AxiosError;
+    const status = axiosError.response?.status;
+    const data = axiosError.response?.data as any;
+    
+    // Network errors
+    if (isNetworkError(error)) {
+      return new Error('Network error. Please check your internet connection and try again.');
     }
     
     // Handle specific error responses with messages
@@ -206,7 +295,16 @@ class ApiService {
     }
   }
   
-  // Additional methods can be added here
+  // Check API availability - useful for connectivity testing
+  async checkApiAvailability(): Promise<boolean> {
+    try {
+      await apiClient.get('/health/', { timeout: 5000 });
+      return true;
+    } catch (error) {
+      console.warn('API health check failed:', error);
+      return false;
+    }
+  }
 }
 
 // Export singleton instance

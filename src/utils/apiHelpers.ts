@@ -5,7 +5,6 @@ import axios from 'axios';
 import { API_CONFIG } from '../config/api.config';
 import { UserSubscription, VisitSchedule } from '../models/subscription-plan';
 import { UserProfile } from '../models/user';
-import { withRetry } from './apiUtils';
 
 // Create an axios instance specifically for these helpers
 const helperClient = axios.create({
@@ -19,33 +18,61 @@ if (token) {
   helperClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 }
 
-// Create retryable API helper functions
-export const getUserProfile = withRetry(async (userId: string): Promise<UserProfile> => {
+// Retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
+
+// Internal retry function
+async function retryableRequest<T>(
+  requestFn: () => Promise<T>,
+  retries = MAX_RETRIES,
+  delayMs = RETRY_DELAY_MS
+): Promise<T> {
   try {
-    const response = await helperClient.get(`/accounts/profile/${userId}/`);
+    return await requestFn();
+  } catch (error) {
+    if (retries <= 0) throw error;
+    
+    console.log(`Retrying request, ${retries} attempts left`);
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+    
+    return retryableRequest(requestFn, retries - 1, delayMs * 2);
+  }
+}
+
+// API Functions with built-in retry
+export async function getUserProfile(userId: string): Promise<UserProfile> {
+  try {
+    const response = await retryableRequest(() => 
+      helperClient.get(`/accounts/profile/${userId}/`)
+    );
     return response.data;
   } catch (error) {
     console.error('Error fetching user profile:', error);
     throw error;
   }
-});
+}
 
-export const getUserSubscriptions = withRetry(async (): Promise<UserSubscription[]> => {
+export async function getUserSubscriptions(): Promise<UserSubscription[]> {
   try {
-    const response = await helperClient.get(`${API_CONFIG.BASE_URL}/subscription/subscriptions/`);
+    const response = await retryableRequest(() => 
+      helperClient.get(`${API_CONFIG.BASE_URL}/subscription/subscriptions/`)
+    );
     return response.data;
   } catch (error) {
     console.error('Error fetching subscription data:', error);
     throw error;
   }
-});
+}
 
-export const getSubscriptionVisits = withRetry(async (subscriptionId: number): Promise<VisitSchedule[]> => {
+export async function getSubscriptionVisits(subscriptionId: number): Promise<VisitSchedule[]> {
   try {
-    const response = await helperClient.get(`${API_CONFIG.BASE_URL}/subscription/subscriptions/${subscriptionId}/visits/`);
+    const response = await retryableRequest(() => 
+      helperClient.get(`${API_CONFIG.BASE_URL}/subscription/subscriptions/${subscriptionId}/visits/`)
+    );
     return response.data;
   } catch (error) {
     console.error(`Error fetching visits for subscription ${subscriptionId}:`, error);
     throw error;
   }
-}); 
+} 

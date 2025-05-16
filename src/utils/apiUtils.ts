@@ -1,6 +1,7 @@
 /**
  * API utility functions to handle common tasks like retries and error handling
  */
+import { AxiosResponse } from 'axios';
 
 // Define a basic error shape for typechecking
 interface ErrorWithCode {
@@ -8,6 +9,34 @@ interface ErrorWithCode {
   code?: string;
   [key: string]: any;
 }
+
+// Timeout constants
+const DEFAULT_TIMEOUT = 10000; // 10 seconds
+const OFFLINE_RETRY_MAX = 3;    // Maximum retries when offline
+const OFFLINE_RETRY_DELAY = 3000; // 3 seconds between offline retries
+
+/**
+ * Check if the error is likely due to network issues
+ */
+export const isNetworkError = (error: any): boolean => {
+  if (!error) return false;
+  
+  // Check for common network error patterns
+  const isTimeout = 
+    error.code === 'ECONNABORTED' ||
+    error.code === 'ETIMEDOUT' || 
+    (error.message && (
+      error.message.includes('timeout') ||
+      error.message.includes('network') ||
+      error.message.includes('Network Error') ||
+      error.message.includes('Failed to fetch')
+    ));
+    
+  // Check for offline status
+  const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+  
+  return isTimeout || isOffline;
+};
 
 /**
  * Retries a function multiple times with exponential backoff until it succeeds
@@ -23,6 +52,32 @@ export const retryOnError = async <T>(
 ): Promise<T> => {
   let lastError: ErrorWithCode = {};
   let delayMs = initialDelayMs;
+  
+  // Check connection status first
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    console.warn('Device is offline. Will retry when online.');
+    
+    // Wait for online status if we're offline
+    if (maxRetries > 0) {
+      await new Promise<void>((resolve) => {
+        const onlineHandler = () => {
+          window.removeEventListener('online', onlineHandler);
+          console.log('Network connection restored. Retrying request.');
+          resolve();
+        };
+        
+        // Resolve if we come back online
+        window.addEventListener('online', onlineHandler);
+        
+        // Also try again after a delay even if still offline
+        setTimeout(() => {
+          window.removeEventListener('online', onlineHandler);
+          console.log('Still offline, but trying request anyway');
+          resolve();
+        }, Math.min(delayMs * 5, 15000)); // Longer delay when offline
+      });
+    }
+  }
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -42,14 +97,12 @@ export const retryOnError = async <T>(
         break;
       }
       
-      // If error mentions timeout, this is a good candidate for retry
-      const isTimeout = error?.message?.includes('timeout') || 
-                       error?.code === 'ECONNABORTED' ||
-                       error?.code === 'ETIMEDOUT';
+      // Determine if this error is worth retrying
+      const shouldRetry = isNetworkError(error);
       
-      // Skip retry for non-timeout errors
-      if (!isTimeout) {
-        console.warn('Not a timeout error, not retrying:', error);
+      // Skip retry for errors that aren't network-related
+      if (!shouldRetry) {
+        console.warn('Not a network-related error, not retrying:', error);
         break;
       }
       
@@ -66,20 +119,59 @@ export const retryOnError = async <T>(
 };
 
 /**
- * Adds retry capability to any API function
- * @param apiFunction The API function to wrap with retry logic
+ * Adds retry capability to any API function that returns a Promise
+ * @param apiFunction The async function to wrap with retry logic
  * @returns A new function with built-in retry capabilities
  */
-export const withRetry = <T extends any[], R>(
-  apiFunction: (...args: T) => Promise<R>,
+export const withRetry = <T>(
+  apiFunction: () => Promise<T>,
   maxRetries: number = 3
-): ((...args: T) => Promise<R>) => {
-  return (...args: T): Promise<R> => {
-    return retryOnError(() => apiFunction(...args), maxRetries);
-  };
+): Promise<T> => {
+  return retryOnError(apiFunction, maxRetries);
+};
+
+/**
+ * Creates a timeout promise that rejects after the specified time
+ * @param ms Timeout in milliseconds
+ * @returns A promise that rejects after the timeout
+ */
+export const createTimeout = (ms: number = DEFAULT_TIMEOUT): Promise<never> => {
+  return new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`Request timed out after ${ms}ms`));
+    }, ms);
+  });
+};
+
+/**
+ * Executes a function with a timeout
+ * @param fn The function to execute
+ * @param timeoutMs Timeout in milliseconds
+ * @returns Promise that resolves with the function result or rejects on timeout
+ */
+export const withTimeout = async <T>(
+  fn: () => Promise<T>,
+  timeoutMs: number = DEFAULT_TIMEOUT
+): Promise<T> => {
+  try {
+    // Race between the function and a timeout
+    return await Promise.race([
+      fn(),
+      createTimeout(timeoutMs)
+    ]);
+  } catch (error) {
+    // Enhance the error with timeout information if it was a timeout
+    if (error instanceof Error && error.message.includes('timed out')) {
+      error.name = 'TimeoutError';
+      (error as any).code = 'ETIMEDOUT';
+    }
+    throw error;
+  }
 };
 
 export default {
   retryOnError,
-  withRetry
+  withRetry,
+  withTimeout,
+  isNetworkError
 }; 

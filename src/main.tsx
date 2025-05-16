@@ -5,6 +5,7 @@ import './index.css';
 import ErrorBoundary from './components/ErrorBoundary';
 import axios from 'axios';
 import { initializeDB } from './services/persistentStorageService';
+import { registerServiceWorker } from './utils/serviceWorkerUtils';
 
 // Performance monitoring
 const startTime = performance.now();
@@ -23,8 +24,20 @@ const initializeApp = async () => {
     // Start cache maintenance in the background
     setupCacheMaintenance();
 
-    // Register service worker in the background
-    registerServiceWorker();
+    // Register service worker with improved error handling
+    registerServiceWorker({
+      immediate: false, // Register after page load
+      onSuccess: () => console.log('[App] Service worker registered successfully'),
+      onError: (error) => console.warn('[App] Service worker registration failed:', error),
+      onOffline: () => {
+        console.log('[App] App is operating in offline mode');
+        document.body.classList.add('offline-mode');
+      },
+      onOnline: () => {
+        console.log('[App] App is back online');
+        document.body.classList.remove('offline-mode');
+      }
+    });
     
     // Measure and log startup performance
     const loadTime = Math.round(performance.now() - startTime);
@@ -184,25 +197,6 @@ const cleanupExpiredItems = () => {
     console.log('[App] Cache maintenance complete');
   } catch (error) {
     console.error('[App] Error during cache maintenance:', error);
-  }
-};
-
-// Register service worker in the background
-const registerServiceWorker = () => {
-  // Only register if service workers are supported
-  if ('serviceWorker' in navigator) {
-    // Defer registration to avoid competing with main app initialization
-    setTimeout(() => {
-      navigator.serviceWorker.register('/service-worker.js')
-        .then(registration => {
-          console.log('[SW] ServiceWorker registered:', registration);
-        })
-        .catch(error => {
-          console.error('[SW] ServiceWorker registration failed:', error);
-        });
-    }, 3000); // Delay by 3 seconds to prioritize app loading
-  } else {
-    console.log('[SW] Service workers are not supported in this browser');
   }
 };
 

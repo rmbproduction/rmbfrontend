@@ -14,6 +14,60 @@
   }
 }
 
+/* Offline mode styling */
+.offline-mode {
+  position: relative;
+}
+
+.offline-mode::before {
+  content: "You're offline. Some features may be limited.";
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background-color: #ff5733;
+  color: white;
+  text-align: center;
+  padding: 8px;
+  z-index: 9999;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.offline-mode main {
+  padding-top: 40px; /* Add space for the offline notice */
+}
+
+/* Apply a grayscale filter to images when offline to indicate they might be stale */
+.offline-mode img:not(.exempt-offline) {
+  filter: grayscale(20%);
+}
+
+/* Style for elements that require online connection */
+.requires-online {
+  position: relative;
+}
+
+.offline-mode .requires-online {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.offline-mode .requires-online::after {
+  content: "⚠️ Requires connection";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .hero-gradient {
   background: radial-gradient(circle at center, rgba(255, 87, 51, 0.15) 0%, transparent 70%);
 }
