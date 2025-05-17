@@ -380,13 +380,21 @@ const MyServicesTab: React.FC = () => {
         if (accessToken) {
           try {
             console.log('[DEBUG] Fetching bookings from API');
+            
+            // Use controller for timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10-second timeout
+            
             const response = await fetchWithRetry(`${API_CONFIG.BASE_URL}/repairing-service/bookings/`, {
               headers: {
                 'Authorization': `Bearer ${accessToken}`,
                 'Content-Type': 'application/json'
               },
-              credentials: 'omit'
-            });
+              credentials: 'omit',
+              signal: controller.signal
+            }, 1); // Reduce to 1 retry
+            
+            clearTimeout(timeoutId);
             
             if (response.ok) {
               const apiBookings = await response.json();
@@ -407,14 +415,25 @@ const MyServicesTab: React.FC = () => {
               fetchError = `Server error: ${response.status}`;
               
               if (response.status !== 404) { // Ignore 404s as the endpoint might not exist yet
-                const errorText = await response.text();
-                console.error('[ERROR] API response:', errorText);
+                try {
+                  const errorText = await response.text();
+                  console.error('[ERROR] API response:', errorText);
+                } catch (textError) {
+                  console.error('[ERROR] Failed to read error response text');
+                }
               }
             }
           } catch (apiError) {
             console.error('[ERROR] Error fetching service bookings from API:', apiError);
-            fetchError = handleApiError(apiError, 'Failed to load your service bookings from server');
+            
+            if (apiError instanceof DOMException && apiError.name === 'AbortError') {
+              fetchError = 'Request timed out. Please try again later.';
+            } else {
+              fetchError = handleApiError(apiError, 'Failed to load your service bookings from server');
+            }
           }
+        } else {
+          console.log('[DEBUG] No access token found, skipping API call');
         }
         
         // If API call failed or returned no results, try to load from sessionStorage
@@ -924,7 +943,7 @@ const MyServicesTab: React.FC = () => {
       {/* Add the cancel confirmation modal */}
       {showCancelModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000] p-4 overflow-y-auto"
           onClick={(e) => {
             // Only close if clicking directly on the backdrop
             if (e.target === e.currentTarget) {
@@ -933,9 +952,17 @@ const MyServicesTab: React.FC = () => {
           }}
         >
           <div 
-            className="bg-white rounded-xl shadow-lg max-w-md w-full p-6 animate-fade-in" 
+            className="bg-white rounded-xl shadow-lg max-w-md w-full p-6 animate-fade-in m-auto relative" 
             onClick={(e) => e.stopPropagation()} // Prevent clicks inside modal from closing it
           >
+            <button
+              onClick={() => setShowCancelModal(false)}
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
+              aria-label="Close modal"
+            >
+              <X size={20} />
+            </button>
+            
             <div className="text-center mb-4">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 text-red-600 mb-4">
                 <AlertCircle className="w-8 h-8" />
@@ -946,7 +973,7 @@ const MyServicesTab: React.FC = () => {
               </p>
             </div>
             
-            <div className="flex justify-center gap-3 mt-6" style={{ zIndex: 100 }}>
+            <div className="flex flex-col sm:flex-row sm:justify-center gap-3 mt-6">
               <button
                 type="button"
                 onClick={(e) => {
@@ -954,7 +981,7 @@ const MyServicesTab: React.FC = () => {
                   e.stopPropagation();
                   setShowCancelModal(false);
                 }}
-                className="px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                className="order-2 sm:order-1 w-full sm:w-auto px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                 disabled={cancelingBooking}
               >
                 Keep Booking
@@ -966,16 +993,16 @@ const MyServicesTab: React.FC = () => {
                   e.stopPropagation();
                   confirmCancelBooking();
                 }}
-                className="px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
+                className="order-1 sm:order-2 w-full sm:w-auto px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
                 disabled={cancelingBooking}
               >
                 {cancelingBooking ? (
-                    <div className="flex items-center">
+                  <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
                     Cancelling...
                   </div>
                 ) : (
-                    <div className="flex items-center">
+                  <div className="flex items-center justify-center">
                     <X className="w-4 h-4 mr-1" />
                     Yes, Cancel
                   </div>
