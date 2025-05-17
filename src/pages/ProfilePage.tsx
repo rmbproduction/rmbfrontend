@@ -1199,10 +1199,32 @@ const ProfilePage = () => {
 
   // Handle logout
   const handleLogout = () => {
+    // Clear all user session data
+    marketplaceService.clearUserSession();
+    
+    // Clear authentication tokens
     localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("tokenExpiration");
+    localStorage.removeItem("rememberMe");
+    localStorage.removeItem("user");
+    
+    // Clear profile data
     localStorage.removeItem("userProfile");
     localStorage.removeItem("userData");
+    localStorage.removeItem("userProfileData");
+    localStorage.removeItem("userVehicleData");
+    localStorage.removeItem("userPhone");
+    localStorage.removeItem("userAddress");
+    
+    // Clear session data
     sessionStorage.removeItem("userProfile");
+    sessionStorage.removeItem("userVehicleOwnership");
+    sessionStorage.removeItem("selectedVehicleType");
+    sessionStorage.removeItem("selectedManufacturer");
+    sessionStorage.removeItem("selectedModel");
+    sessionStorage.removeItem("savedProfileData");
+    
     window.location.href = "/login-signup";
   };
   

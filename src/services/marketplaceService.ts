@@ -285,18 +285,41 @@ const marketplaceService = {
     // Clear in-memory cache
     sellRequestCache.clearAll();
     
-    // Clear session storage selectively (only our entries)
-      for (let i = sessionStorage.length - 1; i >= 0; i--) {
-        const key = sessionStorage.key(i);
-      if (key && (key.startsWith('vehicle_') || key.startsWith('sell_request_') || key === 'available_vehicles')) {
-          sessionStorage.removeItem(key);
-        }
+    // Clear session storage completely (all of our entries)
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const key = sessionStorage.key(i);
+      if (key && (
+        key.startsWith('vehicle_') || 
+        key.startsWith('sell_request_') || 
+        key === 'available_vehicles' ||
+        key === 'userVehicleOwnership' ||
+        key === 'userProfile' ||
+        key === 'savedProfileData' ||
+        key === 'selectedVehicleType' ||
+        key === 'selectedManufacturer' ||
+        key === 'selectedModel' ||
+        key === 'last_submitted_vehicle' ||
+        key === 'userBookings' ||
+        key === 'user_vehicle_bookings' ||
+        key === 'user_sell_requests'
+      )) {
+        sessionStorage.removeItem(key);
       }
+    }
     
     // Clear localStorage selectively (only our entries)
     for (let i = localStorage.length - 1; i >= 0; i--) {
-        const key = localStorage.key(i);
-      if (key && (key.startsWith('vehicle_') || key.startsWith('sell_request_'))) {
+      const key = localStorage.key(i);
+      if (key && (
+        key.startsWith('vehicle_') || 
+        key.startsWith('sell_request_') ||
+        key === 'userVehicleData' ||
+        key === 'userProfileData' ||
+        key === 'userProfile' ||
+        key === 'last_submitted_vehicle' ||
+        key === 'userPhone' ||
+        key === 'userAddress'
+      )) {
         localStorage.removeItem(key);
       }
     }

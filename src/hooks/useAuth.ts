@@ -35,6 +35,12 @@ export const useAuth = () => {
     localStorage.removeItem('tokenExpiration');
     localStorage.removeItem('rememberMe');
     
+    // Clear additional user profile data
+    localStorage.removeItem('userProfile');
+    localStorage.removeItem('userProfileData');
+    localStorage.removeItem('userVehicleData');
+    sessionStorage.removeItem('userProfile');
+    
     // Clear axios auth header
     delete axios.defaults.headers.common['Authorization'];
     

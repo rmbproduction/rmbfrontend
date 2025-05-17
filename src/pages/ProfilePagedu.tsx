@@ -1344,7 +1344,27 @@ const ProfilePage = () => {
       if (!refreshToken) {
         // Clear all user session data first
         marketplaceService.clearUserSession();
-        localStorage.clear();
+        
+        // Remove specific items instead of clearing all localStorage
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
+        localStorage.removeItem("user");
+        localStorage.removeItem("userProfile");
+        localStorage.removeItem("userProfileData");
+        localStorage.removeItem("userVehicleData");
+        localStorage.removeItem("tokenExpiration");
+        localStorage.removeItem("rememberMe");
+        localStorage.removeItem("userPhone");
+        localStorage.removeItem("userAddress");
+        
+        // Clear session data
+        sessionStorage.removeItem("userProfile");
+        sessionStorage.removeItem("userVehicleOwnership");
+        sessionStorage.removeItem("selectedVehicleType");
+        sessionStorage.removeItem("selectedManufacturer");
+        sessionStorage.removeItem("selectedModel");
+        sessionStorage.removeItem("savedProfileData");
+        
         navigate("/login-signup");
         return;
       }
@@ -1361,11 +1381,20 @@ const ProfilePage = () => {
       localStorage.removeItem("refreshToken");
       localStorage.removeItem("user");
       localStorage.removeItem("userProfile");
+      localStorage.removeItem("userProfileData");
+      localStorage.removeItem("userVehicleData");
       localStorage.removeItem("tokenExpiration");
       localStorage.removeItem("rememberMe");
+      localStorage.removeItem("userPhone");
+      localStorage.removeItem("userAddress");
       
-      // Clear any remaining data
-      localStorage.clear();
+      // Clear session data
+      sessionStorage.removeItem("userProfile");
+      sessionStorage.removeItem("userVehicleOwnership");
+      sessionStorage.removeItem("selectedVehicleType");
+      sessionStorage.removeItem("selectedManufacturer");
+      sessionStorage.removeItem("selectedModel");
+      sessionStorage.removeItem("savedProfileData");
 
       toast.success("Logged out successfully", {
         position: "top-right",
@@ -1378,7 +1407,27 @@ const ProfilePage = () => {
 
       // Even on error, clear all sessionStorage data
       marketplaceService.clearUserSession();
-      localStorage.clear();
+      
+      // Remove specific items instead of clearing all localStorage
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("user");
+      localStorage.removeItem("userProfile");
+      localStorage.removeItem("userProfileData");
+      localStorage.removeItem("userVehicleData");
+      localStorage.removeItem("tokenExpiration");
+      localStorage.removeItem("rememberMe");
+      localStorage.removeItem("userPhone");
+      localStorage.removeItem("userAddress");
+      
+      // Clear session data
+      sessionStorage.removeItem("userProfile");
+      sessionStorage.removeItem("userVehicleOwnership");
+      sessionStorage.removeItem("selectedVehicleType");
+      sessionStorage.removeItem("selectedManufacturer");
+      sessionStorage.removeItem("selectedModel");
+      sessionStorage.removeItem("savedProfileData");
+      
       navigate("/login-signup");
 
       toast.error(

@@ -78,15 +78,25 @@ const LoginSignupPage = () => {
         // This prevents mixing data from different accounts
         marketplaceService.clearUserSession();
 
+        // Clear all user-related data from localStorage and sessionStorage
+        // to prevent data from previous accounts persisting
+        localStorage.removeItem("userProfile");
+        localStorage.removeItem("userProfileData");
+        localStorage.removeItem("userVehicleData");
+        localStorage.removeItem("userPhone");
+        localStorage.removeItem("userAddress");
+        sessionStorage.removeItem("userProfile");
+        sessionStorage.removeItem("userVehicleOwnership");
+        sessionStorage.removeItem("selectedVehicleType");
+        sessionStorage.removeItem("selectedManufacturer");
+        sessionStorage.removeItem("selectedModel");
+        sessionStorage.removeItem("savedProfileData");
+
         const response = await axios.post(`${API_CONFIG.BASE_URL}/accounts/login/`, {
           email: formData.email,
           password: formData.password,
         });
 
-        // Clear any existing profile data first
-        localStorage.removeItem("userProfile");
-        sessionStorage.removeItem("userProfile");
-        
         // Use our new login function from the useAuth hook
         login(response.data.user, response.data.tokens, formData.rememberMe);
 
