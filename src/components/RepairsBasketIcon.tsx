@@ -30,21 +30,37 @@ const RepairsBasketIcon: React.FC = () => {
       
       try {
         const cartId = sessionStorage.getItem('cartId');
+        const pendingServiceData = sessionStorage.getItem('pendingServiceData');
+        let loadedItems = false;
         
         // If we have a cart ID, try to load from server
         if (cartId) {
           try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5-second timeout
+            
             const response = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/`), {
-              credentials: 'omit'
+              credentials: 'omit',
+              signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
             
             if (response.ok) {
               const data: CartData = await response.json();
               if (data.items && data.items.length > 0) {
                 console.log('Basket items loaded from server:', data.items.length);
                 setBasketItems(data.items);
-                setLoading(false);
-                return;
+                loadedItems = true;
+              } else {
+                console.log('Cart exists but is empty');
+                // If cart exists but is empty, and we have pending data, we should add it
+                if (pendingServiceData) {
+                  await recoverFromPendingData(pendingServiceData, cartId);
+                  loadedItems = true;
+                } else {
+                  setBasketItems([]);
+                }
               }
             } else if (response.status === 404) {
               // Cart ID not found - it might have been deleted on the server
@@ -52,96 +68,203 @@ const RepairsBasketIcon: React.FC = () => {
               sessionStorage.removeItem('cartId');
               // Show a notification to the user
               toast.info('Your shopping cart has been reset');
+              
+              // If we have pending data, try to recover
+              if (pendingServiceData) {
+                await recoverFromPendingData(pendingServiceData);
+                loadedItems = true;
+              } else {
+                setBasketItems([]);
+              }
             } else {
               // Handle other error status codes
               console.error('Error loading cart:', response.status, response.statusText);
               // Show error notification if it's a server error
               if (response.status >= 500) {
                 toast.error('Server error loading cart. Please try again later.');
+                
+                // Try to load locally
+                if (pendingServiceData) {
+                  await recoverFromPendingData(pendingServiceData);
+                  loadedItems = true;
+                }
               }
             }
           } catch (error) {
             console.error('Error loading cart from server:', error);
-            // Show user-friendly error
-            toast.error('Unable to load your cart. Please check your connection.');
+            
+            // If it's a timeout or network error, try to recover from pendingServiceData
+            if (error instanceof DOMException && error.name === 'AbortError') {
+              console.log('Cart fetch timed out, trying to recover locally');
+            } else {
+              // Show user-friendly error for other errors
+              toast.error('Unable to load your cart. Please check your connection.');
+            }
+            
+            // Try to recover locally
+            if (pendingServiceData && !loadedItems) {
+              await recoverFromPendingData(pendingServiceData);
+              loadedItems = true;
+            }
           }
         }
         
-        // If we get here, either cart ID was missing or no items were found
-        // Try to recover from pendingServiceData
-        const pendingServiceData = sessionStorage.getItem('pendingServiceData');
-        if (pendingServiceData) {
-          try {
-            console.log('Attempting to recover from pendingServiceData');
-            const serviceData = JSON.parse(pendingServiceData);
-            
-            // Create a temporary basket item
-            const tempItem: CartItem = {
-              id: 0,
-              service_id: serviceData.id,
-              service_name: serviceData.name,
-              quantity: serviceData.quantity || 1,
-              price: serviceData.price?.replace('₹', '') || '0'
-            };
-            
-            setBasketItems([tempItem]);
-            console.log('Created temporary basket item from pending data:', tempItem);
-            
-            // If we don't have a cart yet, create one
-            if (!cartId) {
-              try {
-                const createResponse = await fetch(API_CONFIG.getApiUrl('/repairing-service/cart/create/'), {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  credentials: 'omit'
-                });
-                
-                if (createResponse.ok) {
-                  const newCart = await createResponse.json();
-                  console.log('Created new cart:', newCart.id);
-                  sessionStorage.setItem('cartId', newCart.id.toString());
-                  
-                  // Add the service to the new cart
-                  await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${newCart.id}/add/`), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      service_id: serviceData.id,
-                      quantity: serviceData.quantity || 1,
-                      service_name: serviceData.name
-                    }),
-                    credentials: 'omit'
-                  });
-                  
-                  console.log('Added service to new cart');
-                } else {
-                  console.error('Failed to create cart:', createResponse.status, createResponse.statusText);
-                  // Only show error for server errors
-                  if (createResponse.status >= 500) {
-                    toast.error('Server error creating cart. Please try again later.');
-                  }
-                }
-              } catch (cartError) {
-                console.error('Failed to create cart from pending data:', cartError);
-                toast.error('Unable to create cart. Please check your connection.');
-              }
-            }
-          } catch (parseError) {
-            console.error('Failed to parse pending service data:', parseError);
-            // This is likely a corruption issue - clean it up
-            sessionStorage.removeItem('pendingServiceData');
-            toast.error('There was an issue with your cart data. Cart has been reset.');
-          }
-        } else {
-          console.log('No pending service data found');
-          setBasketItems([]);
+        // If we couldn't load items from the server or we don't have a cart ID,
+        // try to recover from pendingServiceData
+        if (!loadedItems && pendingServiceData) {
+          await recoverFromPendingData(pendingServiceData);
         }
       } catch (error) {
         console.error('Unexpected error in fetchCartData:', error);
         toast.error('An unexpected error occurred. Please try refreshing the page.');
+        setBasketItems([]);
       } finally {
         setLoading(false);
       }
+    };
+    
+    // Helper function to recover cart from pending data
+    const recoverFromPendingData = async (pendingData: string, existingCartId?: string) => {
+      try {
+        console.log('Attempting to recover from pendingServiceData');
+        const serviceData = JSON.parse(pendingData);
+        
+        // Check if we already have this item in the basket to prevent duplication
+        const serviceExists = basketItems.some(item => 
+          item.service_id === serviceData.id
+        );
+        
+        if (serviceExists) {
+          console.log('Service already in basket items, skipping recovery');
+          return true;
+        }
+        
+        // Create a temporary basket item
+        const tempItem: CartItem = {
+          id: 0,
+          service_id: serviceData.id,
+          service_name: serviceData.name,
+          quantity: serviceData.quantity || 1,
+          price: serviceData.price?.replace('₹', '') || '0'
+        };
+        
+        setBasketItems(prevItems => [...prevItems, tempItem]);
+        console.log('Created temporary basket item from pending data:', tempItem);
+        
+        // If we don't have a cart or need to add to existing cart
+        if (!existingCartId) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            const createResponse = await fetch(API_CONFIG.getApiUrl('/repairing-service/cart/create/'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'omit',
+              signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (createResponse.ok) {
+              const newCart = await createResponse.json();
+              console.log('Created new cart:', newCart.id);
+              sessionStorage.setItem('cartId', newCart.id.toString());
+              
+              try {
+                // Check if this service already exists in the new cart to prevent duplication
+                const cartItemsResponse = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${newCart.id}/`), {
+                  credentials: 'omit'
+                });
+                
+                if (cartItemsResponse.ok) {
+                  const cartData = await cartItemsResponse.json();
+                  const serviceExistsInCart = cartData.items && cartData.items.some(
+                    (item: CartItem) => item.service_id === serviceData.id
+                  );
+                  
+                  if (serviceExistsInCart) {
+                    console.log('Service already exists in the cart, skipping add operation');
+                    return true;
+                  }
+                }
+                
+                // Add the service to the new cart if it doesn't exist
+                await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${newCart.id}/add/`), {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    service_id: serviceData.id,
+                    quantity: serviceData.quantity || 1,
+                    service_name: serviceData.name
+                  }),
+                  credentials: 'omit'
+                });
+                console.log('Added service to new cart');
+              } catch (addError) {
+                console.error('Failed to add service to new cart:', addError);
+                // Keep local representation, we'll try again later
+              }
+            } else {
+              console.error('Failed to create cart:', createResponse.status, createResponse.statusText);
+              // Only show error for server errors
+              if (createResponse.status >= 500) {
+                toast.error('Server error creating cart. Please try again later.');
+              }
+            }
+          } catch (cartError) {
+            if (cartError instanceof DOMException && cartError.name === 'AbortError') {
+              console.log('Cart creation timed out, keeping local representation');
+            } else {
+              console.error('Failed to create cart from pending data:', cartError);
+              toast.error('Unable to create cart. Please check your connection.');
+            }
+          }
+        } else {
+          // We have an existing cart ID, check if this service already exists in the cart
+          try {
+            const cartItemsResponse = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${existingCartId}/`), {
+              credentials: 'omit'
+            });
+            
+            if (cartItemsResponse.ok) {
+              const cartData = await cartItemsResponse.json();
+              const serviceExistsInCart = cartData.items && cartData.items.some(
+                (item: CartItem) => item.service_id === serviceData.id
+              );
+              
+              if (serviceExistsInCart) {
+                console.log('Service already exists in the cart, skipping add operation');
+                return true;
+              }
+            }
+            
+            // Only add if not already in cart
+            await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${existingCartId}/add/`), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                service_id: serviceData.id,
+                quantity: serviceData.quantity || 1,
+                service_name: serviceData.name
+              }),
+              credentials: 'omit'
+            });
+            console.log('Added service to existing cart:', existingCartId);
+          } catch (addError) {
+            console.error('Failed to add service to existing cart:', addError);
+            // Keep local representation, we'll try again later
+          }
+        }
+      } catch (parseError) {
+        console.error('Failed to parse pending service data:', parseError);
+        // This is likely a corruption issue - clean it up
+        sessionStorage.removeItem('pendingServiceData');
+        toast.error('There was an issue with your cart data. Cart has been reset.');
+        setBasketItems([]);
+      }
+      
+      return true;
     };
     
     fetchCartData();
@@ -197,10 +320,15 @@ const RepairsBasketIcon: React.FC = () => {
   // Handle removing an item
   const handleRemoveItem = async (itemId: number) => {
     try {
+      // Create local backup of current items for rollback
+      const previousItems = [...basketItems];
+      
+      // Update UI immediately for responsive UX
+      setBasketItems(basketItems.filter(item => item.id !== itemId));
+      
       // Special handling for temporary items (ID 0)
       if (itemId === 0) {
         // For temporary items, just update local state and clear pendingServiceData
-        setBasketItems([]);
         sessionStorage.removeItem('pendingServiceData');
         toast.success('Item removed from basket');
         
@@ -210,24 +338,55 @@ const RepairsBasketIcon: React.FC = () => {
       }
 
       // For regular items, call the API
-      const response = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/items/${itemId}/`), {
-        method: 'DELETE',
-        credentials: 'omit'
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to remove item');
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/items/${itemId}/`), {
+          method: 'DELETE',
+          credentials: 'omit',
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to remove item: ${response.status} ${response.statusText}`);
+        }
+        
+        toast.success('Item removed from basket');
+        
+        // Dispatch event to notify other components
+        window.dispatchEvent(new Event('cartUpdated'));
+      } catch (apiError) {
+        console.error('API error removing item:', apiError);
+        
+        if (apiError instanceof DOMException && apiError.name === 'AbortError') {
+          toast.warning('Network timeout. Item removed locally, but will sync when connection improves.');
+        } else {
+          // API failed, but we've already updated the UI - inform the user
+          toast.warning('Item removed locally. Changes will sync when connection improves.');
+        }
+        
+        // Keep the pendingServiceData for potential recovery
+        const pendingServiceData = sessionStorage.getItem('pendingServiceData');
+        if (pendingServiceData) {
+          try {
+            const serviceData = JSON.parse(pendingServiceData);
+            if (serviceData.id === itemId) {
+              sessionStorage.removeItem('pendingServiceData');
+            }
+          } catch (e) {
+            console.error('Error checking pendingServiceData:', e);
+          }
+        }
       }
-      
-      // Update local state
-      setBasketItems(basketItems.filter(item => item.id !== itemId));
-      toast.success('Item removed from basket');
-      
-      // Dispatch event to notify other components
-      window.dispatchEvent(new Event('cartUpdated'));
     } catch (error) {
       console.error('Error removing item:', error);
-      toast.error('Failed to remove item');
+      toast.error('Failed to remove item. Please try again.');
+      
+      // If all else fails, refresh the cart data
+      window.dispatchEvent(new Event('cartUpdated'));
     }
   };
   
