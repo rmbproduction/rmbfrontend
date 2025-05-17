@@ -12,6 +12,7 @@ import {
 } from './imageUtils';
 import { API_CONFIG } from '../config/api.config';
 import persistentStorageService from './persistentStorageService';
+import userProfileDataService from './userProfileDataService';
 import { Vehicle } from '../types/vehicles';
 import { toast } from 'react-toastify';
 
@@ -615,14 +616,17 @@ const marketplaceService = {
     console.log('Submitting vehicle to marketplace');
     const data = new FormData();
     
-    // Format phone number
-    let formattedPhone = formData.contactNumber || localStorage.getItem('userPhone') || '';
+    // Get phone number using centralized service
+    let formattedPhone = formData.contactNumber || userProfileDataService.getUserPhone() || '';
     if (!formattedPhone.startsWith('+')) {
       formattedPhone = '+' + formattedPhone.replace(/\D/g, '');
     }
     
+    // Get address using centralized service if not provided in form data
+    let pickupAddress = formData.pickupAddress || userProfileDataService.getUserAddress() || '';
+    
     // Format address (replace newlines with commas)
-    const formattedAddress = formData.pickupAddress ? formData.pickupAddress.replace(/\n/g, ', ') : '';
+    const formattedAddress = pickupAddress ? pickupAddress.replace(/\n/g, ', ') : '';
     
     // IMPORTANT: Save the complete vehicle data to both sessionStorage and localStorage
     // This ensures we always have the data available for the summary page
@@ -651,8 +655,8 @@ const marketplaceService = {
           insurance_valid_till: formData.insuranceValidTill,
           description: formData.description || ''
         },
-        contact_number: formData.contactNumber,
-        pickup_address: formData.pickupAddress,
+        contact_number: formattedPhone,
+        pickup_address: formattedAddress,
         is_price_negotiable: formData.isPriceNegotiable,
         has_puc_certificate: formData.hasPucCertificate,
         seller_notes: formData.sellerNotes,
@@ -2043,9 +2047,14 @@ const marketplaceService = {
         throw new Error('Authentication required. Please log in to continue.');
       }
 
-      // Validate the booking data
+      // If no contact number provided, try to get it from our centralized service
       if (!bookingData.contact_number) {
-        throw new Error('Contact number is required');
+        const userPhone = userProfileDataService.getUserPhone();
+        if (userPhone) {
+          bookingData.contact_number = userPhone;
+        } else {
+          throw new Error('Contact number is required');
+        }
       }
 
       // Ensure phone number is in the correct format (remove any non-digit characters except +)
@@ -2722,8 +2731,8 @@ const marketplaceService = {
         throw new Error('Authentication required');
       }
       
-      // Format phone number
-      let phone = formData.contactNumber || localStorage.getItem('userPhone') || '';
+      // Get phone using centralized service
+      let phone = formData.contactNumber || userProfileDataService.getUserPhone() || '';
       if (!phone.startsWith('+')) {
         phone = '+' + phone.replace(/\D/g, '');
       }
@@ -2734,11 +2743,13 @@ const marketplaceService = {
         phone = '+91' + '1234567890';
       }
       
+      // Get address using centralized service if not provided
+      const savedAddress = formData.pickupAddress || userProfileDataService.getUserAddress() || '';
+      
       // Ensure pickup address is long enough
-      const address = formData.pickupAddress || '';
-      const formattedAddress = address.length >= 10 ? 
-        address : 
-        address + ', Default Address, City, 12345';
+      const formattedAddress = savedAddress.length >= 10 ? 
+        savedAddress : 
+        savedAddress + ', Default Address, City, 12345';
       
       // Set pickup slot to tomorrow noon UTC
       const tomorrow = new Date();

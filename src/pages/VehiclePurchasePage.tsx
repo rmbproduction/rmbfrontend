@@ -9,6 +9,7 @@ import { toast } from 'react-toastify';
 import { API_CONFIG } from '../config/api.config';
 import marketplaceService from '../services/marketplaceService';
 import { Vehicle } from '../types/vehicles';
+import userProfileDataService from '../services/userProfileDataService';
 
 // Step interface for the purchase flow
 interface PurchaseStep {
@@ -98,19 +99,15 @@ const VehiclePurchasePage = () => {
       setLoading(false);
     }
     
-    // Try to prefill user data if available
-    const phone = localStorage.getItem('userPhone');
-    const name = localStorage.getItem('userName');
-    const address = localStorage.getItem('userAddress');
+    // Try to prefill user data using our centralized service
+    const profileData = userProfileDataService.getFullProfileData();
     
-    if (phone || name || address) {
-      setFormData(prev => ({
-        ...prev,
-        contact_number: phone || prev.contact_number,
-        full_name: name || prev.full_name,
-        delivery_address: address || prev.delivery_address
-      }));
-    }
+    setFormData(prev => ({
+      ...prev,
+      contact_number: profileData.phone || prev.contact_number,
+      full_name: profileData.name || prev.full_name,
+      delivery_address: profileData.address || prev.delivery_address
+    }));
   }, [id]);
   
   const fetchVehicleDetails = async (vehicleId: string) => {
@@ -177,6 +174,15 @@ const VehiclePurchasePage = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Save profile data to our centralized service when user updates relevant fields
+    if (name === 'contact_number') {
+      userProfileDataService.saveProfileData({ phone: value });
+    } else if (name === 'delivery_address') {
+      userProfileDataService.saveProfileData({ address: value });
+    } else if (name === 'full_name') {
+      userProfileDataService.saveProfileData({ name: value });
+    }
   };
   
   const handleSubmit = async () => {

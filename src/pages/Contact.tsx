@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Phone, Mail, MapPin, Clock, CheckCircle } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { API_CONFIG } from '../config/api.config';
+import userProfileDataService from '../services/userProfileDataService';
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -16,6 +17,33 @@ const Contact = () => {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
+
+  // Pre-fill form with user data from our centralized service
+  useEffect(() => {
+    const profileData = userProfileDataService.getFullProfileData();
+    
+    setFormData(prevData => ({
+      ...prevData,
+      name: profileData.name || prevData.name,
+      email: profileData.email || prevData.email,
+      phone: profileData.phone || prevData.phone
+    }));
+  }, []);
+
+  // Update handler to save data to our centralized service
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Save profile data to our centralized service when user updates relevant fields
+    if (name === 'phone') {
+      userProfileDataService.saveProfileData({ phone: value });
+    } else if (name === 'name') {
+      userProfileDataService.saveProfileData({ name: value });
+    } else if (name === 'email') {
+      userProfileDataService.saveProfileData({ email: value });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,13 +145,6 @@ const Contact = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
   };
 
   return (

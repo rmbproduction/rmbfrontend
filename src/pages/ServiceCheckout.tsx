@@ -32,6 +32,8 @@ import { ProfileData } from '../models/profile-data';
 import { VehicleType } from '../models/vehicle-type';
 import { Manufacturer } from '../models/manufacturer';
 import { VehicleModel } from '../models/vehicle-model';
+// Add import for our new profile data service
+import userProfileDataService from '../services/userProfileDataService';
 
 interface CartItem {
   id: number;
@@ -363,48 +365,42 @@ const ServiceCheckout: React.FC = () => {
   // Add the new comprehensive data loading function
   const loadAllUserData = async () => {
     try {
+      // Load profile data from our centralized service
+      const profileData = await userProfileDataService.initializeProfileData();
+      console.log('[DEBUG] Loaded profile data from centralized service:', profileData);
+      
+      // Update profile data with the retrieved information
+      setProfileData(prev => ({
+        ...prev,
+        name: profileData.name || prev.name,
+        email: profileData.email || prev.email,
+        phone: profileData.phone || prev.phone,
+        address: profileData.address || prev.address,
+        city: profileData.city || prev.city,
+        state: profileData.state || prev.state,
+        postalCode: profileData.postalCode || prev.postalCode
+      }));
+      
+      // Save profile data to sessionStorage for consistency
+      saveProfileToSessionStorage({
+        name: profileData.name,
+        email: profileData.email,
+        phone: profileData.phone,
+        address: profileData.address,
+        city: profileData.city,
+        state: profileData.state,
+        postalCode: profileData.postalCode,
+        scheduleDate: '',
+        scheduleTime: '',
+        latitude: 0,
+        longitude: 0
+      });
+
       // First try to load data from the user's account (most authoritative)
       const token = localStorage.getItem('accessToken');
-      let loadedFromAccount = false;
       
       if (token) {
         try {
-          // Fetch user profile data using the new userProfileService
-          const accountData = await userProfileService.getUserProfile();
-          
-          if (accountData) {
-            console.log('[DEBUG] Loaded profile data from account:', accountData);
-            
-            // Update profile data with account information
-            setProfileData(prev => ({
-              ...prev,
-              name: accountData.name || prev.name,
-              email: accountData.email || prev.email,
-              phone: accountData.phone || prev.phone,
-              address: accountData.address || prev.address,
-              city: accountData.city || prev.city,
-              state: accountData.state || prev.state,
-              postalCode: accountData.postal_code || prev.postalCode
-            }));
-            
-            loadedFromAccount = true;
-            
-            // Also save this data in sessionStorage for consistency
-            saveProfileToSessionStorage({
-              name: accountData.name,
-              email: accountData.email || '',
-              phone: accountData.phone || '',
-              address: accountData.address || '',
-              city: accountData.city || '',
-              state: accountData.state || '',
-              postalCode: accountData.postal_code || '',
-              scheduleDate: '',
-              scheduleTime: '',
-              latitude: accountData.latitude,
-              longitude: accountData.longitude
-            });
-          }
-          
           // Fetch user's vehicles
           const vehiclesResponse = await fetch(API_CONFIG.getApiUrl('/vehicle/user-vehicles/'), {
             headers: {
@@ -488,73 +484,6 @@ const ServiceCheckout: React.FC = () => {
           console.error('Error fetching from user account:', accountError);
         }
       }
-      
-      // Then try to load from sessionStorage for returning users
-      if (!loadedFromAccount) {
-        try {
-          const savedData = sessionStorage.getItem('savedProfileData');
-          if (savedData) {
-            const parsedData = JSON.parse(savedData);
-            console.log('[DEBUG] Loading profile data from sessionStorage:', parsedData);
-            setProfileData(prev => ({
-              ...prev,
-              name: parsedData.name || prev.name,
-              email: parsedData.email || prev.email,
-              phone: parsedData.phone || prev.phone,
-              address: parsedData.address || prev.address,
-              city: parsedData.city || prev.city,
-              state: parsedData.state || prev.state,
-              postalCode: parsedData.postalCode || prev.postalCode,
-              scheduleDate: parsedData.scheduleDate || prev.scheduleDate,
-              scheduleTime: parsedData.scheduleTime || prev.scheduleTime,
-              latitude: parsedData.latitude || prev.latitude,
-              longitude: parsedData.longitude || prev.longitude
-            }));
-          }
-        } catch (error) {
-          console.error('Error parsing saved profile data:', error);
-        }
-
-        // Then check localStorage for user profile
-        const userProfile = localStorage.getItem('userProfile');
-        if (userProfile) {
-          try {
-            const profile = JSON.parse(userProfile);
-            setProfileData(prev => ({
-              ...prev,
-              name: profile.name || prev.name,
-              email: profile.email || prev.email,
-              phone: profile.phone || prev.phone,
-              address: profile.address || prev.address,
-              city: profile.city || prev.city,
-              state: profile.state || prev.state,
-              postalCode: profile.postal_code || prev.postalCode
-            }));
-          } catch (error) {
-            console.error('Error parsing user profile from localStorage:', error);
-          }
-        }
-        
-        // Also try to load from userProfileData (new storage location)
-        const storedProfileData = localStorage.getItem('userProfileData');
-        if (storedProfileData) {
-          try {
-            const parsedProfileData = JSON.parse(storedProfileData);
-            setProfileData(prev => ({
-              ...prev,
-              name: parsedProfileData.name || prev.name,
-              email: parsedProfileData.email || prev.email,
-              phone: parsedProfileData.phone || prev.phone,
-              address: parsedProfileData.address || prev.address,
-              city: parsedProfileData.city || prev.city,
-              state: parsedProfileData.state || prev.state,
-              postalCode: parsedProfileData.postal_code || prev.postalCode
-            }));
-          } catch (error) {
-            console.error('Error parsing userProfileData from localStorage:', error);
-          }
-        }
-      }
 
       // Try to load vehicle information from session storage
       const vehicleData = sessionStorage.getItem('userVehicleOwnership');
@@ -578,11 +507,25 @@ const ServiceCheckout: React.FC = () => {
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    
+    // Update local state
     setProfileData({ ...profileData, [name]: value });
     
     // Clear error when field is edited
     if (formErrors[name]) {
       setFormErrors({ ...formErrors, [name]: '' });
+    }
+
+    // For phone and address fields, also update in our centralized service
+    if (name === 'phone' || name === 'address' || name === 'name' || 
+        name === 'email' || name === 'city' || name === 'state' || name === 'postalCode') {
+      // Map the field name to the profile data structure
+      const profileField = name as keyof typeof profileData;
+      
+      // Save to our centralized service
+      userProfileDataService.saveProfileData({
+        [name]: value
+      });
     }
 
     // For address field, provide manual coordinate handling
@@ -762,20 +705,21 @@ const ServiceCheckout: React.FC = () => {
         return false;
       }
 
-      // Sync profile data with user's account using the userProfileService
-      const profilePayload = {
-        name: data.profileData.name,
-        email: data.profileData.email,
-        phone: data.profileData.phone,
-        address: data.profileData.address,
-        city: data.profileData.city,
-        state: data.profileData.state,
-        postal_code: data.profileData.postalCode
-      };
-
+      // Sync profile data with user's account using our centralized service
       try {
-        // Update user profile with the new userProfileService
-        await userProfileService.updateUserProfile(profilePayload);
+        // Format the profile data
+        const profilePayload = {
+          name: data.profileData.name,
+          email: data.profileData.email,
+          phone: data.profileData.phone,
+          address: data.profileData.address,
+          city: data.profileData.city,
+          state: data.profileData.state,
+          postalCode: data.profileData.postalCode
+        };
+
+        // Use our centralized service to save to the server
+        await userProfileDataService.saveProfileToServer(profilePayload);
         console.log('[DEBUG] Updated user profile successfully');
       } catch (profileError) {
         console.error('[ERROR] Failed to update profile:', profileError);
@@ -805,61 +749,32 @@ const ServiceCheckout: React.FC = () => {
           console.error('[ERROR] Failed to update vehicle data:', vehicleError);
         }
       }
-
-      // Update localStorage with latest profile data
-      const updatedProfile = {
-        ...data.profileData,
-        lastSynced: new Date().toISOString()
-      };
-      localStorage.setItem('userProfile', JSON.stringify(updatedProfile));
-      
-      console.log('[DEBUG] Successfully synced checkout data with user account');
-      return true;
     } catch (error) {
       console.error('[ERROR] Failed to sync checkout data with account:', error);
       return false;
     }
   };
 
-  // Improve the saveProfileToSessionStorage function to also update localStorage
+  // Update saveProfileToSessionStorage to use our centralized service
   const saveProfileToSessionStorage = (data: ProfileData) => {
     try {
-      // Store the data with a timestamp
-      const storageData = {
-        ...data,
-        savedAt: new Date().toISOString()
-      };
+      // Save to centralized profile service
+      userProfileDataService.saveProfileData({
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        postalCode: data.postalCode
+      });
       
-      // Save to sessionStorage for current session
-      sessionStorage.setItem('savedProfileData', JSON.stringify(storageData));
+      // Also save to sessionStorage for this specific component's needs
+      sessionStorage.setItem('savedProfileData', JSON.stringify(data));
       
-      // Also update localStorage for longer persistence
-      const userProfile = localStorage.getItem('userProfile');
-      if (userProfile) {
-        try {
-          const profile = JSON.parse(userProfile);
-          const updatedProfile = {
-            ...profile,
-            name: data.name || profile.name,
-            email: data.email || profile.email,
-            phone: data.phone || profile.phone,
-            address: data.address || profile.address,
-            city: data.city || profile.city,
-            state: data.state || profile.state,
-            postal_code: data.postalCode || profile.postal_code,
-            schedule_date: data.scheduleDate || profile.schedule_date,
-            schedule_time: data.scheduleTime || profile.schedule_time,
-            lastUpdated: new Date().toISOString()
-          };
-          localStorage.setItem('userProfile', JSON.stringify(updatedProfile));
-        } catch (error) {
-          console.error('Error updating localStorage profile:', error);
-        }
-      }
-      
-      console.log('[DEBUG] Saved profile data to storage:', storageData);
-    } catch (error) {
-      console.error('Error saving profile data to storage:', error);
+      console.log('Profile data saved successfully');
+    } catch (e) {
+      console.error('Error saving profile data:', e);
     }
   };
   

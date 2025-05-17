@@ -13,6 +13,7 @@ import {
   safeStoreBase64Image
 } from '../../../services/imageUtils';
 import persistentStorageService from '../../../services/persistentStorageService';
+import userProfileDataService from '../../../services/userProfileDataService';
 
 export const useVehicleForm = () => {
   const navigate = useNavigate();
@@ -27,6 +28,10 @@ export const useVehicleForm = () => {
         console.error('Error parsing saved form data:', e);
       }
     }
+    
+    // Get user contact info from our centralized service
+    const phone = userProfileDataService.getUserPhone();
+    const address = userProfileDataService.getUserAddress();
     
     // Return default values if no saved data exists
     return {
@@ -45,8 +50,8 @@ export const useVehicleForm = () => {
       engineCapacity: '',
       lastServiceDate: '',
       insuranceValidTill: '',
-      contactNumber: localStorage.getItem('userPhone') || '',
-      pickupAddress: localStorage.getItem('userAddress') || '',
+      contactNumber: phone || '',
+      pickupAddress: address || '',
       features: [],
       highlights: [],
       isPriceNegotiable: true,
@@ -235,6 +240,13 @@ export const useVehicleForm = () => {
         ...prev,
         [name]: ''
       }));
+    }
+    
+    // Save user contact information to our centralized service
+    if (name === 'contactNumber') {
+      userProfileDataService.saveProfileData({ phone: value });
+    } else if (name === 'pickupAddress') {
+      userProfileDataService.saveProfileData({ address: value });
     }
   };
 
