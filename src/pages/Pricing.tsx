@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Check, Clock, Shield, PenTool as Tool, Wrench, Calendar, Users, Star } from 'lucide-react';
+import { Check, Clock, Shield, PenTool as Tool, Wrench, Calendar, Users, Star, CheckCircle } from 'lucide-react';
 import { 
   SubscriptionPlan, // Keep for backward compatibility
   Plan,
@@ -90,6 +90,8 @@ const Pricing = () => {
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   // Keep old state for backward compatibility
   const [selectedPlanOption, setSelectedPlanOption] = useState<any | null>(null);
+  const [showPlanOptionModal, setShowPlanOptionModal] = useState<boolean>(false);
+  const [creating, setCreating] = useState<boolean>(false);
 
   useEffect(() => {
     const fetchSubscriptionPlans = async () => {
@@ -103,11 +105,12 @@ const Pricing = () => {
           console.log('Plans data received:', plansData);
           setPlans(plansData);
           
-          // Fetch all variants
-          console.log('Attempting to fetch plan variants from new API');
-          const variantsData = await apiService.getPlanVariants();
-          console.log('Variants data received:', variantsData);
+          // Then fetch variants for the first plan (can be changed by user selection later)
+          const variantsData = await apiService.getPlanVariants(plansData[0].id);
           setPlanVariants(variantsData);
+          
+          // Set first plan as selected by default
+          setSelectedPlanVariant(variantsData[0]);
           
           // If we have plans, we're using the new API
           if (plansData.length > 0) {
@@ -199,23 +202,35 @@ const Pricing = () => {
   };
   
   // Handle legacy booking for old API
-  const handleLegacyBookClick = (planOption: any) => {
+  const handleLegacyBookClick = async (planOption: any) => {
     // Store the selected option in session storage for the checkout page
     try {
-      const plan = subscriptionPlans.find(p => p.options.some(o => o.id === planOption.id));
+      const plan = subscriptionPlans.find(p => p.options?.some(o => o.id === planOption.id));
+      
+      // Only proceed if we found a valid plan
       if (plan) {
-        const checkoutData = {
-          id: planOption.id,
-          name: plan.name,
-          description: plan.description,
-          price: planOption.price,
-          duration: planOption.duration,
-          max_services: planOption.max_services,
-          recommended: plan.recommended,
-          features: getFeatures(plan)
-        };
-        sessionStorage.setItem('subscriptionPlan', JSON.stringify(checkoutData));
-        navigate('/service-checkout', { state: { isSubscription: true } });
+        try {
+          setCreating(true);
+          
+          const response = await apiService.createSubscriptionRequest({
+            plan_id: plan.id,
+            duration: planOption.duration || 1,
+            duration_type: planOption.duration_type || 'month',
+            payment_method: 'online'
+          });
+          
+          toast.success('Subscription request created successfully!');
+          setSelectedPlanOption(null);
+          setShowPlanOptionModal(false);
+          
+          // After creating, navigate to profile page to see the request
+          navigate('/profile');
+        } catch (error) {
+          console.error('Error creating subscription request:', error);
+          toast.error('Failed to create subscription request. Please try again.');
+        } finally {
+          setCreating(false);
+        }
       }
     } catch (err) {
       console.error('Error storing plan data:', err);

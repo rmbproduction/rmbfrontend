@@ -296,6 +296,89 @@ class ApiService {
     }
   }
   
+  // Added missing methods
+  async getSubscriptionRequests(): Promise<SubscriptionRequest[]> {
+    try {
+      const response = await apiClient.get(`${SUBSCRIPTION_URL}/requests/`);
+      return response.data;
+    } catch (error) {
+      console.warn('Error fetching subscription requests:', error);
+      return [];
+    }
+  }
+  
+  async scheduleVisit(subscriptionId: number, date: string, notes?: string): Promise<any> {
+    try {
+      const response = await apiClient.post(`${SUBSCRIPTION_URL}/visits/`, {
+        subscription_id: subscriptionId,
+        scheduled_date: date,
+        notes: notes || ''
+      });
+      return response.data;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  }
+  
+  async cancelVisit(visitId: number, notes?: string): Promise<any> {
+    try {
+      const response = await apiClient.post(`${SUBSCRIPTION_URL}/visits/${visitId}/cancel/`, {
+        notes: notes || ''
+      });
+      return response.data;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  }
+  
+  async cancelSubscription(subscriptionId: number): Promise<any> {
+    try {
+      const response = await apiClient.post(`${SUBSCRIPTION_URL}/subscriptions/${subscriptionId}/cancel/`);
+      return response.data;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  }
+  
+  async getServices(): Promise<any[]> {
+    try {
+      const response = await apiClient.get(`${BASE_URL}/services/`);
+      return response.data;
+    } catch (error) {
+      console.warn('Error fetching services:', error);
+      return [];
+    }
+  }
+  
+  async getPlans(): Promise<Plan[]> {
+    try {
+      const response = await apiClient.get(`${SUBSCRIPTION_URL}/legacy-plans/`);
+      return response.data;
+    } catch (error) {
+      console.warn('Error fetching legacy plans:', error);
+      return [];
+    }
+  }
+  
+  async getPlanVariants(planId: number): Promise<PlanVariant[]> {
+    try {
+      const response = await apiClient.get(`${SUBSCRIPTION_URL}/plans/${planId}/variants/`);
+      return response.data;
+    } catch (error) {
+      console.warn(`Error fetching variants for plan ${planId}:`, error);
+      return [];
+    }
+  }
+  
+  async createSubscriptionRequest(requestData: any): Promise<SubscriptionRequest> {
+    try {
+      const response = await apiClient.post(`${SUBSCRIPTION_URL}/requests/`, requestData);
+      return response.data;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  }
+  
   // Check API availability - useful for connectivity testing
   async checkApiAvailability(): Promise<boolean> {
     try {
@@ -324,7 +407,6 @@ class ApiService {
     try {
       const token = localStorage.getItem('accessToken');
       const requestHeaders: Record<string, string> = {
-        'Content-Type': 'application/json',
         ...headers
       };
 
@@ -332,11 +414,24 @@ class ApiService {
         requestHeaders['Authorization'] = `Bearer ${token}`;
       }
 
-      const config = {
+      // Don't set Content-Type for FormData, let the browser handle it
+      if (!(data instanceof FormData)) {
+        requestHeaders['Content-Type'] = 'application/json';
+      }
+
+      const config: RequestInit = {
         method,
         headers: requestHeaders,
-        body: data ? JSON.stringify(data) : null
       };
+
+      // Handle body data based on type
+      if (data) {
+        if (data instanceof FormData) {
+          config.body = data;
+        } else {
+          config.body = JSON.stringify(data);
+        }
+      }
 
       const url = `${API_CONFIG.getApiUrl('api')}${endpoint}`;
       console.log(`[API] ${method} ${url}`, data ? data : '');

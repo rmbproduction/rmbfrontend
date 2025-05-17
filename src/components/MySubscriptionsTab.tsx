@@ -293,20 +293,24 @@ const MySubscriptionsTab: React.FC = () => {
   // Render subscription card
   const renderSubscriptionCard = (subscription: ExtendedUserSubscription) => {
     // Get visits with fallback to empty array
-    const subscriptionVisits = visits[subscription.id] || [];
+    const subscriptionVisits = visits[Number(subscription.id)] || [];
     console.log(`Visits for subscription ${subscription.id}:`, subscriptionVisits);
     
     // Split visits by status with safe checks
-    const upcomingVisits = subscriptionVisits.filter(visit => 
-      visit && visit.status === 'scheduled'
+    const pendingVisits = subscriptionVisits.filter((visit: VisitSchedule) => 
+      visit.status === 'scheduled'
     );
-    const pastVisits = subscriptionVisits.filter(visit => 
-      visit && (visit.status === 'completed' || visit.status === 'cancelled')
+    const completedVisits = subscriptionVisits.filter((visit: VisitSchedule) => 
+      visit.status === 'completed'
+    );
+    const cancelledVisits = subscriptionVisits.filter((visit: VisitSchedule) => 
+      visit.status === 'canceled'
     );
     
     // Calculate total visits
-    const totalVisitsCompleted = pastVisits.filter(visit => visit.status === 'completed').length;
-    const totalVisits = subscription.remaining_visits + totalVisitsCompleted;
+    const totalVisitsCompleted = completedVisits.length;
+    const remainingVisits = subscription.remaining_visits || 0;
+    const totalVisits = remainingVisits + totalVisitsCompleted;
     
     return (
       <div key={subscription.id} className="bg-white border border-gray-200 rounded-lg shadow-sm p-5 mb-6">
@@ -324,13 +328,28 @@ const MySubscriptionsTab: React.FC = () => {
           
           <div className="mt-2 md:mt-0 flex flex-wrap gap-2">
             {subscription.remaining_visits > 0 && (
-              <button
-                onClick={() => handleScheduleVisit(subscription)}
-                className="px-4 py-2 bg-[#FF5733] text-white rounded-lg text-sm font-medium hover:bg-opacity-90 transition-colors flex items-center"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Schedule Visit
-              </button>
+              <div className="mt-4 flex">
+                <button 
+                  onClick={() => handleScheduleVisit(subscription)}
+                  disabled={!remainingVisits || remainingVisits <= 0 || subscription.status !== 'active'}
+                  className={`flex items-center bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-md mr-3 ${
+                    !remainingVisits || remainingVisits <= 0 || subscription.status !== 'active' ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  <span>Schedule Visit</span>
+                </button>
+                
+                {subscription.status === 'active' && (
+                  <button 
+                    onClick={() => handleCancelSubscription(Number(subscription.id))}
+                    className="flex items-center bg-red-50 hover:bg-red-100 text-red-700 px-4 py-2 rounded-md"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    <span>Cancel Plan</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -343,7 +362,7 @@ const MySubscriptionsTab: React.FC = () => {
           
           <div className="bg-gray-50 p-3 rounded-lg">
             <p className="text-sm text-gray-600">Remaining Visits</p>
-            <p className="font-semibold">{subscription.remaining_visits} / {totalVisits}</p>
+            <p className="font-semibold">{remainingVisits} visits</p>
           </div>
           
           <div className="bg-gray-50 p-3 rounded-lg">
@@ -357,17 +376,19 @@ const MySubscriptionsTab: React.FC = () => {
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-md font-semibold text-gray-900 flex items-center">
               <Calendar className="h-4 w-4 mr-2 text-gray-600" />
-              Upcoming Visits ({upcomingVisits.length})
+              Upcoming Visits ({pendingVisits.length})
             </h4>
           </div>
           
-          {upcomingVisits.length > 0 ? (
+          {pendingVisits.length > 0 ? (
             <div className="space-y-3">
-              {upcomingVisits.map(visit => (
+              {pendingVisits.map((visit: VisitSchedule) => (
                 <VisitCard 
                   key={visit.id} 
                   visit={visit} 
-                  onCancelVisit={handleCancelVisit} 
+                  onCancel={() => handleCancelVisit(visit.id)}
+                  subscription={subscription}
+                  remainingVisits={remainingVisits}
                 />
               ))}
             </div>
@@ -380,17 +401,17 @@ const MySubscriptionsTab: React.FC = () => {
         </div>
         
         {/* Past Visits Section */}
-        {pastVisits.length > 0 && (
+        {completedVisits.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-md font-semibold text-gray-900 flex items-center">
                 <Clock className="h-4 w-4 mr-2 text-gray-600" />
-                Past Visits ({pastVisits.length})
+                Past Visits ({completedVisits.length})
               </h4>
             </div>
             
             <div className="space-y-3">
-              {pastVisits.map(visit => (
+              {completedVisits.map(visit => (
                 <VisitCard 
                   key={visit.id} 
                   visit={visit} 

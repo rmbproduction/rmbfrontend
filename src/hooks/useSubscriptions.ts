@@ -53,9 +53,9 @@ export const useSubscriptions = (): UseSubscriptionsReturn => {
               .filter(sub => sub.status === 'active')
               .map(async (subscription) => {
                 try {
-                  const subscriptionVisits = await apiService.getSubscriptionVisits(subscription.id);
+                  const subscriptionVisits = await apiService.getSubscriptionVisits(Number(subscription.id));
                   if (isMounted) {
-                    visitsData[subscription.id] = subscriptionVisits;
+                    visitsData[Number(subscription.id)] = subscriptionVisits;
                   }
                 } catch (error) {
                   console.error(`Error fetching visits for subscription ${subscription.id}:`, error);
@@ -71,8 +71,8 @@ export const useSubscriptions = (): UseSubscriptionsReturn => {
         // Fetch subscription requests
         const requestsData = await apiService.getSubscriptionRequests();
         if (isMounted) {
-          setPendingRequests(requestsData.filter(req => req.status === 'pending'));
-          setApprovedRequests(requestsData.filter(req => req.status === 'approved'));
+          setPendingRequests(requestsData.filter((req: SubscriptionRequest) => req.status === 'pending'));
+          setApprovedRequests(requestsData.filter((req: SubscriptionRequest) => req.status === 'approved'));
         }
       } catch (error) {
         console.error('Error fetching subscription data:', error);

@@ -57,7 +57,7 @@ const ScheduleVisitModal: React.FC<ScheduleVisitModalProps> = ({
     
     try {
       const success = await scheduleVisit(
-        subscription.id,
+        Number(subscription.id),
         scheduledDate,
         scheduledTime,
         notes

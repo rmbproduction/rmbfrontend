@@ -112,10 +112,8 @@ const ChatSystem: React.FC<ChatSystemProps> = ({
 
       await apiService.request<Message>(
         `/repairing-service/chat/${serviceRequestId}/messages/`,
-        {
-          method: 'POST',
-          body: formData
-        }
+        'POST',
+        formData
       );
 
       setNewMessage('');

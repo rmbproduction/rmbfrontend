@@ -26,12 +26,12 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import MultiStepVehicleSelector from '../components/SelectVehicle';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { CartItem } from '../models/cart-item';
-import { VehicleData } from '../models/vehicle-data';
-import { ProfileData } from '../models/profile-data';
-import { VehicleType } from '../models/vehicle-type';
-import { Manufacturer } from '../models/manufacturer';
-import { VehicleModel } from '../models/vehicle-model';
+import { CartItem as ModelCartItem } from '../models/cart-item';
+import { VehicleData as ModelVehicleData } from '../models/vehicle-data';
+import { ProfileData as ModelProfileData } from '../models/profile-data';
+import { VehicleType as ModelVehicleType } from '../models/vehicle-type';
+import { Manufacturer as ModelManufacturer } from '../models/manufacturer';
+import { VehicleModel as ModelVehicleModel } from '../models/vehicle-model';
 // Add import for our new profile data service
 import userProfileDataService from '../services/userProfileDataService';
 

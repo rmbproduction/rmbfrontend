@@ -74,13 +74,8 @@ const ReviewSystem: React.FC<ReviewSystemProps> = ({ serviceId, className = '' }
 
       await apiService.request<Review>(
         '/repairing-service/reviews/',
-        {
-          method: 'POST',
-          headers: {
-            // Don't set Content-Type here, let the browser set it with the boundary
-          },
-          body: formDataObj
-        }
+        'POST',
+        formDataObj
       );
 
       showNotification({

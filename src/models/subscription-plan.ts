@@ -18,6 +18,9 @@ export interface SubscriptionPlan {
   status?: 'active' | 'inactive' | 'limited';
   plan_type?: 'standard' | 'premium' | 'basic';
   imageUrl?: string;
+  options?: any[];
+  recommended?: boolean;
+  labour_discount_percent?: number;
 }
 
 /**
@@ -33,6 +36,9 @@ export interface PlanVariant {
   duration_type: 'day' | 'week' | 'month' | 'year';
   description?: string;
   isPopular?: boolean;
+  plan?: any;
+  duration_display?: string;
+  max_visits?: number;
 }
 
 /**
@@ -56,6 +62,7 @@ export interface UserSubscription {
   duration_type: 'day' | 'week' | 'month' | 'year';
   auto_renew?: boolean;
   next_billing_date?: string;
+  remaining_visits?: number;
 }
 
 /**
@@ -117,4 +124,7 @@ export interface VisitSchedule {
   service_notes?: string;
   service_report?: string;
   created_at: string;
+  status_display?: string;
+  plan_name?: string;
+  technician_notes?: string;
 }
