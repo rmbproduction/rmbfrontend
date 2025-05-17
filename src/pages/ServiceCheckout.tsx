@@ -34,6 +34,8 @@ import { Manufacturer as ModelManufacturer } from '../models/manufacturer';
 import { VehicleModel as ModelVehicleModel } from '../models/vehicle-model';
 // Add import for our new profile data service
 import userProfileDataService from '../services/userProfileDataService';
+// Import MarketplaceService
+import marketplaceService from '../services/marketplaceService';
 
 interface CartItem {
   id: number;
@@ -297,21 +299,23 @@ const ServiceCheckout: React.FC = () => {
         // Check if we already have subscription plan loaded
         if (!subscriptionPlan && checkoutData.subscriptionPlanId) {
           // Fetch the subscription plans and find the one we need
-          apiService.getSubscriptionPlans()
-            .then((plansData) => {
+          (apiService as any).getSubscriptionPlans()
+            .then((plansData: any) => {
               // Find the specific plan by ID
-              const planData = plansData.find(plan => plan.id === parseInt(checkoutData.subscriptionPlanId));
+              const planData = plansData.find((plan: any) => plan.id === parseInt(checkoutData.subscriptionPlanId));
               if (planData) {
                 console.log('[DEBUG] Restored subscription plan:', planData);
                 setSubscriptionPlan(planData);
                 
-                // Store in session storage for consistency
-                sessionStorage.setItem('subscriptionPlan', JSON.stringify(planData));
-              } else {
-                console.warn('Could not find subscription plan with ID:', checkoutData.subscriptionPlanId);
+                // Also restore vehicle if available
+                if (checkoutData.vehicleId) {
+                  console.log('[DEBUG] Restoring vehicle with ID:', checkoutData.vehicleId);
+                  marketplaceService.getSellRequest(checkoutData.vehicleId)
+                    .then((vehicleData: any) => setSelectedVehicle(vehicleData));
+                }
               }
             })
-            .catch((err) => {
+            .catch((err: any) => {
               console.error('Error restoring subscription plan:', err);
             });
         }
@@ -1051,7 +1055,7 @@ const ServiceCheckout: React.FC = () => {
           };
           
           // New API with enhanced data
-          const response = await apiService.createSubscriptionRequest(
+          const response = await (apiService as any).createSubscriptionRequest(
             subscriptionPlan.id,
             customerInfo,
             vehicleInfo,
@@ -2139,7 +2143,7 @@ const ServiceCheckout: React.FC = () => {
           subscriptionData={bookingResult.isSubscription ? {
             name: subscriptionPlan?.name,
             price: subscriptionPlan?.discounted_price?.toString() || subscriptionPlan?.price?.toString(),
-            duration: subscriptionPlan?.duration_display || subscriptionPlan?.duration,
+            duration: (subscriptionPlan?.duration_display || subscriptionPlan?.duration)?.toString(),
             visits: subscriptionPlan?.max_visits || getVisitCount(subscriptionPlan),
             features: subscriptionPlan?.features,
             status: bookingResult.status as 'pending' | 'approved' | 'rejected',

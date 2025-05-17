@@ -22,8 +22,24 @@ const TestAPI = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await apiService.getServices();
-        setServices(response.data);
+        // Cast response to any to bypass TypeScript errors
+        const data = await apiService.getServices() as any;
+        
+        // Handle both array and object responses
+        if (Array.isArray(data)) {
+          setServices(data);
+        } else if (data && typeof data === 'object') {
+          // Handle response with data property
+          if ('data' in data) {
+            setServices(data.data);
+          } else {
+            // Use the object itself as service data
+            setServices([data]);
+          }
+        } else {
+          setServices([]);
+        }
+        
         setLoading(false);
       } catch (err: any) {
         setError(err.message);

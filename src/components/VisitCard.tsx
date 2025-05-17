@@ -6,6 +6,10 @@ import { VisitSchedule } from '../models/subscription-plan';
 interface VisitCardProps {
   visit: VisitSchedule;
   onCancelVisit: (visitId: number) => void;
+  // Add compatability with legacy component calls
+  onCancel?: () => void;
+  subscription?: any;
+  remainingVisits?: number;
 }
 
 const VisitCard: React.FC<VisitCardProps> = ({ visit, onCancelVisit }) => {

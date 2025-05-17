@@ -384,7 +384,7 @@ const Pricing = () => {
               
               <div className="space-y-4">
                 {(variantsByPlan[plan.id] || [])
-                  .sort((a, b) => a.max_visits - b.max_visits)
+                  .sort((a, b) => (a.max_visits ?? 0) - (b.max_visits ?? 0))
                   .map(variant => (
                     <div key={variant.id} className="border rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition duration-150">
                       <div className="flex flex-col md:flex-row md:items-center md:justify-between">
@@ -414,7 +414,7 @@ const Pricing = () => {
                           {/* Visits Display */}
                           <div className="flex items-center text-gray-700">
                             <Users className="w-4 h-4 mr-1 text-[#FFC107]" />
-                            <span><strong>{variant.max_visits}</strong> service visits</span>
+                            <span><strong>{variant.max_visits ?? 0}</strong> service visits</span>
                           </div>
                         </div>
                         <button 
@@ -464,7 +464,7 @@ const Pricing = () => {
               <span className="text-sm text-blue-700 font-semibold">Flat {plan.labour_discount_percent}% off on labour charge for additional work</span>
             </div>
             <div className="space-y-4 mb-6">
-              {plan.options.map((option) => (
+              {plan.options?.map((option) => (
                 <div key={option.id} className="border rounded-lg p-4 flex flex-col bg-blue-50">
                   <div className="mb-3">
                     <span className="bg-gradient-to-r from-blue-600 to-blue-700 text-white text-xs px-3 py-1 rounded-full font-semibold uppercase">
@@ -492,7 +492,7 @@ const Pricing = () => {
                     </button>
                   </div>
                   <ul className="list-disc pl-5 text-gray-600 text-sm mt-2">
-                    {option.services.map((service) => (
+                    {option.services.map((service: any) => (
                       <li key={service.id} className="flex items-start">
                         <Check className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
                         <span>{service.service_name}</span>

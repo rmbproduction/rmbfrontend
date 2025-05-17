@@ -327,7 +327,7 @@ const MySubscriptionsTab: React.FC = () => {
           </div>
           
           <div className="mt-2 md:mt-0 flex flex-wrap gap-2">
-            {subscription.remaining_visits > 0 && (
+            {(subscription.remaining_visits ?? 0) > 0 && (
               <div className="mt-4 flex">
                 <button 
                   onClick={() => handleScheduleVisit(subscription)}
@@ -386,16 +386,14 @@ const MySubscriptionsTab: React.FC = () => {
                 <VisitCard 
                   key={visit.id} 
                   visit={visit} 
-                  onCancel={() => handleCancelVisit(visit.id)}
-                  subscription={subscription}
-                  remainingVisits={remainingVisits}
+                  onCancelVisit={() => handleCancelVisit(visit.id)}
                 />
               ))}
             </div>
           ) : (
             <p className="text-gray-600 text-sm p-3 bg-gray-50 rounded-lg">
               No upcoming visits scheduled. 
-              {subscription.remaining_visits > 0 && " Click on 'Schedule Visit' to book a service visit."}
+              {(subscription.remaining_visits ?? 0) > 0 && " Click on 'Schedule Visit' to book a service visit."}
             </p>
           )}
         </div>
