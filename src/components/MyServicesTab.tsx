@@ -360,6 +360,26 @@ const MyServicesTab: React.FC = () => {
       ).toFixed(2);
     }
     
+    // Ensure vehicle information is properly processed
+    if (processedBooking.vehicle) {
+      // If we have raw vehicle IDs but no names, try to normalize them
+      // This is a placeholder - in a real implementation you would fetch this data from a service
+      if (!processedBooking.vehicle.manufacturer_name && processedBooking.vehicle.manufacturer) {
+        // Use lookup or set a placeholder
+        processedBooking.vehicle.manufacturer_name = `Manufacturer ${processedBooking.vehicle.manufacturer}`;
+      }
+      
+      if (!processedBooking.vehicle.model_name && processedBooking.vehicle.model) {
+        // Use lookup or set a placeholder
+        processedBooking.vehicle.model_name = `Model ${processedBooking.vehicle.model}`;
+      }
+      
+      if (!processedBooking.vehicle.vehicle_type_name && processedBooking.vehicle.vehicle_type) {
+        // Use lookup or set a placeholder
+        processedBooking.vehicle.vehicle_type_name = `Type ${processedBooking.vehicle.vehicle_type}`;
+      }
+    }
+    
     return processedBooking;
   };
 

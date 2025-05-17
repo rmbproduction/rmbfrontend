@@ -1340,7 +1340,20 @@ const ServiceCheckout: React.FC = () => {
       });
       
       // Store booking details for thank you page
-      setBookingResult(result);
+      // Enhanced: Add vehicle and schedule info to the result object
+      setBookingResult({
+        ...result,
+        vehicle: {
+          vehicle_type: selectedVehicle.vehicle_type,
+          manufacturer: selectedVehicle.manufacturer,
+          model: selectedVehicle.model,
+          vehicle_type_name: selectedVehicle.vehicle_type_name || vehicleTypes.find(v => v.id === selectedVehicle.vehicle_type)?.name,
+          manufacturer_name: selectedVehicle.manufacturer_name || manufacturers.find(m => m.id === selectedVehicle.manufacturer)?.name,
+          model_name: selectedVehicle.model_name || vehicleModels.find(m => m.id === selectedVehicle.model)?.name
+        },
+        schedule_date: profileData.scheduleDate,
+        schedule_time: profileData.scheduleTime
+      });
       
       // Show thank you modal
       setShowThankYouModal(true);

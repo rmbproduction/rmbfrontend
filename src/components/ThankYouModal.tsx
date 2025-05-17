@@ -12,6 +12,11 @@ interface ThankYouModalProps {
     reference?: string;
     date?: string;
     time?: string;
+    vehicle?: {
+      vehicle_type_name?: string;
+      manufacturer_name?: string;
+      model_name?: string;
+    };
   };
   subscriptionData?: {
     name?: string;
@@ -40,17 +45,19 @@ const ThankYouModal: React.FC<ThankYouModalProps> = ({
 
   // Helper function to format date
   const formatDate = (dateString?: string): string => {
-    if (!dateString) return '';
+    if (!dateString) return 'To be confirmed';
     
     try {
       const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'To be confirmed';
+      
       return date.toLocaleDateString('en-IN', {
         day: 'numeric',
         month: 'long', 
         year: 'numeric'
       });
     } catch (error) {
-      return dateString;
+      return dateString || 'To be confirmed';
     }
   };
 
@@ -181,23 +188,47 @@ const ThankYouModal: React.FC<ThankYouModalProps> = ({
                 </div>
               )}
               
-              {(bookingData.date || bookingData.time) && (
-                <div className="p-4 bg-green-50 rounded-lg border border-green-100">
-                  <h3 className="font-medium text-green-800 mb-2">Scheduled Service</h3>
-                  {bookingData.date && (
-                    <div className="flex justify-between mb-1">
-                      <span className="text-gray-600">Date:</span>
-                      <span className="font-medium">{bookingData.date}</span>
-                    </div>
-                  )}
-                  {bookingData.time && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Time:</span>
-                      <span className="font-medium">{bookingData.time}</span>
-                    </div>
-                  )}
+              {/* Schedule Information - Always show this section */}
+              <div className="p-4 bg-green-50 rounded-lg border border-green-100">
+                <h3 className="font-medium text-green-800 mb-2">Scheduled Service</h3>
+                <div className="flex justify-between mb-1">
+                  <span className="text-gray-600">Date:</span>
+                  <span className="font-medium">{formatDate(bookingData.date)}</span>
                 </div>
-              )}
+                {bookingData.time && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Time:</span>
+                    <span className="font-medium">{bookingData.time}</span>
+                  </div>
+                )}
+              </div>
+              
+              {/* Vehicle Information - Always show this section */}
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                <h3 className="font-medium text-blue-800 mb-2">Vehicle Information</h3>
+                {bookingData.vehicle && (
+                  bookingData.vehicle.manufacturer_name || bookingData.vehicle.model_name ? (
+                    <div className="flex justify-between mb-1">
+                      <span className="text-gray-600">Vehicle:</span>
+                      <span className="font-medium">
+                        {bookingData.vehicle.manufacturer_name || ''} {bookingData.vehicle.model_name || ''}
+                      </span>
+                    </div>
+                  ) : (
+                    bookingData.vehicle.vehicle_type_name ? (
+                      <div className="flex justify-between mb-1">
+                        <span className="text-gray-600">Vehicle Type:</span>
+                        <span className="font-medium">{bookingData.vehicle.vehicle_type_name}</span>
+                      </div>
+                    ) : null
+                  )
+                ) || (
+                  <div className="flex justify-between mb-1">
+                    <span className="text-gray-600">Vehicle:</span>
+                    <span className="font-medium">Not specified</span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           
