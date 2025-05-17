@@ -546,45 +546,84 @@ const VehicleDetailPage = () => {
   const handleBookVehicle = () => {
     if (!vehicle) return;
     
-    // Pre-fill contact number from our centralized profile service
-    const userPhone = userProfileDataService.getUserPhone();
+    // Directly grab the phone number from the profile data
+    let phoneNumber = '';
     
-    // If no phone number found through service, try other storage locations
-    let phoneNumber = userPhone;
-    
-    if (!phoneNumber) {
-      try {
-        // Try all possible storage locations
-        const profileData = localStorage.getItem('userProfileData');
-        const userProfile = localStorage.getItem('userProfile');
-        const savedProfile = sessionStorage.getItem('savedProfileData');
-        
-        if (profileData) {
-          const parsed = JSON.parse(profileData);
-          if (parsed && parsed.phone) phoneNumber = parsed.phone;
+    try {
+      // First try localStorage - this is most reliable and where profile page updates are stored
+      const profileData = localStorage.getItem('userProfileData');
+      if (profileData) {
+        const parsed = JSON.parse(profileData);
+        if (parsed && parsed.phone) {
+          phoneNumber = parsed.phone;
+          console.log('Got phone from userProfileData:', phoneNumber);
         }
-        
-        if (!phoneNumber && userProfile) {
-          const parsed = JSON.parse(userProfile);
-          if (parsed && parsed.phone) phoneNumber = parsed.phone;
-        }
-        
-        if (!phoneNumber && savedProfile) {
-          const parsed = JSON.parse(savedProfile);
-          if (parsed && parsed.phone) phoneNumber = parsed.phone;
-        }
-      } catch (error) {
-        console.error('Error retrieving phone from storage:', error);
       }
+      
+      // If not found in primary source, try alternate places
+      if (!phoneNumber) {
+        // Try userProfileService
+        const userPhone = userProfileDataService.getUserPhone();
+        if (userPhone) {
+          phoneNumber = userPhone;
+          console.log('Got phone from userProfileDataService:', phoneNumber);
+        }
+      }
+      
+      // Additional fallbacks
+      if (!phoneNumber) {
+        const sources = [
+          { name: 'userProfile', data: localStorage.getItem('userProfile') },
+          { name: 'savedProfileData', data: sessionStorage.getItem('savedProfileData') },
+          { name: 'profileInfo', data: localStorage.getItem('profileInfo') },
+          { name: 'userData', data: localStorage.getItem('userData') }
+        ];
+        
+        for (const source of sources) {
+          if (source.data) {
+            try {
+              const parsed = JSON.parse(source.data);
+              if (parsed && parsed.phone) {
+                phoneNumber = parsed.phone;
+                console.log(`Got phone from ${source.name}:`, phoneNumber);
+                break;
+              }
+            } catch (e) {
+              console.warn(`Failed to parse ${source.name}:`, e);
+            }
+          }
+        }
+      }
+      
+      // Force update localStorage with the phone we found to ensure modal can access it
+      if (phoneNumber) {
+        try {
+          // Update localStorage with this phone number to ensure the modal can find it
+          const existingData = JSON.parse(localStorage.getItem('userProfileData') || '{}');
+          localStorage.setItem('userProfileData', JSON.stringify({
+            ...existingData,
+            phone: phoneNumber
+          }));
+          
+          // Also store just the phone number for direct access
+          localStorage.setItem('userPhone', phoneNumber);
+        } catch (e) {
+          console.warn('Failed to update localStorage with phone number:', e);
+        }
+      }
+    } catch (error) {
+      console.error('Error retrieving phone from storage:', error);
     }
     
     console.log('Pre-filling phone number for booking modal:', phoneNumber);
     
-    setBookingData(prev => ({
-      ...prev,
-      contact_number: phoneNumber || prev.contact_number
-    }));
+    // Set booking data with phone number
+    setBookingData({
+      contact_number: phoneNumber,
+      notes: ''
+    });
     
+    // Show the modal
     setShowBookingModal(true);
   };
 

@@ -28,16 +28,46 @@ const userProfileDataService = {
   getUserPhone: (): string => {
     try {
       // Check all possible storage locations with priority
-      return (
-        localStorage.getItem('userPhone') || 
-        JSON.parse(localStorage.getItem('userProfileData') || '{}')?.phone || 
-        JSON.parse(localStorage.getItem('userProfile') || '{}')?.phone || 
-        JSON.parse(sessionStorage.getItem('savedProfileData') || '{}')?.phone ||
-        JSON.parse(sessionStorage.getItem('userProfile') || '{}')?.phone || 
-        ''
-      );
+      const storageSources = [
+        { name: 'localStorage.userPhone', value: localStorage.getItem('userPhone') },
+        { name: 'localStorage.userProfileData', value: localStorage.getItem('userProfileData') },
+        { name: 'localStorage.userProfile', value: localStorage.getItem('userProfile') },
+        { name: 'sessionStorage.savedProfileData', value: sessionStorage.getItem('savedProfileData') },
+        { name: 'sessionStorage.userProfile', value: sessionStorage.getItem('userProfile') },
+        { name: 'localStorage.user', value: localStorage.getItem('user') },
+        { name: 'sessionStorage.user', value: sessionStorage.getItem('user') }
+      ];
+      
+      // Log all potential sources for debugging
+      console.log('[userProfileDataService] Looking for phone number in storage:');
+      
+      for (const source of storageSources) {
+        if (source.value) {
+          try {
+            // If it's directly a phone number string
+            if (typeof source.value === 'string' && 
+                (source.value.startsWith('+') || /^\d{10,15}$/.test(source.value))) {
+              console.log(`[userProfileDataService] Found phone in ${source.name} directly:`, source.value);
+              return source.value;
+            }
+            
+            // Try to parse JSON
+            const parsed = JSON.parse(source.value);
+            if (parsed && parsed.phone) {
+              console.log(`[userProfileDataService] Found phone in ${source.name}:`, parsed.phone);
+              return parsed.phone;
+            }
+          } catch (e) {
+            console.warn(`[userProfileDataService] Error parsing ${source.name}:`, e);
+          }
+        }
+      }
+      
+      // If nothing found
+      console.warn('[userProfileDataService] No phone number found in any storage location');
+      return '';
     } catch (e) {
-      console.error('Error retrieving user phone:', e);
+      console.error('[userProfileDataService] Error retrieving user phone:', e);
       return '';
     }
   },
