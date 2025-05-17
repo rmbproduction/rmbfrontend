@@ -24,19 +24,71 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
   bookingError,
   bookingLoading
 }) => {
-  // Pre-fill the form with user's phone number when the component mounts
+  // Pre-fill the form with user's phone number when the component mounts or becomes visible
   useEffect(() => {
-    const userPhone = userProfileDataService.getUserPhone();
-    if (userPhone && !bookingData.contact_number) {
-      // Use the provided input change handler to update parent state
-      const mockEvent = {
-        target: {
-          name: 'contact_number',
-          value: userPhone
-        }
-      } as React.ChangeEvent<HTMLInputElement>;
+    if (isOpen) {
+      // Get user's phone from centralized service
+      const userPhone = userProfileDataService.getUserPhone();
       
-      onBookingInputChange(mockEvent);
+      if (userPhone && !bookingData.contact_number) {
+        console.log('Pre-filling phone number from userProfileDataService:', userPhone);
+        
+        // Use the provided input change handler to update parent state
+        const mockEvent = {
+          target: {
+            name: 'contact_number',
+            value: userPhone
+          }
+        } as React.ChangeEvent<HTMLInputElement>;
+        
+        onBookingInputChange(mockEvent);
+      } else {
+        console.log('Phone number not found or already filled:', { 
+          fromService: userPhone, 
+          inForm: bookingData.contact_number 
+        });
+        
+        // As a fallback, try different storage locations directly
+        if (!bookingData.contact_number) {
+          try {
+            // Try all possible storage locations
+            const profileData = localStorage.getItem('userProfileData');
+            const userProfile = localStorage.getItem('userProfile');
+            const savedProfile = sessionStorage.getItem('savedProfileData');
+            
+            let phoneNumber = '';
+            
+            if (profileData) {
+              const parsed = JSON.parse(profileData);
+              if (parsed && parsed.phone) phoneNumber = parsed.phone;
+            }
+            
+            if (!phoneNumber && userProfile) {
+              const parsed = JSON.parse(userProfile);
+              if (parsed && parsed.phone) phoneNumber = parsed.phone;
+            }
+            
+            if (!phoneNumber && savedProfile) {
+              const parsed = JSON.parse(savedProfile);
+              if (parsed && parsed.phone) phoneNumber = parsed.phone;
+            }
+            
+            if (phoneNumber) {
+              console.log('Found phone number in storage:', phoneNumber);
+              const mockEvent = {
+                target: {
+                  name: 'contact_number',
+                  value: phoneNumber
+                }
+              } as React.ChangeEvent<HTMLInputElement>;
+              
+              onBookingInputChange(mockEvent);
+            }
+          } catch (error) {
+            console.error('Error retrieving phone from storage:', error);
+          }
+        }
+      }
     }
   }, [isOpen, bookingData.contact_number, onBookingInputChange]);
 

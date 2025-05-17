@@ -549,9 +549,40 @@ const VehicleDetailPage = () => {
     // Pre-fill contact number from our centralized profile service
     const userPhone = userProfileDataService.getUserPhone();
     
+    // If no phone number found through service, try other storage locations
+    let phoneNumber = userPhone;
+    
+    if (!phoneNumber) {
+      try {
+        // Try all possible storage locations
+        const profileData = localStorage.getItem('userProfileData');
+        const userProfile = localStorage.getItem('userProfile');
+        const savedProfile = sessionStorage.getItem('savedProfileData');
+        
+        if (profileData) {
+          const parsed = JSON.parse(profileData);
+          if (parsed && parsed.phone) phoneNumber = parsed.phone;
+        }
+        
+        if (!phoneNumber && userProfile) {
+          const parsed = JSON.parse(userProfile);
+          if (parsed && parsed.phone) phoneNumber = parsed.phone;
+        }
+        
+        if (!phoneNumber && savedProfile) {
+          const parsed = JSON.parse(savedProfile);
+          if (parsed && parsed.phone) phoneNumber = parsed.phone;
+        }
+      } catch (error) {
+        console.error('Error retrieving phone from storage:', error);
+      }
+    }
+    
+    console.log('Pre-filling phone number for booking modal:', phoneNumber);
+    
     setBookingData(prev => ({
       ...prev,
-      contact_number: userPhone || prev.contact_number
+      contact_number: phoneNumber || prev.contact_number
     }));
     
     setShowBookingModal(true);
