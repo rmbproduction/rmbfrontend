@@ -12,6 +12,13 @@ import marketplaceService from '../services/marketplaceService';
 import { Vehicle } from '../types/vehicles';
 import VehicleSuggestions from '../components/VehicleSuggestions';
 import { getOptimizedCloudinaryUrl, getBlurPlaceholder } from '../utils/imageOptimizer';
+import { formatPrice } from '../utils/formatters';
+import { calcEMI } from '../utils/finance';
+import SpecTable from '../components/SpecTable';
+import { useAuth } from '../hooks/useAuth';
+import LoadingSpinner from '../components/LoadingSpinner';
+import userProfileDataService from '../services/userProfileDataService';
+import BookingVehicleModal from '../components/BookingVehicleModal';
 
 // Extended vehicle interface with UI-specific properties
 interface UIVehicle extends Omit<Vehicle, 'images'> {
@@ -119,7 +126,7 @@ const VehicleDetailPage = () => {
   }, [vehicle]);
 
   // Process images to use optimized Cloudinary URLs
-  const processImageUrl = useCallback((url: string) => {
+  const processImageUrl = React.useCallback((url: string) => {
     if (!url) return API_CONFIG.getDefaultVehicleImage();
     
     // Generate optimized URL
@@ -127,12 +134,12 @@ const VehicleDetailPage = () => {
   }, []);
 
   // Preprocess image gallery to optimize all URLs
-  const optimizeGalleryImages = useCallback((images: string[]) => {
+  const optimizeGalleryImages = React.useCallback((images: string[]) => {
     return images.map(url => processImageUrl(url));
   }, [processImageUrl]);
 
   // Enhanced image loading handler for better performance tracking
-  const handleImageLoad = useCallback((index: number, e: React.SyntheticEvent<HTMLImageElement>) => {
+  const handleImageLoad = React.useCallback((index: number, e: React.SyntheticEvent<HTMLImageElement>) => {
     const target = e.target as HTMLImageElement;
     const loadedSrc = target.src;
     
@@ -169,7 +176,7 @@ const VehicleDetailPage = () => {
   }, [vehicle]);
 
   // Enhanced image error handler with detailed logging and smarter fallbacks
-  const handleImageError = useCallback((index: number, e: React.SyntheticEvent<HTMLImageElement>) => {
+  const handleImageError = React.useCallback((index: number, e: React.SyntheticEvent<HTMLImageElement>) => {
     const target = e.target as HTMLImageElement;
     const originalSrc = target.src;
     
@@ -216,7 +223,7 @@ const VehicleDetailPage = () => {
   }, [vehicle]);
 
   // Enhanced image preloading with progress tracking and error handling
-  const preloadImages = useCallback((imageUrls: string[]) => {
+  const preloadImages = React.useCallback((imageUrls: string[]) => {
     if (!imageUrls.length) {
       console.warn('[VehicleDetailPage] No images to preload');
       return;
@@ -538,6 +545,15 @@ const VehicleDetailPage = () => {
 
   const handleBookVehicle = () => {
     if (!vehicle) return;
+    
+    // Pre-fill contact number from our centralized profile service
+    const userPhone = userProfileDataService.getUserPhone();
+    
+    setBookingData(prev => ({
+      ...prev,
+      contact_number: userPhone || prev.contact_number
+    }));
+    
     setShowBookingModal(true);
   };
 
@@ -556,6 +572,13 @@ const VehicleDetailPage = () => {
       ...prev,
       [name]: value
     }));
+    
+    // Save phone number to our centralized service
+    if (name === 'contact_number') {
+      userProfileDataService.saveProfileData({
+        phone: value
+      });
+    }
   };
 
   const submitBooking = async (e: React.FormEvent) => {
@@ -691,6 +714,17 @@ const VehicleDetailPage = () => {
       setShareLoading(false);
     }
   };
+
+  // Add a useEffect to initialize phone number from our profile service
+  useEffect(() => {
+    const userPhone = userProfileDataService.getUserPhone();
+    if (userPhone) {
+      setBookingData(prev => ({
+        ...prev,
+        contact_number: userPhone
+      }));
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -1039,85 +1073,15 @@ const VehicleDetailPage = () => {
 
       {/* Booking Modal */}
       {showBookingModal && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-          onClick={closeBookingModal}
-        >
-          <div 
-            className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-xl font-bold text-gray-900 mb-4">
-              Book {vehicle.brand} {vehicle.model}
-            </h3>
-            
-            <p className="text-gray-600 mb-6">
-              Fill out the form below to book this vehicle. Our team will contact you soon to guide you through the process.
-            </p>
-            
-            {bookingError && (
-              <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg">
-                {bookingError}
-              </div>
-            )}
-            
-            <form onSubmit={submitBooking}>
-              <div className="mb-4">
-                <label htmlFor="contact_number" className="block text-sm font-medium text-gray-700 mb-1">
-                  Contact Number*
-                </label>
-                <input
-                  type="tel"
-                  id="contact_number"
-                  name="contact_number"
-                  value={bookingData.contact_number}
-                  onChange={handleBookingInputChange}
-                  required
-                  pattern="^\+?[0-9]{10,15}$"
-                  placeholder="+911234567890"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-[#FF5733] focus:border-[#FF5733]"
-                />
-                <p className="mt-1 text-xs text-gray-500">Format: +911234567890 or 1234567890</p>
-              </div>
-              
-              <div className="mb-6">
-                <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
-                  Additional Notes
-                </label>
-                <textarea
-                  id="notes"
-                  name="notes"
-                  value={bookingData.notes}
-                  onChange={handleBookingInputChange}
-                  rows={3}
-                  placeholder="Any specific details or questions about the vehicle..."
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-[#FF5733] focus:border-[#FF5733]"
-                ></textarea>
-              </div>
-              
-              <div className="flex space-x-3">
-                <button
-                  type="button"
-                  onClick={closeBookingModal}
-                  className="flex-1 bg-gray-100 text-gray-800 font-medium py-2.5 px-4 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={bookingLoading}
-                  className="flex-1 bg-[#FF5733] text-white font-medium py-2.5 px-4 rounded-lg hover:bg-[#ff4019] transition-colors flex items-center justify-center"
-                >
-                  {bookingLoading ? (
-                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                  ) : (
-                    'Submit Booking'
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <BookingVehicleModal
+          isOpen={showBookingModal}
+          onClose={closeBookingModal}
+          onSubmit={submitBooking}
+          bookingData={bookingData}
+          onBookingInputChange={handleBookingInputChange}
+          bookingError={bookingError}
+          bookingLoading={bookingLoading}
+        />
       )}
     </div>
   );
