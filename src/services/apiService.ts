@@ -220,7 +220,205 @@ export const serviceService = {
   }
 };
 
+// User profile interface
+export interface UserProfileData {
+  id?: number;
+  name: string;
+  email?: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  country: string;
+  postal_code: string;
+  preferredLocation?: string;
+  latitude?: number;
+  longitude?: number;
+  profile_photo?: string | null;
+  vehicle_name?: any;
+  vehicle_type?: any;
+  manufacturer?: any;
+}
+
+// User profile service
+export const userProfileService = {
+  // Get user profile
+  getUserProfile: async (): Promise<UserProfileData | null> => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        console.warn('No access token available for fetching user profile');
+        return null;
+      }
+      
+      console.log(`[API] Fetching user profile`);
+      
+      const response = await fetch(`${API_BASE}/accounts/profile/`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'omit'
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.warn('User profile not found');
+          return null;
+        }
+        throw new Error(`Failed to fetch profile: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Cache the profile data for offline use
+      localStorage.setItem('userProfileData', JSON.stringify(data));
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      
+      // Try to return cached profile if available
+      const cachedProfile = localStorage.getItem('userProfileData');
+      if (cachedProfile) {
+        try {
+          return JSON.parse(cachedProfile);
+        } catch (e) {
+          console.error('Error parsing cached profile:', e);
+        }
+      }
+      
+      throw error;
+    }
+  },
+  
+  // Update user profile
+  updateUserProfile: async (profileData: Partial<UserProfileData>): Promise<UserProfileData> => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        throw new Error('No access token available for updating user profile');
+      }
+      
+      console.log(`[API] Updating user profile`);
+      
+      const response = await fetch(`${API_BASE}/accounts/profile/`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(profileData),
+        credentials: 'omit'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to update profile: ${response.status} ${response.statusText}`);
+      }
+      
+      const updatedData = await response.json();
+      
+      // Update the cached profile data
+      const cachedProfile = localStorage.getItem('userProfileData');
+      if (cachedProfile) {
+        try {
+          const parsedCache = JSON.parse(cachedProfile);
+          const mergedData = { ...parsedCache, ...updatedData };
+          localStorage.setItem('userProfileData', JSON.stringify(mergedData));
+        } catch (e) {
+          console.error('Error updating cached profile:', e);
+          localStorage.setItem('userProfileData', JSON.stringify(updatedData));
+        }
+      } else {
+        localStorage.setItem('userProfileData', JSON.stringify(updatedData));
+      }
+      
+      return updatedData;
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      
+      // Store the update attempt for later sync
+      const pendingUpdates = localStorage.getItem('pendingProfileUpdates');
+      const updates = pendingUpdates ? JSON.parse(pendingUpdates) : [];
+      updates.push({
+        data: profileData,
+        timestamp: Date.now()
+      });
+      localStorage.setItem('pendingProfileUpdates', JSON.stringify(updates));
+      
+      throw error;
+    }
+  },
+  
+  // Create user profile when it doesn't exist
+  createUserProfile: async (profileData: UserProfileData): Promise<UserProfileData> => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        throw new Error('No access token available for creating user profile');
+      }
+      
+      console.log(`[API] Creating user profile`);
+      
+      const response = await fetch(`${API_BASE}/accounts/profile/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(profileData),
+        credentials: 'omit'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to create profile: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Cache the profile data
+      localStorage.setItem('userProfileData', JSON.stringify(data));
+      
+      return data;
+    } catch (error) {
+      console.error('Error creating user profile:', error);
+      throw error;
+    }
+  },
+  
+  // Sync any pending profile updates
+  syncPendingUpdates: async (): Promise<boolean> => {
+    try {
+      const pendingUpdates = localStorage.getItem('pendingProfileUpdates');
+      if (!pendingUpdates) return true;
+      
+      const updates = JSON.parse(pendingUpdates);
+      if (updates.length === 0) return true;
+      
+      console.log(`[API] Syncing ${updates.length} pending profile updates`);
+      
+      // Merge all pending updates into one
+      const mergedUpdate = updates.reduce((acc: any, update: any) => {
+        return { ...acc, ...update.data };
+      }, {});
+      
+      // Try to update the profile
+      await userProfileService.updateUserProfile(mergedUpdate);
+      
+      // Clear pending updates if successful
+      localStorage.removeItem('pendingProfileUpdates');
+      
+      return true;
+    } catch (error) {
+      console.error('Error syncing pending profile updates:', error);
+      return false;
+    }
+  }
+};
+
 export default {
   categoryService,
-  serviceService
+  serviceService,
+  userProfileService
 }; 

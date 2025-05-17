@@ -1,3 +1,17 @@
+/**
+ * ServiceCheckout Component
+ * 
+ * This component handles service and subscription checkout flows.
+ * 
+ * User profile data handling:
+ * - When a user enters information like address and phone number, it is automatically saved to:
+ *   1. The user's profile in the backend via userProfileService if the user is logged in
+ *   2. Local storage for persistence between sessions
+ *   3. Session storage for immediate use in the current session
+ * 
+ * This ensures that the next time the user uses the application, their data (address, phone, etc.)
+ * will be automatically pre-filled in all forms throughout the application.
+ */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -6,16 +20,18 @@ import { ArrowLeft, User, MapPin, Phone, Clock, CheckCircle, AlertTriangle, Navi
 import { checkUserAuthentication } from '../utils/auth';
 import ThankYouModal from '../components/ThankYouModal';
 import { SubscriptionPlan } from '../models/subscription-plan';
-import { apiService } from '../services/api.service';
+import apiService, { userProfileService } from '../services/apiService';
 import { API_CONFIG } from '../config/api.config';
 import LoadingSpinner from '../components/LoadingSpinner';
-
-// Declare google maps and initMap on the window object
-declare global {
-  interface Window {
-    // Remove Google Maps related properties
-  }
-}
+import MultiStepVehicleSelector from '../components/SelectVehicle';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { CartItem } from '../models/cart-item';
+import { VehicleData } from '../models/vehicle-data';
+import { ProfileData } from '../models/profile-data';
+import { VehicleType } from '../models/vehicle-type';
+import { Manufacturer } from '../models/manufacturer';
+import { VehicleModel } from '../models/vehicle-model';
 
 interface CartItem {
   id: number;
@@ -353,15 +369,10 @@ const ServiceCheckout: React.FC = () => {
       
       if (token) {
         try {
-          // Fetch user profile data
-          const profileResponse = await fetch(API_CONFIG.getApiUrl('/accounts/profile/'), {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
+          // Fetch user profile data using the new userProfileService
+          const accountData = await userProfileService.getUserProfile();
           
-          if (profileResponse.ok) {
-            const accountData = await profileResponse.json();
+          if (accountData) {
             console.log('[DEBUG] Loaded profile data from account:', accountData);
             
             // Update profile data with account information
@@ -377,6 +388,21 @@ const ServiceCheckout: React.FC = () => {
             }));
             
             loadedFromAccount = true;
+            
+            // Also save this data in sessionStorage for consistency
+            saveProfileToSessionStorage({
+              name: accountData.name,
+              email: accountData.email || '',
+              phone: accountData.phone || '',
+              address: accountData.address || '',
+              city: accountData.city || '',
+              state: accountData.state || '',
+              postalCode: accountData.postal_code || '',
+              scheduleDate: '',
+              scheduleTime: '',
+              latitude: accountData.latitude,
+              longitude: accountData.longitude
+            });
           }
           
           // Fetch user's vehicles
@@ -465,11 +491,11 @@ const ServiceCheckout: React.FC = () => {
       
       // Then try to load from sessionStorage for returning users
       if (!loadedFromAccount) {
-      try {
-        const savedData = sessionStorage.getItem('savedProfileData');
-        if (savedData) {
-          const parsedData = JSON.parse(savedData);
-          console.log('[DEBUG] Loading profile data from sessionStorage:', parsedData);
+        try {
+          const savedData = sessionStorage.getItem('savedProfileData');
+          if (savedData) {
+            const parsedData = JSON.parse(savedData);
+            console.log('[DEBUG] Loading profile data from sessionStorage:', parsedData);
             setProfileData(prev => ({
               ...prev,
               name: parsedData.name || prev.name,
@@ -484,16 +510,16 @@ const ServiceCheckout: React.FC = () => {
               latitude: parsedData.latitude || prev.latitude,
               longitude: parsedData.longitude || prev.longitude
             }));
+          }
+        } catch (error) {
+          console.error('Error parsing saved profile data:', error);
         }
-      } catch (error) {
-        console.error('Error parsing saved profile data:', error);
-      }
 
-      // Then check localStorage for user profile
-      const userProfile = localStorage.getItem('userProfile');
-      if (userProfile) {
-        try {
-          const profile = JSON.parse(userProfile);
+        // Then check localStorage for user profile
+        const userProfile = localStorage.getItem('userProfile');
+        if (userProfile) {
+          try {
+            const profile = JSON.parse(userProfile);
             setProfileData(prev => ({
               ...prev,
               name: profile.name || prev.name,
@@ -504,261 +530,46 @@ const ServiceCheckout: React.FC = () => {
               state: profile.state || prev.state,
               postalCode: profile.postal_code || prev.postalCode
             }));
-        } catch (error) {
-          console.error('Error parsing profile data:', error);
+          } catch (error) {
+            console.error('Error parsing user profile from localStorage:', error);
+          }
         }
-      } else {
-        // Try to get user details from the auth token
-        const userJson = localStorage.getItem('user');
-        if (userJson) {
+        
+        // Also try to load from userProfileData (new storage location)
+        const storedProfileData = localStorage.getItem('userProfileData');
+        if (storedProfileData) {
           try {
-            const user = JSON.parse(userJson);
+            const parsedProfileData = JSON.parse(storedProfileData);
             setProfileData(prev => ({
               ...prev,
-                name: user.username || prev.name,
-                email: user.email || prev.email,
+              name: parsedProfileData.name || prev.name,
+              email: parsedProfileData.email || prev.email,
+              phone: parsedProfileData.phone || prev.phone,
+              address: parsedProfileData.address || prev.address,
+              city: parsedProfileData.city || prev.city,
+              state: parsedProfileData.state || prev.state,
+              postalCode: parsedProfileData.postal_code || prev.postalCode
             }));
           } catch (error) {
-            console.error('Error parsing user data:', error);
-            }
+            console.error('Error parsing userProfileData from localStorage:', error);
           }
         }
       }
-      
-      // Load vehicle data if not already loaded from account
-      if (!selectedVehicle) {
-        // First try localStorage for more persistence
-        const localVehicleData = localStorage.getItem('userVehicleData');
-        if (localVehicleData) {
-          try {
-            const parsedVehicle = JSON.parse(localVehicleData);
-            setSelectedVehicle(parsedVehicle);
-          } catch (error) {
-            console.error('Error parsing local vehicle data:', error);
-          }
-        } else {
-          // Try sessionStorage as fallback
-          const sessionVehicleData = sessionStorage.getItem('userVehicleOwnership');
-          if (sessionVehicleData) {
-            try {
-              const parsedVehicle = JSON.parse(sessionVehicleData);
+
+      // Try to load vehicle information from session storage
+      const vehicleData = sessionStorage.getItem('userVehicleOwnership');
+      if (vehicleData) {
+        try {
+          const parsedVehicle = JSON.parse(vehicleData);
+          console.log('[DEBUG] Found vehicle data in sessionStorage:', parsedVehicle);
           
-          // If we have IDs but not names, fetch the details from API
-          if (parsedVehicle.vehicle_type && parsedVehicle.manufacturer && parsedVehicle.model &&
-              (!parsedVehicle.vehicle_type_name || !parsedVehicle.manufacturer_name || !parsedVehicle.model_name)) {
-            
-            // Fetch vehicle type name if needed
-            try {
-              const typeResponse = await fetch(API_CONFIG.getApiUrl(`/vehicle/vehicle-types/${parsedVehicle.vehicle_type}/`), {
-                credentials: 'omit'
-              });
-              
-              if (typeResponse.ok) {
-                const typeData = await typeResponse.json();
-                parsedVehicle.vehicle_type_name = typeData.name;
-              }
-            } catch (error) {
-              console.error('Error fetching vehicle type:', error);
-            }
-            
-            // Fetch manufacturer name if needed
-            try {
-              const mfgResponse = await fetch(API_CONFIG.getApiUrl('/repairing-service/manufacturers/'), {
-                credentials: 'omit'
-              });
-              
-              if (mfgResponse.ok) {
-                const manufacturers = await mfgResponse.json();
-                const manufacturer = manufacturers.find((m: any) => m.id == parsedVehicle.manufacturer);
-                if (manufacturer) {
-                  parsedVehicle.manufacturer_name = manufacturer.name;
-                }
-              }
-            } catch (error) {
-              console.error('Error fetching manufacturers:', error);
-            }
-            
-            // Fetch model name if needed
-            try {
-              const modelResponse = await fetch(API_CONFIG.getApiUrl(`/repairing-service/vehicle-models/?manufacturer_id=${parsedVehicle.manufacturer}`), {
-                credentials: 'omit'
-              });
-              
-              if (modelResponse.ok) {
-                const models = await modelResponse.json();
-                const model = models.find((m: any) => m.id == parsedVehicle.model);
-                if (model) {
-                  parsedVehicle.model_name = model.name;
-                }
-              }
-            } catch (error) {
-              console.error('Error fetching vehicle models:', error);
-            }
-            
-            // Update sessionStorage with the enhanced data
-            sessionStorage.setItem('userVehicleOwnership', JSON.stringify(parsedVehicle));
-                // Also save to localStorage for better persistence
-                localStorage.setItem('userVehicleData', JSON.stringify(parsedVehicle));
-          }
+          // Also save to localStorage for better persistence
+          localStorage.setItem('userVehicleData', JSON.stringify(parsedVehicle));
           
           setSelectedVehicle(parsedVehicle);
         } catch (error) {
           console.error('Error parsing vehicle data:', error);
         }
-      }
-        }
-      }
-    
-    // Load basket items
-      try {
-        // Get the cart ID from sessionStorage
-        const cartId = sessionStorage.getItem('cartId');
-        const pendingServiceData = sessionStorage.getItem('pendingServiceData');
-        
-        // If there's no cart ID, attempt to use the pending service data
-        if (!cartId) {
-        if (pendingServiceData) {
-          try {
-            const serviceData = JSON.parse(pendingServiceData);
-              console.log('[DEBUG] Creating local basket item from pending service data');
-              
-              setBasketItems([{
-                id: 0, // Temporary ID
-                  service_id: serviceData.id,
-                service_name: serviceData.name,
-                  quantity: serviceData.quantity || 1,
-                price: serviceData.price?.replace('₹', '') || '0'
-              }]);
-              
-              // Create a new cart with the pending service
-              const createCartAndAddPendingService = async () => {
-                try {
-              const createCartResponse = await fetch(API_CONFIG.getApiUrl('/repairing-service/cart/create/'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'omit'
-              });
-              
-                  if (createCartResponse.ok) {
-              const cartData = await createCartResponse.json();
-              const newCartId = cartData.id;
-              sessionStorage.setItem('cartId', newCartId.toString());
-              
-              await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${newCartId}/add/`), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  service_id: serviceData.id,
-                  quantity: serviceData.quantity || 1,
-                  service_name: serviceData.name
-                }),
-                credentials: 'omit'
-              });
-              
-                    // Clear the pending service data to prevent duplication
-              sessionStorage.removeItem('pendingServiceData');
-                    
-                    // Dispatch event to update other components
-                    window.dispatchEvent(new Event('cartUpdated'));
-            }
-          } catch (error) {
-                  console.error('[DEBUG] Failed to recreate cart:', error);
-                }
-              };
-              
-              createCartAndAddPendingService();
-              return;
-            } catch (error) {
-              console.error('Error creating local basket item:', error);
-            }
-          }
-          setBasketItems([]);
-          return;
-        }
-        
-        // Fetch cart items from API
-        console.log(`[DEBUG] Fetching cart data for cart ID: ${cartId}`);
-        // Change from /cart/{id}/items/ to /cart/{id}/ to match backend
-        const response = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/`), {
-          credentials: 'omit'
-        });
-        
-        if (!response.ok) {
-          throw new Error(`API returned status ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log('[DEBUG] Cart data received:', data);
-        
-        // Check if the cart is empty and we have pending service data
-        if (!data.items || data.items.length === 0) {
-          console.log('[DEBUG] Cart has no items, checking for fallback data');
-          
-          // If cart is empty but we have pending service data, try to create a local basket item
-          if (pendingServiceData) {
-            try {
-              const serviceData = JSON.parse(pendingServiceData);
-              console.log('[DEBUG] Creating local basket item from pending service data');
-              
-              setBasketItems([{
-                id: 0, // Temporary ID
-                service_id: serviceData.id,
-                service_name: serviceData.name,
-                quantity: serviceData.quantity || 1,
-                price: serviceData.price?.replace('₹', '') || '0'
-              }]);
-              
-              // If we have a local basket item but no items in the cart, add the pending service to the cart
-              setTimeout(() => {
-                const createCartAndAddPendingService = async () => {
-                  try {
-                    await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/add/`), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          service_id: serviceData.id,
-                          quantity: serviceData.quantity || 1,
-                          service_name: serviceData.name
-                        }),
-                        credentials: 'omit'
-                      });
-                    
-                    // Clear the pending service data to prevent duplication
-                    sessionStorage.removeItem('pendingServiceData');
-                      
-                      // Dispatch event to update other components
-                      window.dispatchEvent(new Event('cartUpdated'));
-                  } catch (error) {
-                    console.error('[DEBUG] Failed to add pending service to cart:', error);
-                  }
-                };
-                
-                createCartAndAddPendingService();
-              }, 500);
-              
-              return;
-            } catch (error) {
-              console.error('Error creating local basket item:', error);
-            }
-          }
-        } else {
-          // If we already have items in the cart, we can safely clear the pending service data
-          if (pendingServiceData) {
-            console.log('[DEBUG] Clearing pending service data as we already have items in cart');
-            sessionStorage.removeItem('pendingServiceData');
-          }
-        }
-        
-        setBasketItems(data.items || []);
-        
-        // Optional: If we have items in the cart now, dispatch an event to update other components
-        if (data.items && data.items.length > 0) {
-          window.dispatchEvent(new Event('cartUpdated'));
-        }
-      } catch (error) {
-        console.error('Error loading basket items:', error);
-        toast.error('Failed to load your repair items');
-        setBasketItems([]);
       }
     } catch (error) {
       console.error('Error in loadAllUserData:', error);
@@ -951,7 +762,7 @@ const ServiceCheckout: React.FC = () => {
         return false;
       }
 
-      // Sync profile data with user's account
+      // Sync profile data with user's account using the userProfileService
       const profilePayload = {
         name: data.profileData.name,
         email: data.profileData.email,
@@ -962,15 +773,14 @@ const ServiceCheckout: React.FC = () => {
         postal_code: data.profileData.postalCode
       };
 
-      // Update user profile
-      await fetch(API_CONFIG.getApiUrl('/accounts/profile/'), {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(profilePayload)
-      });
+      try {
+        // Update user profile with the new userProfileService
+        await userProfileService.updateUserProfile(profilePayload);
+        console.log('[DEBUG] Updated user profile successfully');
+      } catch (profileError) {
+        console.error('[ERROR] Failed to update profile:', profileError);
+        // Continue with vehicle update even if profile update fails
+      }
 
       // If we have vehicle data, sync that too
       if (data.vehicleData) {
@@ -980,15 +790,20 @@ const ServiceCheckout: React.FC = () => {
           model: data.vehicleData.model
         };
 
-        // Save or update vehicle data
-        await fetch(API_CONFIG.getApiUrl('/vehicle/user-vehicles/'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(vehiclePayload)
-        });
+        try {
+          // Save or update vehicle data
+          await fetch(API_CONFIG.getApiUrl('/vehicle/user-vehicles/'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(vehiclePayload)
+          });
+          console.log('[DEBUG] Updated vehicle data successfully');
+        } catch (vehicleError) {
+          console.error('[ERROR] Failed to update vehicle data:', vehicleError);
+        }
       }
 
       // Update localStorage with latest profile data
@@ -1655,10 +1470,63 @@ const ServiceCheckout: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (isSubscription) {
-      handleSubscriptionSubmit(e);
-    } else {
-      handleServiceSubmit();
+    // Validate form fields
+    if (!validateForm()) {
+      return;
+    }
+    
+    // Show processing state
+    setIsSubmitting(true);
+    
+    try {
+      // Save profile data both locally and to the server
+      saveProfileToSessionStorage(profileData);
+      
+      // Sync with user account if logged in
+      const isLoggedIn = checkUserAuthentication();
+      if (isLoggedIn) {
+        try {
+          // Try to update the profile in the backend
+          await syncCheckoutDataWithAccount({
+            profileData,
+            vehicleData: selectedVehicle
+          });
+          
+          // Also save to userProfileService directly to ensure it's in the newer format
+          const profilePayload = {
+            name: profileData.name,
+            email: profileData.email,
+            phone: profileData.phone,
+            address: profileData.address,
+            city: profileData.city,
+            state: profileData.state,
+            postal_code: profileData.postalCode
+          };
+          
+          try {
+            await userProfileService.updateUserProfile(profilePayload);
+            console.log('[DEBUG] Updated user profile with userProfileService');
+          } catch (profileError) {
+            console.error('[ERROR] Failed to update profile with userProfileService:', profileError);
+          }
+        } catch (syncError) {
+          console.error('Error syncing profile with account:', syncError);
+          // Non-blocking error, continue with checkout
+          toast.warn('Could not sync profile with your account. Proceeding with checkout anyway.');
+        }
+      }
+      
+      // For subscription, use the specific handler
+      if (isSubscription) {
+        await handleSubscriptionSubmit(e);
+      } else {
+        // For regular service booking
+        await handleServiceSubmit();
+      }
+    } catch (error) {
+      console.error('Checkout error:', error);
+      toast.error('Failed to process your booking. Please try again.');
+      setIsSubmitting(false);
     }
   };
   
