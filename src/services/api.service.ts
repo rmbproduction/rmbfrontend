@@ -6,7 +6,8 @@ import {
   PlanVariant, 
   SubscriptionRequest, 
   UserSubscription,
-  VisitSchedule
+  VisitSchedule,
+  ExtendedSubscriptionRequest
 } from '../models/subscription-plan';
 import { UserProfile } from '../models/user';
 import { withRetry, withTimeout, isNetworkError } from '../utils/apiUtils';
@@ -303,6 +304,53 @@ class ApiService {
     } catch (error) {
       console.warn('API health check failed:', error);
       return false;
+    }
+  }
+
+  /**
+   * Generic request method for API calls
+   * @param endpoint - API endpoint to request
+   * @param method - HTTP method (GET, POST, PUT, DELETE)
+   * @param data - Optional data to send with the request
+   * @param headers - Optional additional headers
+   * @returns Promise with the API response
+   */
+  async request<T>(
+    endpoint: string,
+    method: string = 'GET',
+    data: any = null,
+    headers: Record<string, string> = {}
+  ): Promise<{ data: T; status: number }> {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const requestHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...headers
+      };
+
+      if (token) {
+        requestHeaders['Authorization'] = `Bearer ${token}`;
+      }
+
+      const config = {
+        method,
+        headers: requestHeaders,
+        body: data ? JSON.stringify(data) : null
+      };
+
+      const url = `${API_CONFIG.getApiUrl('api')}${endpoint}`;
+      console.log(`[API] ${method} ${url}`, data ? data : '');
+
+      const response = await fetch(url, config);
+      const responseData = await response.json();
+
+      return {
+        data: responseData as T,
+        status: response.status
+      };
+    } catch (error) {
+      console.error('[API] Request error:', error);
+      throw error;
     }
   }
 }

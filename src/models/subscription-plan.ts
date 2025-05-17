@@ -1,28 +1,103 @@
 /**
- * Subscription plan models
+ * Represents a subscription plan
  */
-
 export interface SubscriptionPlan {
-  id: number;
+  id: string | number;
   name: string;
   description: string;
-  recommended?: boolean;
-  labour_discount_percent?: number;
-  options: SubscriptionOption[];
-  plan_type?: string;
-  features?: string[];
-}
-
-export interface SubscriptionOption {
-  id: number;
-  duration: string;
-  price: string;
-  original_price?: string;
+  price: number;
+  discounted_price?: number;
+  duration: number;
+  duration_type: 'day' | 'week' | 'month' | 'year';
+  duration_display: string;
   max_services: number;
-  discount_percent?: number;
-  services: any[];
+  max_visits: number;
+  features?: string[];
+  isPopular?: boolean;
+  activeSubscribers?: number;
+  status?: 'active' | 'inactive' | 'limited';
+  plan_type?: 'standard' | 'premium' | 'basic';
+  imageUrl?: string;
 }
 
+/**
+ * Represents a plan variant
+ */
+export interface PlanVariant {
+  id: string | number;
+  plan_id: string | number;
+  plan_name: string;
+  price: number;
+  discounted_price?: number;
+  duration: number;
+  duration_type: 'day' | 'week' | 'month' | 'year';
+  description?: string;
+  isPopular?: boolean;
+}
+
+/**
+ * Represents a user subscription
+ */
+export interface UserSubscription {
+  id: string | number;
+  user_id: string;
+  plan_id: string | number;
+  plan_name: string;
+  plan_type: 'standard' | 'premium' | 'basic';
+  start_date: string;
+  end_date: string;
+  status: 'active' | 'expired' | 'canceled' | 'scheduled';
+  services_used: number;
+  services_remaining: number;
+  price_paid: number;
+  payment_method?: string;
+  purchase_date: string;
+  duration: number;
+  duration_type: 'day' | 'week' | 'month' | 'year';
+  auto_renew?: boolean;
+  next_billing_date?: string;
+}
+
+/**
+ * Represents a subscription request
+ */
+export interface SubscriptionRequest {
+  id: string | number;
+  user_id: string;
+  plan_id: string | number;
+  plan_name: string;
+  request_date: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  status_display: string;
+  price: number;
+  discounted_price?: number;
+  payment_method?: string;
+  rejection_reason?: string;
+  duration: number;
+  duration_type: 'day' | 'week' | 'month' | 'year';
+}
+
+/**
+ * Extended subscription request with additional data
+ */
+export interface ExtendedSubscriptionRequest extends SubscriptionRequest {
+  user_name?: string;
+  user_email?: string;
+  user_phone?: string;
+}
+
+/**
+ * Extended user subscription with additional data
+ */
+export interface ExtendedUserSubscription extends UserSubscription {
+  visit_count?: number;
+  remaining_visits: number;
+  upcoming_visits?: any[];
+}
+
+/**
+ * Legacy Plan interface for backward compatibility
+ */
 export interface Plan {
   id: number;
   name: string;
@@ -31,47 +106,9 @@ export interface Plan {
   features: string[];
 }
 
-export interface PlanVariant {
-  id: number;
-  plan: number;
-  name: string;
-  duration: number;
-  duration_display: string;
-  price: number;
-  discounted_price: number | null;
-  max_visits: number;
-}
-
-export interface SubscriptionRequest {
-  id: number;
-  plan_variant: number;
-  status: 'pending' | 'approved' | 'rejected';
-  created_at: string;
-  customer_name?: string;
-  customer_email?: string;
-  customer_phone?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  postal_code?: string;
-  vehicle_type?: number;
-  manufacturer?: number;
-  vehicle_model?: number;
-  schedule_date?: string;
-  schedule_time?: string;
-}
-
-export interface UserSubscription {
-  id: number;
-  user: number;
-  plan_variant: PlanVariant;
-  start_date: string;
-  end_date: string;
-  remaining_visits: number;
-  status: 'active' | 'canceled' | 'expired';
-  has_upcoming_visits: boolean;
-}
-
+/**
+ * Visit schedule interface for subscription visits
+ */
 export interface VisitSchedule {
   id: number;
   subscription: number;
