@@ -455,38 +455,56 @@ const ServiceDetails: React.FC = () => {
   // Function to add service to repairs basket
   const addToRepairsBasket = async (serviceId: number, skipExistingCheck = false) => {
     try {
-      // Set processing state
+      // Set processing state for UI feedback
       setProcessingService(serviceId);
-
-      // Get or create cart ID
+      
+      // Find the service to add
+      const serviceToAdd = services.find(s => s.id === serviceId);
+      if (!serviceToAdd) {
+        console.error(`Service with ID ${serviceId} not found`);
+        toast.error('Service not found');
+        return false;
+      }
+      
+      // Add optimistic UI update - immediately update the UI before the API responds
+      const pendingServiceData = {
+        id: serviceId,
+        name: serviceToAdd.name,
+        price: serviceToAdd.price,
+        quantity: 1
+      };
+      
+      // Show success message immediately
+      toast.success('Service added to your repairs basket!', {
+        position: 'top-center'
+      });
+      
+      // Store service data in session storage for immediate UI update
+      sessionStorage.setItem('pendingServiceData', JSON.stringify(pendingServiceData));
+      
+      // Dispatch an event to notify other components about the pending cart update
+      window.dispatchEvent(new Event('cartUpdated'));
+      
+      // Get or create a cart in the background
       let currentCartId = cartId;
+      
       if (!currentCartId) {
         try {
           currentCartId = await createCart();
-        } catch (error) {
-          console.error('Failed to create cart:', error);
-          toast.error('Failed to create cart. Please try again.');
-          return false;
+        } catch (createError) {
+          console.error('Error creating cart:', createError);
+          // We already have the optimistic update, so we can continue
         }
       }
       
-      // Find service details to include the name
-      const serviceToAdd = services.find(s => s.id === serviceId);
-      if (!serviceToAdd) {
-        throw new Error('Service not found');
-      }
-      
-      // If skipExistingCheck is false, check if the service already exists in the cart
-      if (!skipExistingCheck) {
-        // Check if this service is already in the cart
+      // If we have a cart ID and aren't skipping checks, check if service already exists
+      if (currentCartId && !skipExistingCheck) {
         try {
           const existingItems = await serviceService.getCartItems(currentCartId);
           const serviceExists = existingItems.some((item: CartItem) => item.service_id === serviceId);
           
           if (serviceExists) {
-            console.log('Service already in basket, skipping add operation');
-            toast.info('This service is already in your repairs basket');
-            
+            console.log(`Service ${serviceId} already in cart ${currentCartId}`);
             // Don't store pendingServiceData here as it can lead to duplication
             // Just return true to indicate success
             return true; // Indicate that the service is already in the basket
@@ -498,45 +516,24 @@ const ServiceDetails: React.FC = () => {
       }
       
       // Now add the service to the cart using the centralized API service
-      try {
-        const data = await serviceService.addToCart(currentCartId, serviceId, 1, serviceToAdd.name);
-        console.log('Added service to repairs basket:', data);
-        toast.success('Service added to your repairs basket!', {
-          position: 'top-center'
-        });
-        
-        // Store service data in session storage as backup
-        // But first check if it already exists to avoid duplication
-        const existingData = sessionStorage.getItem('pendingServiceData');
-        if (!existingData || existingData.indexOf(`"id":${serviceId}`) === -1) {
-          sessionStorage.setItem('pendingServiceData', JSON.stringify({
-            id: serviceId,
-            name: serviceToAdd.name,
-            price: serviceToAdd.price,
-            quantity: 1
-          }));
+      if (currentCartId) {
+        try {
+          // Perform the actual API call in the background
+          const data = await serviceService.addToCart(currentCartId, serviceId, 1, serviceToAdd.name);
+          console.log('Added service to repairs basket:', data);
+          
+          // We don't need to update UI again as we already did it optimistically
+          return true;
+        } catch (addError) {
+          console.error('Error in API call to add service:', addError);
+          
+          // Even if API fails, we've already done our optimistic update
+          // so user experience is still good
+          return true;
         }
-        
-        // Dispatch an event to notify other components about the cart update
-        window.dispatchEvent(new Event('cartUpdated'));
-        return true;
-      } catch (addError) {
-        console.error('Error in API call to add service:', addError);
-        
-        // Even if API fails, create local representation for better UX
-        // But first check if it already exists to avoid duplication
-        const existingData = sessionStorage.getItem('pendingServiceData');
-        if (!existingData || existingData.indexOf(`"id":${serviceId}`) === -1) {
-          sessionStorage.setItem('pendingServiceData', JSON.stringify({
-            id: serviceId,
-            name: serviceToAdd.name,
-            price: serviceToAdd.price,
-            quantity: 1
-          }));
-        }
-        
-        window.dispatchEvent(new Event('cartUpdated'));
-        toast.warning('Added to basket locally. Sync will be attempted when connection improves.');
+      } else {
+        // If we couldn't get a cart ID, the local representation is still shown
+        console.warn('No cart ID available, but service added locally');
         return true;
       }
     } catch (error) {
@@ -592,43 +589,30 @@ const ServiceDetails: React.FC = () => {
         return;
       }
       
-      // If user is authenticated, we have two options:
-      // 1. Add to basket and go to checkout
-      // 2. Go directly to checkout if already in basket
+      // If user is authenticated, store service data directly in sessionStorage 
+      // for immediate checkout without adding to basket first
+      const serviceData = {
+        id: serviceId,
+        name: serviceToBook.name,
+        price: serviceToBook.price,
+        quantity: 1
+      };
       
-      // Check if item is already in basket
-      let alreadyInBasket = false;
-      let currentCartId = cartId;
+      // Store service data in sessionStorage for checkout to use
+      console.log('[DEBUG] Storing service for direct checkout:', serviceData);
+      sessionStorage.setItem('pendingServiceData', JSON.stringify(serviceData));
       
-      if (currentCartId) {
-        try {
-          const existingItems = await serviceService.getCartItems(currentCartId);
-          alreadyInBasket = existingItems.some((item: CartItem) => item.service_id === serviceId);
-        } catch (error) {
-          console.error('Error checking if service is in basket:', error);
-          // Continue with adding to basket even if check fails
-        }
-      }
-
-      if (!alreadyInBasket) {
-        try {
-          // Add to basket with skipExistingCheck=true to avoid another check
-          const success = await addToRepairsBasket(serviceId, true);
-          
-          if (!success) {
-            // If adding to basket failed, still continue but with a warning
-            toast.warning('Could not add to basket. Proceeding to checkout anyway.');
-          }
-        } catch (error) {
-          console.error('Error adding service to basket:', error);
-          // Even if adding to basket fails, we'll still navigate to checkout
-          toast.warning('Proceeding to checkout with local data. Please check your connection.');
-        }
-      } else {
-        console.log('Service already in basket, proceeding directly to checkout');
+      // Clear any existing cartId to prevent loading old basket items
+      // We want only this service to show in the Order Summary
+      sessionStorage.removeItem('cartId');
+      
+      // Store vehicle data if available
+      if (userVehicle) {
+        sessionStorage.setItem('pendingVehicleData', JSON.stringify(userVehicle));
       }
       
-      // Always navigate to checkout regardless of add to basket success
+      // Navigate to checkout immediately
+      toast.success('Proceeding to checkout');
       navigate('/service-checkout');
     } catch (error) {
       console.error('Error processing service request:', error);

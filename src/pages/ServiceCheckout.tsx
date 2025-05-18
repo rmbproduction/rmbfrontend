@@ -257,6 +257,50 @@ const ServiceCheckout: React.FC = () => {
       } catch (error) {
         console.error('Error loading subscription plan:', error);
       }
+    } else {
+      // Only load basket items for service checkouts (not subscriptions)
+      const loadBasketItems = async () => {
+        try {
+          const cartId = sessionStorage.getItem('cartId');
+          if (cartId) {
+            console.log('[DEBUG] Loading basket items for cart:', cartId);
+            const response = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/`));
+            
+            if (response.ok) {
+              const cartData = await response.json();
+              if (cartData.items && Array.isArray(cartData.items)) {
+                console.log('[DEBUG] Loaded basket items:', cartData.items);
+                setBasketItems(cartData.items);
+              }
+            } else {
+              console.error('[ERROR] Failed to fetch cart:', response.statusText);
+            }
+          } else {
+            // Check if we have pending service data in session storage
+            const pendingData = sessionStorage.getItem('pendingServiceData');
+            if (pendingData) {
+              try {
+                const service = JSON.parse(pendingData);
+                console.log('[DEBUG] Found pending service data:', service);
+                // Add as a temporary basket item
+                setBasketItems([{
+                  id: 0, // Temporary ID
+                  service_id: service.id,
+                  service_name: service.name,
+                  quantity: service.quantity || 1,
+                  price: service.price
+                }]);
+              } catch (parseError) {
+                console.error('[ERROR] Error parsing pending service data:', parseError);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('[ERROR] Error loading basket items:', error);
+        }
+      };
+      
+      loadBasketItems();
     }
     
     // Check if we have checkout data saved from before login
