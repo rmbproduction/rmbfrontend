@@ -1444,17 +1444,6 @@ const ProfilePage = () => {
                   My Services
                 </button>
                 <button
-                  onClick={() => handleTabChange("settings")}
-                  className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
-                    activeTab === "settings"
-                      ? "bg-[#FFF5F2] text-[#FF5733]"
-                      : "text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  <Settings className="h-5 w-5 mr-3" />
-                  Settings
-                </button>
-                <button
                   onClick={() => handleTabChange("subscriptions")}
                   className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
                     activeTab === "subscriptions"
@@ -1475,6 +1464,17 @@ const ProfilePage = () => {
                 >
                   <BookOpen className="h-5 w-5 mr-3" />
                   My Bookings
+                </button>
+                <button
+                  onClick={() => handleTabChange("settings")}
+                  className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
+                    activeTab === "settings"
+                      ? "bg-[#FFF5F2] text-[#FF5733]"
+                      : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <Settings className="h-5 w-5 mr-3" />
+                  Settings
                 </button>
               </nav>
 
