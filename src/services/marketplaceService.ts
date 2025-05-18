@@ -302,7 +302,11 @@ const marketplaceService = {
         key === 'last_submitted_vehicle' ||
         key === 'userBookings' ||
         key === 'user_vehicle_bookings' ||
-        key === 'user_sell_requests'
+        key === 'user_sell_requests' ||
+        key === 'pendingVehicleData' || 
+        key === 'pendingServiceData' ||
+        key === 'checkoutAfterLogin' ||
+        key === 'user'
       )) {
         sessionStorage.removeItem(key);
       }
@@ -319,10 +323,34 @@ const marketplaceService = {
         key === 'userProfile' ||
         key === 'last_submitted_vehicle' ||
         key === 'userPhone' ||
-        key === 'userAddress'
+        key === 'userAddress' ||
+        key === 'user'
       )) {
         localStorage.removeItem(key);
       }
+    }
+    
+    // Clear any data in userProfileDataService
+    try {
+      const emptyProfile = {
+        name: '',
+        email: '',
+        phone: '',
+        address: '',
+        city: '',
+        state: '',
+        postalCode: ''
+      };
+      
+      // Save empty profile to overwrite existing data
+      localStorage.setItem('userProfileData', JSON.stringify(emptyProfile));
+      sessionStorage.setItem('savedProfileData', JSON.stringify(emptyProfile));
+      
+      // Clear individual profile fields
+      localStorage.removeItem('userPhone');
+      localStorage.removeItem('userAddress');
+    } catch (e) {
+      console.error('[clearUserSession] Error clearing profile data:', e);
     }
     
     console.log('Cleared all user session data and cache');
