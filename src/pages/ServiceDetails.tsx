@@ -609,15 +609,15 @@ const ServiceDetails: React.FC = () => {
           // Update the cart ID in session storage to ensure consistency
           if (data && data.id) {
             sessionStorage.setItem('cartId', data.id.toString());
+            // Clear the pending service data since it's now in the cart
+            sessionStorage.removeItem('pendingServiceData');
           }
           
-          // We don't need to update UI again as we already did it optimistically
+          // Dispatch event to notify other components
+          window.dispatchEvent(new Event('cartUpdated'));
           return true;
         } catch (addError) {
           console.error('Error in API call to add service:', addError);
-          
-          // Even if API fails, we've already done our optimistic update
-          // so user experience is still good
           return true;
         }
       } else {

@@ -312,38 +312,28 @@ const ServiceCheckout: React.FC = () => {
                 const service = JSON.parse(pendingData);
                 console.log('[DEBUG] Found pending service data:', service);
                 
-                // Try to get service features if we have a service ID
-                let enhancedService = {
-                  id: 0, // Temporary ID
-                  service_id: service.id,
-                  service_name: service.name,
-                  quantity: service.quantity || 1,
-                  price: service.price,
-                  features: service.features || [],
-                  description: service.description || ''
-                };
+                // Check if this service already exists in basketItems
+                const serviceExists = basketItems.some(item => 
+                  item.service_id === service.id
+                );
                 
-                // If we have a service ID but no features, try to fetch them
-                if (service.id && (!service.features || service.features.length === 0)) {
-                  try {
-                    const serviceResponse = await fetch(
-                      API_CONFIG.getApiUrl(`/repairing-service/services/${service.id}/`)
-                    );
-                    
-                    if (serviceResponse.ok) {
-                      const serviceData = await serviceResponse.json();
-                      enhancedService.features = serviceData.features || [];
-                      enhancedService.description = serviceData.description || '';
-                    }
-                  } catch (fetchError) {
-                    console.error('[ERROR] Error fetching service details:', fetchError);
-                  }
+                if (!serviceExists) {
+                  // Only add if not already in basketItems
+                  let enhancedService = {
+                    id: 0, // Temporary ID
+                    service_id: service.id,
+                    service_name: service.name,
+                    quantity: service.quantity || 1,
+                    price: service.price,
+                    features: service.features || [],
+                    description: service.description || ''
+                  };
+                  
+                  setBasketItems(prev => [...prev, enhancedService]);
                 }
-                
-                // Add as a temporary basket item
-                setBasketItems([enhancedService]);
-              } catch (parseError) {
-                console.error('[ERROR] Error parsing pending service data:', parseError);
+              } catch (error) {
+                console.error('[ERROR] Error handling pending service data:', error);
+                sessionStorage.removeItem('pendingServiceData');
               }
             }
           }

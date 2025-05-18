@@ -314,7 +314,27 @@ const RepairsBasketIcon: React.FC = () => {
   
   // Calculate total items (counting quantities)
   const calculateTotalItems = (): number => {
-    return basketItems.reduce((total, item) => total + item.quantity, 0);
+    // Get items from the cart
+    const cartItemsCount = basketItems.reduce((total, item) => total + item.quantity, 0);
+    
+    // Check for pending service data
+    const pendingData = sessionStorage.getItem('pendingServiceData');
+    if (pendingData) {
+      try {
+        const pendingService = JSON.parse(pendingData);
+        // Only count pending service if it's not already in the cart
+        const serviceExists = basketItems.some(item => 
+          item.service_id === pendingService.id
+        );
+        if (!serviceExists) {
+          return cartItemsCount + (pendingService.quantity || 1);
+        }
+      } catch (error) {
+        console.error('Error parsing pending service data:', error);
+      }
+    }
+    
+    return cartItemsCount;
   };
   
   // Handle removing an item
