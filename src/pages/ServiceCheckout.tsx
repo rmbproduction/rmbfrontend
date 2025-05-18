@@ -515,15 +515,35 @@ const ServiceCheckout: React.FC = () => {
             console.log('[DEBUG] Found vehicle data in userVehicleOwnership:', parsedVehicle);
             
             // Check if it has the name fields
-          console.log('[DEBUG] Found vehicle data in sessionStorage:', parsedVehicle);
-          
-          // Also save to localStorage for better persistence
-          localStorage.setItem('userVehicleData', JSON.stringify(parsedVehicle));
-          
-          setSelectedVehicle(parsedVehicle);
-        } catch (error) {
-          console.error('Error parsing vehicle data:', error);
+            if (parsedVehicle.vehicle_type_name && parsedVehicle.manufacturer_name && parsedVehicle.model_name) {
+              console.log('[DEBUG] Using complete vehicle data from userVehicleOwnership');
+              setSelectedVehicle(parsedVehicle);
+              foundVehicleData = true;
+            } else {
+              console.log('[DEBUG] Vehicle data missing name fields');
+              // Also save to localStorage for better persistence
+              localStorage.setItem('userVehicleData', JSON.stringify(parsedVehicle));
+              setSelectedVehicle(parsedVehicle);
+            }
+          } catch (error) {
+            console.error('Error parsing vehicle data:', error);
+          }
         }
+      }
+      
+      // After setting up vehicle, load user profile data if available
+      try {
+        // Load user profile from central service
+        const storedProfile = userProfileDataService.getFullProfileData();
+        if (storedProfile) {
+          console.log('[DEBUG] Loaded user profile from service:', storedProfile);
+          setProfileData(prev => ({
+            ...prev,
+            ...storedProfile
+          }));
+        }
+      } catch (profileError) {
+        console.error('Error loading profile data:', profileError);
       }
     } catch (error) {
       console.error('Error in loadAllUserData:', error);
