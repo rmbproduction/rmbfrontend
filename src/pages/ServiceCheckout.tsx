@@ -43,6 +43,8 @@ interface CartItem {
   service_name: string;
   quantity: number;
   price: string;
+  description?: string;
+  features?: Array<{ id?: number; name: string } | string>;
 }
 
 interface VehicleData {
@@ -270,7 +272,34 @@ const ServiceCheckout: React.FC = () => {
               const cartData = await response.json();
               if (cartData.items && Array.isArray(cartData.items)) {
                 console.log('[DEBUG] Loaded basket items:', cartData.items);
-                setBasketItems(cartData.items);
+                
+                // Fetch complete service details for each item to get features
+                const enhancedItems = await Promise.all(
+                  cartData.items.map(async (item: CartItem) => {
+                    try {
+                      // Try to fetch detailed service information
+                      const serviceResponse = await fetch(
+                        API_CONFIG.getApiUrl(`/repairing-service/services/${item.service_id}/`)
+                      );
+                      
+                      if (serviceResponse.ok) {
+                        const serviceData = await serviceResponse.json();
+                        // Add service features and description to the item
+                        return {
+                          ...item,
+                          features: serviceData.features || [],
+                          description: serviceData.description || ''
+                        };
+                      }
+                      return item;
+                    } catch (error) {
+                      console.error(`[ERROR] Failed to fetch details for service ${item.service_id}:`, error);
+                      return item;
+                    }
+                  })
+                );
+                
+                setBasketItems(enhancedItems);
               }
             } else {
               console.error('[ERROR] Failed to fetch cart:', response.statusText);
@@ -282,14 +311,37 @@ const ServiceCheckout: React.FC = () => {
               try {
                 const service = JSON.parse(pendingData);
                 console.log('[DEBUG] Found pending service data:', service);
-                // Add as a temporary basket item
-                setBasketItems([{
+                
+                // Try to get service features if we have a service ID
+                let enhancedService = {
                   id: 0, // Temporary ID
                   service_id: service.id,
                   service_name: service.name,
                   quantity: service.quantity || 1,
-                  price: service.price
-                }]);
+                  price: service.price,
+                  features: service.features || [],
+                  description: service.description || ''
+                };
+                
+                // If we have a service ID but no features, try to fetch them
+                if (service.id && (!service.features || service.features.length === 0)) {
+                  try {
+                    const serviceResponse = await fetch(
+                      API_CONFIG.getApiUrl(`/repairing-service/services/${service.id}/`)
+                    );
+                    
+                    if (serviceResponse.ok) {
+                      const serviceData = await serviceResponse.json();
+                      enhancedService.features = serviceData.features || [];
+                      enhancedService.description = serviceData.description || '';
+                    }
+                  } catch (fetchError) {
+                    console.error('[ERROR] Error fetching service details:', fetchError);
+                  }
+                }
+                
+                // Add as a temporary basket item
+                setBasketItems([enhancedService]);
               } catch (parseError) {
                 console.error('[ERROR] Error parsing pending service data:', parseError);
               }
@@ -1539,33 +1591,44 @@ const ServiceCheckout: React.FC = () => {
                     </h3>
                     
                     {selectedVehicle ? (
-                      <div className="flex items-center justify-between">
+                      <div className="flex justify-between items-center p-4 bg-white rounded-lg shadow-sm">
                         <div className="flex items-center">
-                          <Bike className="w-5 h-5 text-gray-500 mr-2" />
-                          <span>
-                            {selectedVehicle.vehicle_type_name || 'Vehicle'}: {' '}
-                            <strong>
-                              {selectedVehicle.manufacturer_name || ''} {selectedVehicle.model_name || ''}
-                            </strong>
-                          </span>
+                          <div className="bg-amber-100 p-3 rounded-full mr-4">
+                            <Bike className="h-6 w-6 text-amber-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900 text-lg">
+                              {selectedVehicle.vehicle_type_name || 'Loading vehicle...'}
+                            </p>
+                            <p className="text-gray-600">
+                              {selectedVehicle.manufacturer_name ? `${selectedVehicle.manufacturer_name} ${selectedVehicle.model_name || ''}` : 'Loading details...'}
+                            </p>
+                          </div>
                         </div>
                         <button
                           type="button"
                           onClick={openVehicleModal}
-                          className="text-blue-500 text-sm hover:underline"
+                          className="text-sm font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-4 py-2 rounded-lg transition-colors"
                         >
                           Change
                         </button>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={openVehicleModal}
-                        className="flex items-center text-blue-500 hover:underline"
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        Select a vehicle
-                      </button>
+                      <div className="text-center py-8 bg-white rounded-lg border border-dashed border-gray-300">
+                        <div className="inline-flex justify-center items-center w-16 h-16 mb-4 bg-amber-100 rounded-full">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        </div>
+                        <p className="text-gray-600 mb-4">Please select a vehicle for service</p>
+                        <button
+                          type="button"
+                          onClick={openVehicleModal}
+                          className="bg-[#FF5733] text-white px-6 py-3 rounded-lg font-medium hover:bg-opacity-90 transition-colors shadow-md"
+                        >
+                          Select Vehicle
+                        </button>
+                      </div>
                     )}
                   </div>
 
@@ -1903,16 +1966,39 @@ const ServiceCheckout: React.FC = () => {
                         ) : (
                           <div>
                             {basketItems.map(item => (
-                              <div key={item.id} className="flex justify-between items-center py-3 border-b border-gray-200 last:border-0">
-                                <div className="flex-1">
-                                  <p className="font-medium text-gray-900">{item.service_name}</p>
-                                  {item.quantity > 1 && (
-                                    <p className="text-sm text-gray-500">Quantity: {item.quantity}</p>
-                                  )}
+                              <div key={item.id} className="flex flex-col py-3 border-b border-gray-200 last:border-0">
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <p className="font-medium text-gray-900">{item.service_name}</p>
+                                    {/* Add service description if available */}
+                                    {item.description && (
+                                      <p className="text-xs text-gray-500 mt-1 mb-2">{item.description}</p>
+                                    )}
+                                    {/* Show service features if available */}
+                                    {item.features && Array.isArray(item.features) && item.features.length > 0 && (
+                                      <div className="mt-2">
+                                        <p className="text-xs font-medium text-gray-700 mb-1">Service includes:</p>
+                                        <ul className="text-xs text-gray-600 space-y-1 pl-2">
+                                          {item.features.slice(0, 3).map((feature, idx) => (
+                                            <li key={idx} className="flex items-start">
+                                              <CheckCircle className="h-3 w-3 text-green-500 mr-1 flex-shrink-0 mt-0.5" />
+                                              <span>{typeof feature === 'string' ? feature : feature.name}</span>
+                                            </li>
+                                          ))}
+                                          {item.features.length > 3 && (
+                                            <li className="text-xs text-blue-500">+ {item.features.length - 3} more features</li>
+                                          )}
+                                        </ul>
+                                      </div>
+                                    )}
+                                    {item.quantity > 1 && (
+                                      <p className="text-sm text-gray-500 mt-2">Quantity: {item.quantity}</p>
+                                    )}
+                                  </div>
+                                  <span className="font-semibold text-gray-900 whitespace-nowrap ml-4">₹{
+                                    (parseFloat(item.price) * item.quantity).toFixed(2)
+                                  }</span>
                                 </div>
-                                <span className="font-semibold text-gray-900">₹{
-                                  (parseFloat(item.price) * item.quantity).toFixed(2)
-                                }</span>
                               </div>
                             ))}
                             
