@@ -299,7 +299,7 @@ class ApiService {
   // Added missing methods
   async getSubscriptionRequests(): Promise<SubscriptionRequest[]> {
     try {
-      const response = await apiClient.get(`${SUBSCRIPTION_URL}/requests/`);
+      const response = await apiClient.get(`${SUBSCRIPTION_URL}/subscription-requests/`);
       return response.data;
     } catch (error) {
       console.warn('Error fetching subscription requests:', error);
@@ -372,7 +372,7 @@ class ApiService {
   
   async createSubscriptionRequest(requestData: any): Promise<SubscriptionRequest> {
     try {
-      const response = await apiClient.post(`${SUBSCRIPTION_URL}/requests/`, requestData);
+      const response = await apiClient.post(`${SUBSCRIPTION_URL}/subscription-requests/`, requestData);
       return response.data;
     } catch (error) {
       throw handleApiError(error);
