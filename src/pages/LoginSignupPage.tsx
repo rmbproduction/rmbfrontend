@@ -105,9 +105,11 @@ const LoginSignupPage = () => {
         const selectedServiceId = sessionStorage.getItem('selectedServiceId');
         
         // Check for redirect from location state (redirected from protected route)
-        const locationState = location.state as { from?: string };
+        const locationState = location.state as { from?: string, redirectTo?: string };
         if (locationState?.from) {
           navigate(locationState.from);
+        } else if (locationState?.redirectTo) {
+          navigate(locationState.redirectTo);
         } else if (postLoginRedirect) {
           navigate(postLoginRedirect);
           sessionStorage.removeItem('postLoginRedirect');
@@ -115,7 +117,8 @@ const LoginSignupPage = () => {
           navigate(`/services/${selectedServiceId}`);
           sessionStorage.removeItem('selectedServiceId');
         } else {
-          navigate('/');
+          // By default, navigate to profile page instead of homepage
+          navigate('/profile');
         }
 
       } else if (mode === "signup") {

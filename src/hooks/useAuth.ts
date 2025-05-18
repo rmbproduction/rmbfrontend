@@ -214,6 +214,66 @@ export const useAuth = () => {
     // Update axios headers
     axios.defaults.headers.common['Authorization'] = `Bearer ${tokens.access}`;
     
+    // Initialize basic profile data structure to ensure components don't break
+    // with empty values until real data is loaded from the server
+    try {
+      // Provide initial default profile data while server data loads
+      const initialProfile = {
+        name: userData.name || userData.username || '',
+        email: userData.email || '',
+        phone: '',
+        address: '',
+        city: '',
+        state: '',
+        postalCode: ''
+      };
+      
+      // Store initial profile data
+      localStorage.setItem('userProfileData', JSON.stringify(initialProfile));
+      
+      // Attempt to fetch profile from backend in the background
+      setTimeout(() => {
+        try {
+          // Make API call to get user profile data
+          axios.get(`${API_CONFIG.BASE_URL}/accounts/profile/`, {
+            headers: { 'Authorization': `Bearer ${tokens.access}` }
+          })
+          .then(response => {
+            if (response.data) {
+              // Format the response data
+              const profileData = {
+                name: response.data.name || userData.name || userData.username || '',
+                email: response.data.email || userData.email || '',
+                phone: response.data.phone || '',
+                address: response.data.address || '',
+                city: response.data.city || '',
+                state: response.data.state || '',
+                postalCode: response.data.postal_code || ''
+              };
+              
+              // Save to local storage
+              localStorage.setItem('userProfileData', JSON.stringify(profileData));
+              if (profileData.phone) {
+                localStorage.setItem('userPhone', profileData.phone);
+              }
+              if (profileData.address) {
+                localStorage.setItem('userAddress', profileData.address);
+              }
+              
+              console.log('User profile initialized after login');
+            }
+          })
+          .catch(err => {
+            console.warn('Could not load profile data after login:', err);
+          });
+        } catch (e) {
+          console.warn('Error initializing profile after login:', e);
+        }
+      }, 500); // Slight delay to ensure login process completes first
+    } catch (profileError) {
+      console.warn('Error setting initial profile data:', profileError);
+    }
+    
     // Update state
     setAuthState({
       isAuthenticated: true,

@@ -330,28 +330,13 @@ const marketplaceService = {
       }
     }
     
-    // Clear any data in userProfileDataService
-    try {
-      const emptyProfile = {
-        name: '',
-        email: '',
-        phone: '',
-        address: '',
-        city: '',
-        state: '',
-        postalCode: ''
-      };
-      
-      // Save empty profile to overwrite existing data
-      localStorage.setItem('userProfileData', JSON.stringify(emptyProfile));
-      sessionStorage.setItem('savedProfileData', JSON.stringify(emptyProfile));
-      
-      // Clear individual profile fields
-      localStorage.removeItem('userPhone');
-      localStorage.removeItem('userAddress');
-    } catch (e) {
-      console.error('[clearUserSession] Error clearing profile data:', e);
-    }
+    // Don't set empty profile objects, just remove the existing data
+    localStorage.removeItem('userProfileData');
+    localStorage.removeItem('userProfile');
+    localStorage.removeItem('userPhone');
+    localStorage.removeItem('userAddress');
+    sessionStorage.removeItem('savedProfileData');
+    sessionStorage.removeItem('userProfile');
     
     console.log('Cleared all user session data and cache');
   },
