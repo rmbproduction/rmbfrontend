@@ -16,7 +16,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from '../utils/noToast';
-import { ArrowLeft, User, MapPin, Phone, Clock, CheckCircle, AlertTriangle, Navigation, Trash2, ShoppingCart, X, Calendar, Info } from 'lucide-react';
+import { ArrowLeft, User, MapPin, Phone, Clock, CheckCircle, AlertTriangle, Navigation, Trash2, ShoppingCart, X, Calendar, Info, Plus, Bike } from 'lucide-react';
 import { checkUserAuthentication } from '../utils/auth';
 import ThankYouModal from '../components/ThankYouModal';
 import { SubscriptionPlan } from '../models/subscription-plan';
@@ -413,131 +413,56 @@ const ServiceCheckout: React.FC = () => {
   // Add the new comprehensive data loading function
   const loadAllUserData = async () => {
     try {
-      // Load profile data from our centralized service
-      const profileData = await userProfileDataService.initializeProfileData();
-      console.log('[DEBUG] Loaded profile data from centralized service:', profileData);
+      console.log('[DEBUG] Loading all user data');
       
-      // Update profile data with the retrieved information
-      setProfileData(prev => ({
-        ...prev,
-        name: profileData.name || prev.name,
-        email: profileData.email || prev.email,
-        phone: profileData.phone || prev.phone,
-        address: profileData.address || prev.address,
-        city: profileData.city || prev.city,
-        state: profileData.state || prev.state,
-        postalCode: profileData.postalCode || prev.postalCode
-      }));
-      
-      // Save profile data to sessionStorage for consistency
-      saveProfileToSessionStorage({
-        name: profileData.name,
-        email: profileData.email,
-        phone: profileData.phone,
-        address: profileData.address,
-        city: profileData.city,
-        state: profileData.state,
-        postalCode: profileData.postalCode,
+      // Initialize profile data with default values
+      setProfileData({
+        name: '',
+        email: '',
+        phone: '',
+        address: '',
+        city: '',
+        state: '',
+        postalCode: '',
         scheduleDate: '',
         scheduleTime: '',
         latitude: 0,
         longitude: 0
       });
 
-      // First try to load data from the user's account (most authoritative)
-      const token = localStorage.getItem('accessToken');
+      // Check multiple storage locations for vehicle data, prioritizing most recent and complete data
       
-      if (token) {
+      // 1. First check session storage for pending vehicle data (from direct checkout flow)
+      let foundVehicleData = false;
+      const pendingVehicleData = sessionStorage.getItem('pendingVehicleData');
+      
+      if (pendingVehicleData) {
         try {
-          // Fetch user's vehicles
-          const vehiclesResponse = await fetch(API_CONFIG.getApiUrl('/vehicle/user-vehicles/'), {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
+          const parsedVehicle = JSON.parse(pendingVehicleData);
+          console.log('[DEBUG] Found pending vehicle data in sessionStorage:', parsedVehicle);
           
-          if (vehiclesResponse.ok) {
-            const vehiclesData = await vehiclesResponse.json();
-            console.log('[DEBUG] Loaded vehicles from account:', vehiclesData);
-            
-            // Use the most recently added vehicle if available
-            if (vehiclesData.length > 0) {
-              const latestVehicle = vehiclesData[vehiclesData.length - 1];
-              
-              // Need to fetch names for the vehicle data
-              try {
-                // Fetch vehicle type name
-                const typeResponse = await fetch(API_CONFIG.getApiUrl(`/vehicle/vehicle-types/${latestVehicle.vehicle_type}/`), {
-                  credentials: 'omit'
-                });
-                
-                let typeName = '';
-                if (typeResponse.ok) {
-                  const typeData = await typeResponse.json();
-                  typeName = typeData.name;
-                }
-                
-                // Fetch manufacturer name
-                const mfgResponse = await fetch(API_CONFIG.getApiUrl('/repairing-service/manufacturers/'), {
-                  credentials: 'omit'
-                });
-                
-                let mfgName = '';
-                if (mfgResponse.ok) {
-                  const manufacturers = await mfgResponse.json();
-                  const manufacturer = manufacturers.find((m: any) => m.id == latestVehicle.manufacturer);
-                  if (manufacturer) {
-                    mfgName = manufacturer.name;
-                  }
-                }
-                
-                // Fetch model name
-                const modelResponse = await fetch(API_CONFIG.getApiUrl(`/repairing-service/vehicle-models/?manufacturer_id=${latestVehicle.manufacturer}`), {
-                  credentials: 'omit'
-                });
-                
-                let modelName = '';
-                if (modelResponse.ok) {
-                  const models = await modelResponse.json();
-                  const model = models.find((m: any) => m.id == latestVehicle.model);
-                  if (model) {
-                    modelName = model.name;
-                  }
-                }
-                
-                // Create a complete vehicle object
-                const completeVehicle: VehicleData = {
-                  vehicle_type: latestVehicle.vehicle_type,
-                  manufacturer: latestVehicle.manufacturer,
-                  model: latestVehicle.model,
-                  vehicle_type_name: typeName,
-                  manufacturer_name: mfgName,
-                  model_name: modelName,
-                  registration_number: latestVehicle.registration_number || '',
-                  purchase_date: latestVehicle.purchase_date || ''
-                };
-                
-                // Set the selected vehicle
-                setSelectedVehicle(completeVehicle);
-                
-                // Save to session storage for consistency
-                sessionStorage.setItem('userVehicleOwnership', JSON.stringify(completeVehicle));
-                localStorage.setItem('userVehicleData', JSON.stringify(completeVehicle));
-              } catch (vehicleError) {
-                console.error('Error fetching vehicle details:', vehicleError);
-              }
-            }
+          // Check if it has the name fields
+          if (parsedVehicle.vehicle_type_name && parsedVehicle.manufacturer_name && parsedVehicle.model_name) {
+            console.log('[DEBUG] Using complete vehicle data from pendingVehicleData');
+            setSelectedVehicle(parsedVehicle);
+            foundVehicleData = true;
+          } else {
+            console.log('[DEBUG] Pending vehicle data missing name fields, will try other sources');
           }
-        } catch (accountError) {
-          console.error('Error fetching from user account:', accountError);
+        } catch (error) {
+          console.error('Error parsing pending vehicle data:', error);
         }
       }
-
-      // Try to load vehicle information from session storage
-      const vehicleData = sessionStorage.getItem('userVehicleOwnership');
-      if (vehicleData) {
-        try {
-          const parsedVehicle = JSON.parse(vehicleData);
+      
+      // 2. Next check userVehicleOwnership in session storage
+      if (!foundVehicleData) {
+        const vehicleData = sessionStorage.getItem('userVehicleOwnership');
+        if (vehicleData) {
+          try {
+            const parsedVehicle = JSON.parse(vehicleData);
+            console.log('[DEBUG] Found vehicle data in userVehicleOwnership:', parsedVehicle);
+            
+            // Check if it has the name fields
           console.log('[DEBUG] Found vehicle data in sessionStorage:', parsedVehicle);
           
           // Also save to localStorage for better persistence
@@ -1614,46 +1539,33 @@ const ServiceCheckout: React.FC = () => {
                     </h3>
                     
                     {selectedVehicle ? (
-                      <div className="flex justify-between items-center p-4 bg-white rounded-lg shadow-sm">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center">
-                          <div className="bg-amber-100 p-3 rounded-full mr-4">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m12 0v10m0 0v-2m0 2h-4" />
-                            </svg>
-                          </div>
-                          <div>
-                            <p className="font-medium text-gray-900 text-lg">
-                              {selectedVehicle.vehicle_type_name}
-                            </p>
-                            <p className="text-gray-600">
-                              {selectedVehicle.manufacturer_name} {selectedVehicle.model_name}
-                            </p>
-                          </div>
+                          <Bike className="w-5 h-5 text-gray-500 mr-2" />
+                          <span>
+                            {selectedVehicle.vehicle_type_name || 'Vehicle'}: {' '}
+                            <strong>
+                              {selectedVehicle.manufacturer_name || ''} {selectedVehicle.model_name || ''}
+                            </strong>
+                          </span>
                         </div>
                         <button
                           type="button"
                           onClick={openVehicleModal}
-                          className="text-sm font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-4 py-2 rounded-lg transition-colors"
+                          className="text-blue-500 text-sm hover:underline"
                         >
                           Change
                         </button>
                       </div>
                     ) : (
-                      <div className="text-center py-8 bg-white rounded-lg border border-dashed border-gray-300">
-                        <div className="inline-flex justify-center items-center w-16 h-16 mb-4 bg-amber-100 rounded-full">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
-                        </div>
-                        <p className="text-gray-600 mb-4">Please select a vehicle for service</p>
-                        <button
-                          type="button"
-                          onClick={openVehicleModal}
-                          className="bg-[#FF5733] text-white px-6 py-3 rounded-lg font-medium hover:bg-opacity-90 transition-colors shadow-md"
-                        >
-                          Select Vehicle
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={openVehicleModal}
+                        className="flex items-center text-blue-500 hover:underline"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Select a vehicle
+                      </button>
                     )}
                   </div>
 

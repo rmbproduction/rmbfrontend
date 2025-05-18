@@ -8,6 +8,7 @@ import { toast } from 'react-toastify';
 import MultiStepVehicleSelector from '../components/SelectVehicle';
 import { checkUserAuthentication } from '../utils/auth';
 import { categoryService, serviceService } from '../services/apiService';
+import { API_CONFIG } from '../config/api.config';
 
 // Type definitions
 interface ServiceFeature {
@@ -77,6 +78,9 @@ interface VehicleOwnership {
   vehicle_type: number;
   manufacturer: number;
   model: number;
+  vehicle_type_name?: string;
+  manufacturer_name?: string;
+  model_name?: string;
 }
 
 // Add an interface for the API response
@@ -117,7 +121,7 @@ const iconMapping = {
 };
 
 // Get appropriate icon based on slug or icon property
-const getServiceIcon = (category: Category): React.FC<{ className?: string }> => {
+const getServiceIcon = (category: Category): React.ComponentType<{ className?: string }> => {
   const slug = category.slug || '';
   
   if (category.icon) {
@@ -156,41 +160,58 @@ const ServiceDetails: React.FC = () => {
 
   // New function to fetch service prices for specific vehicle
   const fetchServicePrices = async (vehicleData: VehicleOwnership) => {
-    if (!vehicleData || !serviceId || services.length === 0) return;
+    if (!vehicleData || !serviceId || services.length === 0) {
+      console.log('[PRICE] Skipping price fetch - missing data', {
+        hasVehicle: !!vehicleData,
+        serviceId,
+        serviceCount: services.length
+      });
+      return;
+    }
     
     try {
+      console.log('[PRICE] Fetching prices for vehicle:', vehicleData);
+      
       // Create a price map to store results
       const priceMap: Record<number, string> = {};
       // Track which prices are custom vs base prices
       const customPriceMap: Record<number, boolean> = {};
       
-      // Need to fetch prices for each service
-      for (let i = 0; i < services.length; i++) {
-        const service = services[i];
-        
+      // Use Promise.all for parallel requests to speed up loading
+      const pricePromises = services.map(async (service, index) => {
         // We need the real service ID, not just the index
-        const serviceIdForApi = service.id || i + 1;
-        
-        console.log(`[PRICE] Fetching price for service ${service.name} (ID: ${serviceIdForApi})`);
+        const serviceIdForApi = service.id || index + 1;
         
         try {
-          // Use the centralized API service
-          const data = await serviceService.getServicePrice(serviceIdForApi, vehicleData.manufacturer, vehicleData.model);
+          console.log(`[PRICE] Fetching price for service ${service.name} (ID: ${serviceIdForApi})`);
+          
+          // Use the centralized API service with a 3-second timeout
+          const data = await Promise.race([
+            serviceService.getServicePrice(serviceIdForApi, vehicleData.manufacturer, vehicleData.model),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Price fetch timeout')), 3000))
+          ]);
           
           // Store the price (custom or base)
-          priceMap[i] = `₹${data.price}`;
+          priceMap[index] = `₹${data.price}`;
           // Store whether this is a custom price or base price
-          customPriceMap[i] = data.is_custom_price;
+          customPriceMap[index] = data.is_custom_price;
           
           console.log(`[PRICE] Price for service ${service.name}: ₹${data.price} (Custom: ${data.is_custom_price})`);
+          
+          return { index, price: data.price, isCustom: data.is_custom_price };
         } catch (priceErr) {
           console.error(`Error fetching price for service ${service.name}:`, priceErr);
           // Fallback to default price on error
           const basePrice = service.price.replace('₹', '');
-          priceMap[i] = `₹${basePrice}`;
-          customPriceMap[i] = false;
+          priceMap[index] = `₹${basePrice}`;
+          customPriceMap[index] = false;
+          
+          return { index, price: basePrice, isCustom: false, error: true };
         }
-      }
+      });
+      
+      // Wait for all price requests to complete, even if some fail
+      await Promise.allSettled(pricePromises);
       
       // Store all the prices
       setServicePrices(priceMap);
@@ -204,10 +225,25 @@ const ServiceDetails: React.FC = () => {
       // Store in session for persistence
       sessionStorage.setItem('vehicleSpecificPrices', JSON.stringify(priceMap));
       sessionStorage.setItem('customPriceFlags', JSON.stringify(customPriceMap));
+      
+      // Return the price map for any functions that need it
+      return priceMap;
     } catch (error) {
       console.error('Error fetching service prices:', error);
       // Don't let the whole component fail if price fetching fails
       toast.error("Could not fetch custom prices. Using standard prices instead.");
+      
+      // Create a fallback price map using base prices
+      const fallbackPrices: Record<number, string> = {};
+      services.forEach((service, index) => {
+        fallbackPrices[index] = service.price;
+      });
+      
+      // Store the fallback prices
+      setServicePrices(fallbackPrices);
+      
+      // Return the fallback prices
+      return fallbackPrices;
     }
   };
 
@@ -239,11 +275,24 @@ const ServiceDetails: React.FC = () => {
 
   // Update the getServicePrice function to use the fetched prices
   const getServicePrice = (index: number): string => {
-    if (!userVehicle) return '';
+    // Make sure index is valid
+    if (index < 0 || index >= services.length) {
+      console.error(`[PRICE] Invalid service index: ${index}`);
+      return '';
+    }
+    
+    // If we don't have vehicle data, just return the base price
+    if (!userVehicle) {
+      const basePrice = services[index]?.price || '';
+      // Ensure price always has ₹ symbol
+      return basePrice.startsWith('₹') ? basePrice : `₹${basePrice}`;
+    }
     
     // First check our state for prices
     if (servicePrices[index]) {
-      return servicePrices[index];
+      const price = servicePrices[index];
+      // Ensure price always has ₹ symbol
+      return price.startsWith('₹') ? price : `₹${price}`;
     }
     
     // Check session storage as fallback
@@ -252,15 +301,19 @@ const ServiceDetails: React.FC = () => {
       if (priceMapStr) {
         const priceMap = JSON.parse(priceMapStr);
         if (priceMap[index]) {
-          return priceMap[index];
+          const price = priceMap[index];
+          // Ensure price always has ₹ symbol
+          return price.startsWith('₹') ? price : `₹${price}`;
         }
       }
     } catch (error) {
-      console.error('Error getting vehicle-specific price:', error);
+      console.error('[PRICE] Error getting vehicle-specific price:', error);
     }
     
     // Final fallback - use base price
-    return services[index]?.price || '';
+    const basePrice = services[index]?.price || '';
+    // Ensure price always has ₹ symbol
+    return basePrice.startsWith('₹') ? basePrice : `₹${basePrice}`;
   };
 
   // Helper function to properly format recommendation text with spaces
@@ -466,17 +519,45 @@ const ServiceDetails: React.FC = () => {
         return false;
       }
       
+      // Get the actual price for the vehicle if available
+      let servicePrice = serviceToAdd.price;
+      if (userVehicle && selectedServiceIndex !== null) {
+        const customPriceForVehicle = getServicePrice(services.findIndex(s => s.id === serviceId));
+        if (customPriceForVehicle) {
+          servicePrice = customPriceForVehicle;
+        }
+      }
+      
       // Add optimistic UI update - immediately update the UI before the API responds
       const pendingServiceData = {
         id: serviceId,
         name: serviceToAdd.name,
-        price: serviceToAdd.price,
+        price: servicePrice.replace('₹', ''), // Remove currency symbol for consistent formatting
         quantity: 1
       };
       
+      // Store vehicle data with the service if available
+      if (userVehicle) {
+        // Make sure userVehicle data has names - fetch if needed
+        if (!userVehicle.vehicle_type_name || !userVehicle.manufacturer_name || !userVehicle.model_name) {
+          console.log('[DEBUG] Vehicle data is missing name fields, storing what we have...');
+          
+          // Store available vehicle data
+          sessionStorage.setItem('pendingVehicleData', JSON.stringify(userVehicle));
+          sessionStorage.setItem('userVehicleOwnership', JSON.stringify(userVehicle));
+          localStorage.setItem('userVehicleData', JSON.stringify(userVehicle));
+        } else {
+          // Store complete vehicle data
+          sessionStorage.setItem('pendingVehicleData', JSON.stringify(userVehicle));
+          sessionStorage.setItem('userVehicleOwnership', JSON.stringify(userVehicle));
+          localStorage.setItem('userVehicleData', JSON.stringify(userVehicle));
+        }
+      }
+      
       // Show success message immediately
       toast.success('Service added to your repairs basket!', {
-        position: 'top-center'
+        position: 'top-center',
+        autoClose: 2000
       });
       
       // Store service data in session storage for immediate UI update
@@ -490,7 +571,10 @@ const ServiceDetails: React.FC = () => {
       
       if (!currentCartId) {
         try {
+          // Create cart and update both state and sessionStorage
           currentCartId = await createCart();
+          setCartId(currentCartId);
+          sessionStorage.setItem('cartId', currentCartId.toString());
         } catch (createError) {
           console.error('Error creating cart:', createError);
           // We already have the optimistic update, so we can continue
@@ -521,6 +605,11 @@ const ServiceDetails: React.FC = () => {
           // Perform the actual API call in the background
           const data = await serviceService.addToCart(currentCartId, serviceId, 1, serviceToAdd.name);
           console.log('Added service to repairs basket:', data);
+          
+          // Update the cart ID in session storage to ensure consistency
+          if (data && data.id) {
+            sessionStorage.setItem('cartId', data.id.toString());
+          }
           
           // We don't need to update UI again as we already did it optimistically
           return true;
@@ -559,6 +648,18 @@ const ServiceDetails: React.FC = () => {
         return;
       }
       
+      // Get the actual price for the vehicle if available
+      let servicePrice = serviceToBook.price;
+      if (userVehicle) {
+        const serviceIndex = services.findIndex(s => s.id === serviceId);
+        if (serviceIndex !== -1) {
+          const customPriceForVehicle = getServicePrice(serviceIndex);
+          if (customPriceForVehicle) {
+            servicePrice = customPriceForVehicle;
+          }
+        }
+      }
+      
       // First check if user is authenticated
       const isAuthenticated = checkUserAuthentication();
       
@@ -567,7 +668,7 @@ const ServiceDetails: React.FC = () => {
         const serviceData = {
           id: serviceId,
           name: serviceToBook.name,
-          price: serviceToBook.price,
+          price: servicePrice.replace('₹', ''), // Remove currency symbol
           quantity: 1
         };
         
@@ -594,7 +695,7 @@ const ServiceDetails: React.FC = () => {
       const serviceData = {
         id: serviceId,
         name: serviceToBook.name,
-        price: serviceToBook.price,
+        price: servicePrice.replace('₹', ''), // Remove currency symbol
         quantity: 1
       };
       
@@ -606,14 +707,112 @@ const ServiceDetails: React.FC = () => {
       // We want only this service to show in the Order Summary
       sessionStorage.removeItem('cartId');
       
-      // Store vehicle data if available
+      // Store vehicle data if available - make sure we're storing the complete vehicle data with names
       if (userVehicle) {
-        sessionStorage.setItem('pendingVehicleData', JSON.stringify(userVehicle));
+        console.log('[DEBUG] Storing vehicle data for checkout:', userVehicle);
+        
+        // Check if userVehicle has name fields already
+        if (!userVehicle.vehicle_type_name || !userVehicle.manufacturer_name || !userVehicle.model_name) {
+          console.log('[DEBUG] Vehicle data is missing name fields, fetching...');
+          
+          try {
+            // Fetch vehicle details before checkout
+            // Get vehicle type name
+            let typeName = userVehicle.vehicle_type_name || '';
+            if (!typeName) {
+              const typeResponse = await fetch(API_CONFIG.getApiUrl(`/vehicle/vehicle-types/${userVehicle.vehicle_type}/`), {
+                credentials: 'omit'
+              });
+              
+              if (typeResponse.ok) {
+                const typeData = await typeResponse.json();
+                typeName = typeData.name;
+              }
+            }
+            
+            // Get manufacturer name
+            let mfgName = userVehicle.manufacturer_name || '';
+            if (!mfgName) {
+              const mfgResponse = await fetch(API_CONFIG.getApiUrl('/repairing-service/manufacturers/'), {
+                credentials: 'omit'
+              });
+              
+              if (mfgResponse.ok) {
+                const manufacturers = await mfgResponse.json();
+                const manufacturer = manufacturers.find((m: any) => m.id == userVehicle.manufacturer);
+                if (manufacturer) {
+                  mfgName = manufacturer.name;
+                }
+              }
+            }
+            
+            // Get model name
+            let modelName = userVehicle.model_name || '';
+            if (!modelName) {
+              const modelResponse = await fetch(API_CONFIG.getApiUrl(`/repairing-service/vehicle-models/?manufacturer_id=${userVehicle.manufacturer}`), {
+                credentials: 'omit'
+              });
+              
+              if (modelResponse.ok) {
+                const models = await modelResponse.json();
+                const model = models.find((m: any) => m.id == userVehicle.model);
+                if (model) {
+                  modelName = model.name;
+                }
+              }
+            }
+            
+            // Create enhanced vehicle object
+            const enhancedVehicle = {
+              ...userVehicle,
+              vehicle_type_name: typeName || `Type ${userVehicle.vehicle_type}`,
+              manufacturer_name: mfgName || `Manufacturer ${userVehicle.manufacturer}`,
+              model_name: modelName || `Model ${userVehicle.model}`
+            };
+            
+            // Store the enhanced vehicle data
+            sessionStorage.setItem('pendingVehicleData', JSON.stringify(enhancedVehicle));
+            sessionStorage.setItem('userVehicleOwnership', JSON.stringify(enhancedVehicle));
+            localStorage.setItem('userVehicleData', JSON.stringify(enhancedVehicle));
+            
+            // Update the userVehicle state
+            setUserVehicle(enhancedVehicle);
+          } catch (error) {
+            console.error('Error enhancing vehicle data:', error);
+            // Continue with unenhanced data
+            sessionStorage.setItem('pendingVehicleData', JSON.stringify(userVehicle));
+            sessionStorage.setItem('userVehicleOwnership', JSON.stringify(userVehicle));
+            localStorage.setItem('userVehicleData', JSON.stringify(userVehicle));
+          }
+        } else {
+          // Vehicle data already has names, store it directly
+          sessionStorage.setItem('pendingVehicleData', JSON.stringify(userVehicle));
+          sessionStorage.setItem('userVehicleOwnership', JSON.stringify(userVehicle));
+          localStorage.setItem('userVehicleData', JSON.stringify(userVehicle));
+        }
       }
+      
+      // Store current date and time for immediate checkout
+      const currentDate = new Date();
+      const formattedDate = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
+      const hours = currentDate.getHours();
+      const minutes = currentDate.getMinutes();
+      const formattedTime = `${hours < 10 ? '0' + hours : hours}:${minutes < 10 ? '0' + minutes : minutes}`;
+      
+      // Store schedule information
+      sessionStorage.setItem('scheduledDate', formattedDate);
+      sessionStorage.setItem('scheduledTime', formattedTime);
+      
+      // Dispatch event before navigation for any components that need to update
+      window.dispatchEvent(new Event('directCheckout'));
       
       // Navigate to checkout immediately
       toast.success('Proceeding to checkout');
-      navigate('/service-checkout');
+      
+      // Small timeout to ensure sessionStorage is written before navigation
+      setTimeout(() => {
+        navigate('/service-checkout');
+      }, 100);
     } catch (error) {
       console.error('Error processing service request:', error);
       toast.error('Failed to process your request. Please try again.');
@@ -669,7 +868,110 @@ const ServiceDetails: React.FC = () => {
   const handleVehicleSelected = () => {
     // Vehicle selection was completed in the modal
     setVehicleModalOpen(false);
-    toast.success("Vehicle selected successfully!");
+    
+    // Read the selected vehicle data from sessionStorage
+    try {
+      const vehicleData = sessionStorage.getItem('userVehicleOwnership');
+      if (vehicleData) {
+        const parsedVehicle = JSON.parse(vehicleData);
+        
+        // First set the basic vehicle data
+        setUserVehicle(parsedVehicle);
+        
+        // Fetch complete vehicle details including names
+        const fetchCompleteVehicleDetails = async () => {
+          try {
+            // Get vehicle type name
+            let typeName = '';
+            const typeResponse = await fetch(API_CONFIG.getApiUrl(`/vehicle/vehicle-types/${parsedVehicle.vehicle_type}/`), {
+              credentials: 'omit'
+            });
+            
+            if (typeResponse.ok) {
+              const typeData = await typeResponse.json();
+              typeName = typeData.name;
+            }
+            
+            // Get manufacturer name
+            let mfgName = '';
+            const mfgResponse = await fetch(API_CONFIG.getApiUrl('/repairing-service/manufacturers/'), {
+              credentials: 'omit'
+            });
+            
+            if (mfgResponse.ok) {
+              const manufacturers = await mfgResponse.json();
+              const manufacturer = manufacturers.find((m: any) => m.id == parsedVehicle.manufacturer);
+              if (manufacturer) {
+                mfgName = manufacturer.name;
+              }
+            }
+            
+            // Get model name
+            let modelName = '';
+            const modelResponse = await fetch(API_CONFIG.getApiUrl(`/repairing-service/vehicle-models/?manufacturer_id=${parsedVehicle.manufacturer}`), {
+              credentials: 'omit'
+            });
+            
+            if (modelResponse.ok) {
+              const models = await modelResponse.json();
+              const model = models.find((m: any) => m.id == parsedVehicle.model);
+              if (model) {
+                modelName = model.name;
+              }
+            }
+            
+            // Create complete vehicle object with names
+            const completeVehicle = {
+              ...parsedVehicle,
+              vehicle_type_name: typeName,
+              manufacturer_name: mfgName,
+              model_name: modelName
+            };
+            
+            console.log('[DEBUG] Complete vehicle data:', completeVehicle);
+            
+            // Update state with complete data
+            setUserVehicle(completeVehicle);
+            
+            // Save complete vehicle data to storage
+            sessionStorage.setItem('userVehicleOwnership', JSON.stringify(completeVehicle));
+            sessionStorage.setItem('pendingVehicleData', JSON.stringify(completeVehicle));
+            localStorage.setItem('userVehicleData', JSON.stringify(completeVehicle));
+          } catch (error) {
+            console.error('Error fetching complete vehicle details:', error);
+          }
+        };
+        
+        // Execute the fetch function
+        fetchCompleteVehicleDetails();
+        
+        // Update prices for all services with the newly selected vehicle
+        if (services.length > 0) {
+          // Fetch service prices for the newly selected vehicle
+          fetchServicePrices(parsedVehicle)
+            .then(() => {
+              console.log('[DEBUG] Updated prices for new vehicle');
+              
+              // If there was a selected service, update its price
+              if (selectedServiceIndex !== null) {
+                const updatedPrice = getServicePrice(selectedServiceIndex);
+                setCustomPrice(updatedPrice);
+              }
+            })
+            .catch(err => {
+              console.error('Error updating prices after vehicle selection:', err);
+            });
+        }
+        
+        toast.success("Vehicle selected successfully!");
+      } else {
+        console.error('No vehicle data found in sessionStorage after selection');
+        toast.warning('Vehicle selection not saved properly. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error processing vehicle selection:', error);
+      toast.error('Failed to process vehicle selection');
+    }
   };
 
   const handleBack = () => {
