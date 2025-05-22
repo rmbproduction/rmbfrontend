@@ -50,6 +50,9 @@ const VehicleDetailPage = () => {
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 2000;
 
   useEffect(() => {
     if (id) {
@@ -319,139 +322,166 @@ const VehicleDetailPage = () => {
     setError(null);
     
     try {
-      // Try to get vehicle from the API
-      const vehicleData = await marketplaceService.getVehicleDetails(vehicleId);
-      
-      // Debug: Log the original vehicle data
-      console.log('[VehicleDetailPage] Original vehicle data:', vehicleData);
-      console.log('[VehicleDetailPage] Image URLs from API:', {
-        front: vehicleData.front_image_url,
-        back: vehicleData.back_image_url,
-        left: vehicleData.left_image_url,
-        right: vehicleData.right_image_url,
-        dashboard: vehicleData.dashboard_image_url,
-        imageUrl: vehicleData.imageUrl
-      });
-      
-      // Get the default image for fallbacks
-      const defaultImage = API_CONFIG.getDefaultVehicleImage();
-      
-      // Check for custom image URLs for specific vehicles (like vehicle #4)
-      const knownVehicleImages = marketplaceService.getFixedImagesForKnownVehicle(vehicleId);
-      
-      // If we have fixed images for this vehicle, use them
-      if (knownVehicleImages) {
-        console.log('[VehicleDetailPage] Using fixed images for vehicle:', vehicleId);
-        Object.assign(vehicleData, knownVehicleImages);
-      }
-      
-      // Set up a systematic image mapping for better organization
-      const imageMapping = {
-        front: vehicleData.front_image_url,
-        back: vehicleData.back_image_url,
-        left: vehicleData.left_image_url,
-        right: vehicleData.right_image_url,
-        dashboard: vehicleData.dashboard_image_url
-      };
-      
-      // Create a descriptive vehicle name
-      const vehicleName = `${vehicleData.brand} ${vehicleData.model}`;
-      
-      // Create cloudinary placeholder image with vehicle name as backup
-      const cloudinaryPlaceholder = API_CONFIG.getCloudinaryPlaceholder(vehicleName, 800, 600);
-      
-      // Process all image URLs with validation and optimization
-      const processedImages: Record<string, string> = {};
-      
-      // Process each image type with proper validation
-      Object.entries(imageMapping).forEach(([type, url]) => {
-        if (!url || typeof url !== 'string' || url.length < 10) {
-          return; // Skip invalid URLs
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.DEFAULT_TIMEOUT);
+
+      try {
+        // Try to get vehicle from the API with timeout
+        const vehicleData = await Promise.race([
+          marketplaceService.getVehicleDetails(vehicleId, controller.signal),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), API_CONFIG.DEFAULT_TIMEOUT)
+          )
+        ]);
+
+        clearTimeout(timeoutId);
+        
+        // Debug: Log the original vehicle data
+        console.log('[VehicleDetailPage] Original vehicle data:', vehicleData);
+        console.log('[VehicleDetailPage] Image URLs from API:', {
+          front: vehicleData.front_image_url,
+          back: vehicleData.back_image_url,
+          left: vehicleData.left_image_url,
+          right: vehicleData.right_image_url,
+          dashboard: vehicleData.dashboard_image_url,
+          imageUrl: vehicleData.imageUrl
+        });
+        
+        // Get the default image for fallbacks
+        const defaultImage = API_CONFIG.getDefaultVehicleImage();
+        
+        // Check for custom image URLs for specific vehicles (like vehicle #4)
+        const knownVehicleImages = marketplaceService.getFixedImagesForKnownVehicle(vehicleId);
+        
+        // If we have fixed images for this vehicle, use them
+        if (knownVehicleImages) {
+          console.log('[VehicleDetailPage] Using fixed images for vehicle:', vehicleId);
+          Object.assign(vehicleData, knownVehicleImages);
         }
         
-        // Check for cached successful URLs first
-        try {
-          const cachedUrl = localStorage.getItem(`vehicle_image_${vehicleId}_${type}`);
-          if (cachedUrl && cachedUrl.includes('cloudinary.com')) {
-            processedImages[type] = cachedUrl;
-            return;
+        // Set up a systematic image mapping for better organization
+        const imageMapping = {
+          front: vehicleData.front_image_url,
+          back: vehicleData.back_image_url,
+          left: vehicleData.left_image_url,
+          right: vehicleData.right_image_url,
+          dashboard: vehicleData.dashboard_image_url
+        };
+        
+        // Create a descriptive vehicle name
+        const vehicleName = `${vehicleData.brand} ${vehicleData.model}`;
+        
+        // Create cloudinary placeholder image with vehicle name as backup
+        const cloudinaryPlaceholder = API_CONFIG.getCloudinaryPlaceholder(vehicleName, 800, 600);
+        
+        // Process all image URLs with validation and optimization
+        const processedImages: Record<string, string> = {};
+        
+        // Process each image type with proper validation
+        Object.entries(imageMapping).forEach(([type, url]) => {
+          if (!url || typeof url !== 'string' || url.length < 10) {
+            return; // Skip invalid URLs
           }
-        } catch (e) {
-          console.warn('Error reading from localStorage:', e);
-        }
-        
-        // Process URL through Cloudinary optimizer
-        try {
-          const optimizedUrl = processImageUrl(url);
-          if (optimizedUrl) {
-            processedImages[type] = optimizedUrl;
-            
-            // Cache this successful URL
-            try {
-              localStorage.setItem(`vehicle_image_${vehicleId}_${type}`, optimizedUrl);
-            } catch (e) {
-              console.warn('Failed to cache image URL:', e);
+          
+          // Check for cached successful URLs first
+          try {
+            const cachedUrl = localStorage.getItem(`vehicle_image_${vehicleId}_${type}`);
+            if (cachedUrl && cachedUrl.includes('cloudinary.com')) {
+              processedImages[type] = cachedUrl;
+              return;
             }
+          } catch (e) {
+            console.warn('Error reading from localStorage:', e);
           }
-        } catch (e) {
-          console.warn(`Failed to process ${type} image:`, e);
+          
+          // Process URL through Cloudinary optimizer
+          try {
+            const optimizedUrl = processImageUrl(url);
+            if (optimizedUrl) {
+              processedImages[type] = optimizedUrl;
+              
+              // Cache this successful URL
+              try {
+                localStorage.setItem(`vehicle_image_${vehicleId}_${type}`, optimizedUrl);
+              } catch (e) {
+                console.warn('Failed to cache image URL:', e);
+              }
+            }
+          } catch (e) {
+            console.warn(`Failed to process ${type} image:`, e);
+          }
+        });
+        
+        // Ensure we have images by adding placeholders if needed
+        if (Object.keys(processedImages).length === 0) {
+          // No valid images found, use placeholder
+          processedImages.main = cloudinaryPlaceholder;
         }
-      });
-      
-      // Ensure we have images by adding placeholders if needed
-      if (Object.keys(processedImages).length === 0) {
-        // No valid images found, use placeholder
-        processedImages.main = cloudinaryPlaceholder;
-      }
-      
-      // Create the gallery array from the processed images
-      const galleryUrls = Object.values(processedImages);
-      
-      // Add main image if not already in gallery
-      if (processedImages.front && !galleryUrls.includes(processedImages.front)) {
-        galleryUrls.unshift(processedImages.front);
-      }
-      
-      // Create a well-structured vehicle object for the UI
-      const processedVehicle: UIVehicle = {
-        ...vehicleData,
-        name: vehicleName,
-        images: {
-          // Use front image as main, fallback to first gallery image
-          main: processedImages.front || galleryUrls[0] || cloudinaryPlaceholder,
-          gallery: galleryUrls.length > 0 ? galleryUrls : [cloudinaryPlaceholder]
+        
+        // Create the gallery array from the processed images
+        const galleryUrls = Object.values(processedImages);
+        
+        // Add main image if not already in gallery
+        if (processedImages.front && !galleryUrls.includes(processedImages.front)) {
+          galleryUrls.unshift(processedImages.front);
         }
-      };
-      
-      // Log the processed vehicle for debugging
-      console.log('[VehicleDetailPage] Processed vehicle data:', {
-        id: processedVehicle.id,
-        name: processedVehicle.name,
-        imageCount: processedVehicle.images.gallery.length,
-        mainImage: processedVehicle.images.main.substring(0, 100) + '...'
-      });
-      
-      setVehicle(processedVehicle);
+        
+        // Create a well-structured vehicle object for the UI
+        const processedVehicle: UIVehicle = {
+          ...vehicleData,
+          name: vehicleName,
+          images: {
+            // Use front image as main, fallback to first gallery image
+            main: processedImages.front || galleryUrls[0] || cloudinaryPlaceholder,
+            gallery: galleryUrls.length > 0 ? galleryUrls : [cloudinaryPlaceholder]
+          }
+        };
+        
+        // Log the processed vehicle for debugging
+        console.log('[VehicleDetailPage] Processed vehicle data:', {
+          id: processedVehicle.id,
+          name: processedVehicle.name,
+          imageCount: processedVehicle.images.gallery.length,
+          mainImage: processedVehicle.images.main.substring(0, 100) + '...'
+        });
+        
+        setVehicle(processedVehicle);
+        setRetryCount(0); // Reset retry count on success
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        controller.abort();
+
+        if (err.name === 'AbortError' || err.message === 'Request timeout') {
+          if (retryCount < MAX_RETRIES) {
+            setRetryCount(prev => prev + 1);
+            setTimeout(() => {
+              fetchVehicleDetails(vehicleId);
+            }, RETRY_DELAY * (retryCount + 1)); // Exponential backoff
+            throw new Error('Request timed out. Retrying...');
+          }
+        }
+        throw err;
+      }
     } catch (err: any) {
       console.error('Error fetching vehicle details:', err);
       setError(err.message || 'Error loading vehicle details');
       
       // Create a fallback vehicle with placeholder
       const fallbackVehicle = {
-        id: parseInt(vehicleId, 10), // Convert string ID to number
+        id: parseInt(vehicleId, 10),
         brand: 'Unknown',
         model: 'Vehicle',
         name: 'Unknown Vehicle',
         year: new Date().getFullYear(),
         price: 0,
-        status: 'available', // Valid status value
+        status: 'available',
         registration_number: 'Unknown',
-        fuel_type: 'petrol', // Valid fuel type
+        fuel_type: 'petrol',
         color: 'Unknown',
         kms_driven: 0,
         condition: 'Used',
         seller_notes: 'Vehicle information temporarily unavailable',
-        vehicle_type: 'other', // Valid vehicle type
+        vehicle_type: 'other',
         engine_capacity: 0,
         mileage: 'Unknown',
         location: 'Unknown',
@@ -461,7 +491,6 @@ const VehicleDetailPage = () => {
         }
       };
       
-      // Set the fallback vehicle
       setVehicle(fallbackVehicle as unknown as UIVehicle);
     } finally {
       setLoading(false);
@@ -655,10 +684,15 @@ const VehicleDetailPage = () => {
     e.preventDefault();
     if (!vehicle || !id) return;
     
-    // Validate phone number format
+    // Enhanced phone number validation
     const phoneRegex = /^\+?[0-9]{10,15}$/;
-    if (!phoneRegex.test(bookingData.contact_number)) {
-      setBookingError('Phone number must be in valid format (10-15 digits with optional + prefix)');
+    const phone = bookingData.contact_number.trim();
+    
+    // Remove any spaces or special characters except +
+    const cleanPhone = phone.replace(/[^\d+]/g, '');
+    
+    if (!phoneRegex.test(cleanPhone)) {
+      setBookingError('Please enter a valid phone number (10-15 digits with optional + prefix)');
       return;
     }
     
@@ -666,43 +700,49 @@ const VehicleDetailPage = () => {
     setBookingError(null);
     
     try {
-      // Log the exact front_image_url we're sending for booking
-      const originalVehicleData = await marketplaceService.getVehicleDetails(id);
-      console.log('Original front_image_url for booking:', originalVehicleData.front_image_url);
-      
-      // Add original front_image_url to booking data to ensure it's used exactly as is
-      const enhancedBookingData = {
-        ...bookingData,
-        original_front_image_url: originalVehicleData.front_image_url,
-        // Store the current location as referrer
-        referrer: window.location.pathname
-      };
-      
-      const response = await marketplaceService.bookVehicle(id, enhancedBookingData);
-      
-      toast.success('Booking request submitted successfully! Our team will contact you shortly.');
-      closeBookingModal();
-      
-      // Navigate to the profile bookings tab
-      navigate('/profile', { state: { activeTab: 'bookings' } });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.DEFAULT_TIMEOUT);
+
+      try {
+        const originalVehicleData = await marketplaceService.getVehicleDetails(id, controller.signal);
+        
+        const enhancedBookingData = {
+          ...bookingData,
+          contact_number: cleanPhone, // Use the cleaned phone number
+          original_front_image_url: originalVehicleData.front_image_url,
+          referrer: window.location.pathname
+        };
+        
+        const response = await marketplaceService.bookVehicle(id, enhancedBookingData);
+        
+        clearTimeout(timeoutId);
+        
+        toast.success('Booking request submitted successfully! Our team will contact you shortly.');
+        closeBookingModal();
+        
+        navigate('/profile', { state: { activeTab: 'bookings' } });
+      } catch (err) {
+        clearTimeout(timeoutId);
+        controller.abort();
+        throw err;
+      }
     } catch (error: any) {
       console.error('Error booking vehicle:', error);
       
-      // Display a specific error message based on the error
       let errorMessage = 'Failed to submit booking request. Please try again.';
       
       if (error.message) {
-        // Check for specific error messages from the marketplaceService
         if (error.message.includes('Contact number')) {
           errorMessage = error.message;
         } else if (error.message.includes('Authentication')) {
           errorMessage = 'Please log in to book this vehicle.';
         } else if (error.message.includes('not found') || error.message.includes('no longer available')) {
           errorMessage = 'This vehicle is no longer available for booking.';
+        } else if (error.message.includes('timeout') || error.name === 'AbortError') {
+          errorMessage = 'Request timed out. Please try again.';
         } else if (error.message.includes('Server error')) {
           errorMessage = 'Our system is currently experiencing issues. Please try again later.';
         } else {
-          // Use the error message from the server if it exists
           errorMessage = error.message;
         }
       }

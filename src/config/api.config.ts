@@ -417,6 +417,17 @@ export const API_CONFIG = {
   validatePassword: (password: string): boolean => {
     return password.length >= 8;
   },
+  
+  // Add API base URL
+  API_BASE: `${API_URL}/api`,
+  
+  // Add auth headers helper
+  getAuthHeaders: () => {
+    const token = localStorage.getItem('accessToken');
+    return {
+      'Authorization': token ? `Bearer ${token}` : ''
+    };
+  },
 };
 
 // Google Maps API configuration

@@ -1796,111 +1796,22 @@ const marketplaceService = {
   },
 
   // Fetch detailed information about a specific vehicle
-  getVehicleDetails: async (vehicleId: string) => {
+  getVehicleDetails: async (id: string, signal?: AbortSignal) => {
     try {
-      // Get authentication token
-      const token = localStorage.getItem('accessToken');
-      
-      // Log for debugging
-      console.log(`[getVehicleDetails] Fetching details for vehicle ${vehicleId}`);
-      
-      // Use the marketplace prefix for vehicle endpoints
-      const response = await axios.get(`${API_CONFIG.BASE_URL}/marketplace/vehicles/${vehicleId}/`, {
+      const response = await fetch(`${API_CONFIG.API_BASE}/vehicles/${id}/`, {
+        method: 'GET',
         headers: {
-          'Authorization': token ? `Bearer ${token}` : ''
-        }
+          'Content-Type': 'application/json',
+          ...API_CONFIG.getAuthHeaders()
+        },
+        signal // Add signal to the fetch options
       });
-      
-      // Process the vehicle data to normalize image URLs
-      const vehicleData = response.data;
-      
-      // Log raw image URLs for debugging
-      console.log('[getVehicleDetails] Raw image URLs from API:', {
-        front: vehicleData.front_image_url,
-        back: vehicleData.back_image_url,
-        left: vehicleData.left_image_url,
-        right: vehicleData.right_image_url,
-        dashboard: vehicleData.dashboard_image_url
-      });
-      
-      // Process image URLs using our utility functions
-      if (vehicleData) {
-        // Store original URLs for debugging
-        vehicleData._original_front_image_url = vehicleData.front_image_url;
-        
-        // Process front image
-        const frontImageUrl = processCloudinaryUrl(vehicleData.front_image_url) || 
-                             getStoredCloudinaryUrl(vehicleId, 'front');
-        
-        if (frontImageUrl && isValidCloudinaryUrl(frontImageUrl)) {
-          // Store valid URLs for future use
-          storeValidCloudinaryUrl(vehicleId, 'front', frontImageUrl);
-          vehicleData.front_image_url = frontImageUrl;
-        } else if (frontImageUrl) {
-          // Use whatever URL we have, even if not a verified Cloudinary URL
-          vehicleData.front_image_url = frontImageUrl;
-        }
-        
-        // Process back image
-        const backImageUrl = processCloudinaryUrl(vehicleData.back_image_url) || 
-                            getStoredCloudinaryUrl(vehicleId, 'back');
-        
-        if (backImageUrl && isValidCloudinaryUrl(backImageUrl)) {
-          storeValidCloudinaryUrl(vehicleId, 'back', backImageUrl);
-          vehicleData.back_image_url = backImageUrl;
-        } else if (backImageUrl) {
-          vehicleData.back_image_url = backImageUrl;
-        }
-        
-        // Process left image
-        const leftImageUrl = processCloudinaryUrl(vehicleData.left_image_url) || 
-                            getStoredCloudinaryUrl(vehicleId, 'left');
-        
-        if (leftImageUrl && isValidCloudinaryUrl(leftImageUrl)) {
-          storeValidCloudinaryUrl(vehicleId, 'left', leftImageUrl);
-          vehicleData.left_image_url = leftImageUrl;
-        } else if (leftImageUrl) {
-          vehicleData.left_image_url = leftImageUrl;
-        }
-        
-        // Process right image
-        const rightImageUrl = processCloudinaryUrl(vehicleData.right_image_url) || 
-                             getStoredCloudinaryUrl(vehicleId, 'right');
-        
-        if (rightImageUrl && isValidCloudinaryUrl(rightImageUrl)) {
-          storeValidCloudinaryUrl(vehicleId, 'right', rightImageUrl);
-          vehicleData.right_image_url = rightImageUrl;
-        } else if (rightImageUrl) {
-          vehicleData.right_image_url = rightImageUrl;
-        }
-        
-        // Process dashboard image
-        const dashboardImageUrl = processCloudinaryUrl(vehicleData.dashboard_image_url) || 
-                                 getStoredCloudinaryUrl(vehicleId, 'dashboard');
-        
-        if (dashboardImageUrl && isValidCloudinaryUrl(dashboardImageUrl)) {
-          storeValidCloudinaryUrl(vehicleId, 'dashboard', dashboardImageUrl);
-          vehicleData.dashboard_image_url = dashboardImageUrl;
-        } else if (dashboardImageUrl) {
-          vehicleData.dashboard_image_url = dashboardImageUrl;
-        }
-        
-        // Add an imageUrl field for compatibility with other components
-        vehicleData.imageUrl = vehicleData.front_image_url || 
-                               getImageUrlWithFallback(vehicleData.photo_front, API_CONFIG.getDefaultVehicleImage());
-        
-        // Log the processed vehicle data
-        console.log('[getVehicleDetails] Processed image URLs:', {
-          front: vehicleData.front_image_url,
-          back: vehicleData.back_image_url,
-          left: vehicleData.left_image_url,
-          right: vehicleData.right_image_url,
-          dashboard: vehicleData.dashboard_image_url,
-          imageUrl: vehicleData.imageUrl
-        });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch vehicle details: ${response.status}`);
       }
-      
-      return vehicleData;
+
+      return await response.json();
     } catch (error) {
       console.error('Error fetching vehicle details:', error);
       throw error;
