@@ -685,13 +685,24 @@ const VehicleDetailPage = () => {
     if (!vehicle || !id) return;
     
     // Enhanced phone number validation
-    const phoneRegex = /^\+?[0-9]{10,15}$/;
     const phone = bookingData.contact_number.trim();
     
     // Remove any spaces or special characters except +
-    const cleanPhone = phone.replace(/[^\d+]/g, '');
+    let cleanPhone = phone.replace(/[^\d+]/g, '');
     
-    if (!phoneRegex.test(cleanPhone)) {
+    // Ensure it starts with +
+    if (!cleanPhone.startsWith('+')) {
+      cleanPhone = '+' + cleanPhone;
+    }
+    
+    // Ensure only one + at start
+    cleanPhone = '+' + cleanPhone.replace(/\+/g, '');
+    
+    // Limit length
+    cleanPhone = cleanPhone.slice(0, 15);
+    
+    // Validate using the centralized validator
+    if (!API_CONFIG.validatePhone(cleanPhone)) {
       setBookingError('Please enter a valid phone number (10-15 digits with optional + prefix)');
       return;
     }
@@ -708,7 +719,7 @@ const VehicleDetailPage = () => {
         
         const enhancedBookingData = {
           ...bookingData,
-          contact_number: cleanPhone, // Use the cleaned phone number
+          contact_number: cleanPhone,
           original_front_image_url: originalVehicleData.front_image_url,
           referrer: window.location.pathname
         };
@@ -716,6 +727,11 @@ const VehicleDetailPage = () => {
         const response = await marketplaceService.bookVehicle(id, enhancedBookingData);
         
         clearTimeout(timeoutId);
+        
+        // Save the validated phone number to user profile
+        userProfileDataService.saveProfileData({
+          phone: cleanPhone
+        });
         
         toast.success('Booking request submitted successfully! Our team will contact you shortly.');
         closeBookingModal();

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import userProfileDataService from '../services/userProfileDataService';
+import { API_CONFIG } from '../config/api.config';
 
 interface BookingVehicleModalProps {
   isOpen: boolean;
@@ -63,13 +64,27 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
           phoneNumber = userPhone;
         }
         
-        // Always update if we have a phone number
+        // Format the phone number before setting it
         if (phoneNumber) {
-          console.log('Setting phone number in booking modal:', phoneNumber);
+          // Clean the phone number
+          let cleanPhone = phoneNumber.replace(/[^\d+]/g, '');
+          
+          // Ensure it starts with +
+          if (!cleanPhone.startsWith('+')) {
+            cleanPhone = '+' + cleanPhone;
+          }
+          
+          // Ensure only one + at start
+          cleanPhone = '+' + cleanPhone.replace(/\+/g, '');
+          
+          // Limit length
+          cleanPhone = cleanPhone.slice(0, 15);
+          
+          console.log('Setting formatted phone number in booking modal:', cleanPhone);
           const mockEvent = {
             target: {
               name: 'contact_number',
-              value: phoneNumber
+              value: cleanPhone
             }
           } as React.ChangeEvent<HTMLInputElement>;
           
@@ -99,6 +114,9 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
     
     // Limit length to 15 characters
     value = value.slice(0, 15);
+    
+    // Validate the phone number format
+    const isValid = API_CONFIG.validatePhone(value);
     
     // Create a synthetic event with the formatted value
     const syntheticEvent = {
@@ -145,10 +163,12 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
                   onChange={handlePhoneChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
                   placeholder="+91XXXXXXXXXX"
+                  pattern="\\+?[0-9]{10,15}"
+                  title="Phone number must be between 10-15 digits with optional + prefix"
                   required
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Format: +91XXXXXXXXXX (10 digits with optional + prefix)
+                  Format: +91XXXXXXXXXX (10-15 digits with optional + prefix)
                 </p>
               </div>
 
