@@ -150,24 +150,42 @@ export const serviceService = {
   
   // Create a cart
   createCart: async () => {
-    try {
-      const url = `${API_BASE}/cart/create/`;
-      console.log(`[API] Creating new cart at: ${url}`);
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        ...defaultOptions
-      });
-      
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        const url = `${API_BASE}/cart/create/`;
+        console.log(`[API] Creating new cart at: ${url}`);
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          ...defaultOptions,
+          headers: {
+            ...defaultOptions.headers,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        if (!data.id) {
+          throw new Error('Invalid cart data received from server');
+        }
+        
+        return data;
+      } catch (error) {
+        retries--;
+        if (retries === 0) {
+          console.error('Failed to create cart after all retries:', error);
+          throw new Error('Failed to create cart. Please try again.');
+        }
+        // Wait before retrying (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, (3 - retries) * 1000));
       }
-      
-      return await response.json();
-    } catch (error) {
-      console.error('Failed to create cart:', error);
-      throw error;
     }
+    throw new Error('Failed to create cart after all retries');
   },
   
   // Add service to cart

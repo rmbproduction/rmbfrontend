@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import userProfileDataService from '../services/userProfileDataService';
 import { API_CONFIG } from '../config/api.config';
+import { toast } from 'react-toastify';
 
 interface BookingVehicleModalProps {
   isOpen: boolean;
@@ -104,8 +105,18 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
     
-    // Allow numbers, +, -, and spaces during typing
-    value = value.replace(/[^\d\+\-\s]/g, '');
+    // Remove all non-numeric characters except +
+    value = value.replace(/[^\d+]/g, '');
+    
+    // Ensure only one + at start
+    if (value.startsWith('+')) {
+      value = '+' + value.substring(1).replace(/\+/g, '');
+    }
+    
+    // If no + at start and has numbers, add +
+    if (!value.startsWith('+') && value.length > 0) {
+      value = '+' + value;
+    }
     
     // Limit length to 15 characters
     value = value.slice(0, 15);
@@ -121,6 +132,13 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
     };
     
     onBookingInputChange(syntheticEvent);
+  };
+
+  // Add phone number validation
+  const isValidPhoneNumber = (phone: string): boolean => {
+    // Must start with + and have 10-15 digits
+    const phoneRegex = /^\+\d{10,14}$/;
+    return phoneRegex.test(phone);
   };
 
   return (
@@ -142,7 +160,14 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
               </button>
             </div>
 
-            <form onSubmit={onSubmit}>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (!isValidPhoneNumber(bookingData.contact_number)) {
+                toast.error('Please enter a valid phone number (e.g., +911234567890)');
+                return;
+              }
+              onSubmit(e);
+            }}>
               <div className="mb-4">
                 <label htmlFor="contact_number" className="block text-sm font-medium text-gray-700 mb-1">
                   Contact Number*
@@ -156,10 +181,17 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
                   placeholder="+91XXXXXXXXXX"
                   required
+                  pattern="\\+[0-9]{10,14}"
+                  title="Please enter a valid phone number starting with + followed by 10-14 digits"
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Format: +91XXXXXXXXXX or 816-812-1711
+                  Format: +91XXXXXXXXXX (must start with country code)
                 </p>
+                {bookingData.contact_number && !isValidPhoneNumber(bookingData.contact_number) && (
+                  <p className="mt-1 text-xs text-red-500">
+                    Please enter a valid phone number with country code (e.g., +911234567890)
+                  </p>
+                )}
               </div>
 
               <div className="mb-4">
