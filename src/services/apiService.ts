@@ -438,8 +438,167 @@ export const userProfileService = {
   }
 };
 
+export const cartService = {
+  // Create a cart
+  createCart: async () => {
+    try {
+      const url = `${API_CONFIG.getApiUrl('/repairing-service/cart/create/')}`;
+      console.log(`[API] Creating new cart at: ${url}`);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        credentials: 'omit'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Store cart ID in session storage
+      if (data.id) {
+        sessionStorage.setItem('cartId', data.id.toString());
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Failed to create cart:', error);
+      throw error;
+    }
+  },
+  
+  // Add service to cart
+  addToCart: async (cartId: number, serviceId: number, data: any) => {
+    try {
+      const url = `${API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/add/`)}`;
+      console.log(`[API] Adding item to cart: ${url}`, data);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service_id: serviceId,
+          ...data
+        }),
+        credentials: 'omit'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to add item to cart:', error);
+      throw error;
+    }
+  },
+  
+  // Get cart items
+  getCartItems: async (cartId: number) => {
+    try {
+      const url = `${API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/`)}`;
+      console.log(`[API] Fetching cart items for cart ${cartId}: ${url}`);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'omit'
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          // Cart not found - remove from session storage
+          sessionStorage.removeItem('cartId');
+          throw new Error('Cart not found');
+        }
+        throw new Error('Failed to get cart items');
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error getting cart items:', error);
+      throw error;
+    }
+  },
+  
+  // Update cart item quantity
+  updateCartItem: async (cartId: number, cartItemId: number, quantity: number) => {
+    try {
+      const url = `${API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/update-item/`)}`;
+      console.log(`[API] Updating cart item: ${url}`, { cartItemId, quantity });
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cart_item_id: cartItemId,
+          quantity
+        }),
+        credentials: 'omit'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update cart item');
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to update cart item:', error);
+      throw error;
+    }
+  },
+  
+  // Clear cart
+  clearCart: async (cartId: number) => {
+    try {
+      const url = `${API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/clear/`)}`;
+      console.log(`[API] Clearing cart: ${url}`);
+      
+      const response = await fetch(url, {
+        method: 'DELETE',
+        credentials: 'omit'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to clear cart');
+      }
+      
+      // Remove cart ID from session storage
+      sessionStorage.removeItem('cartId');
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to clear cart:', error);
+      throw error;
+    }
+  },
+  
+  // Handle direct checkout
+  handleDirectCheckout: async (serviceData: any) => {
+    try {
+      // Clear any existing cart data
+      sessionStorage.removeItem('cartId');
+      
+      // Store service data for checkout
+      const checkoutData = {
+        ...serviceData,
+        isDirectCheckout: true
+      };
+      
+      sessionStorage.setItem('pendingServiceData', JSON.stringify(checkoutData));
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to handle direct checkout:', error);
+      throw error;
+    }
+  }
+};
+
 export default {
   categoryService,
   serviceService,
-  userProfileService
+  userProfileService,
+  cartService
 }; 

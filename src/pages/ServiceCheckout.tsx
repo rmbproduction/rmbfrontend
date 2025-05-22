@@ -263,10 +263,39 @@ const ServiceCheckout: React.FC = () => {
       // Only load basket items for service checkouts (not subscriptions)
       const loadBasketItems = async () => {
         try {
+          // First check for direct checkout service
+          const pendingServiceData = sessionStorage.getItem('pendingServiceData');
+          if (pendingServiceData) {
+            try {
+              const serviceData = JSON.parse(pendingServiceData);
+              
+              // If this is a direct checkout service, don't try to load cart
+              if (serviceData.isDirectCheckout) {
+                console.log('[DEBUG] Loading direct checkout service:', serviceData);
+                const enhancedService = {
+                  id: 0, // Use 0 for temporary items
+                  service_id: serviceData.id,
+                  service_name: serviceData.name,
+                  quantity: serviceData.quantity || 1,
+                  price: serviceData.price?.toString() || '0',
+                  features: serviceData.features || [],
+                  description: serviceData.description || ''
+                };
+                setBasketItems([enhancedService]);
+                return;
+              }
+            } catch (error) {
+              console.error('[ERROR] Error handling pending service data:', error);
+            }
+          }
+
+          // If not a direct checkout, try to load from cart
           const cartId = sessionStorage.getItem('cartId');
           if (cartId) {
             console.log('[DEBUG] Loading basket items for cart:', cartId);
-            const response = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/`));
+            const response = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/`), {
+              credentials: 'omit'
+            });
             
             if (response.ok) {
               const cartData = await response.json();
@@ -301,44 +330,58 @@ const ServiceCheckout: React.FC = () => {
                 
                 setBasketItems(enhancedItems);
               }
-            } else {
-              console.error('[ERROR] Failed to fetch cart:', response.statusText);
-            }
-          } else {
-            // Check if we have pending service data in session storage
-            const pendingData = sessionStorage.getItem('pendingServiceData');
-            if (pendingData) {
-              try {
-                const service = JSON.parse(pendingData);
-                console.log('[DEBUG] Found pending service data:', service);
-                
-                // Check if this service already exists in basketItems
-                const serviceExists = basketItems.some(item => 
-                  item.service_id === service.id
-                );
-                
-                if (!serviceExists) {
-                  // Only add if not already in basketItems
-                  let enhancedService = {
-                    id: 0, // Temporary ID
-                    service_id: service.id,
-                    service_name: service.name,
-                    quantity: service.quantity || 1,
-                    price: service.price,
-                    features: service.features || [],
-                    description: service.description || ''
+            } else if (response.status === 404) {
+              // Cart not found - remove cart ID
+              console.warn('[DEBUG] Cart not found, removing cartId from session');
+              sessionStorage.removeItem('cartId');
+              
+              // Try to recover from pending service data
+              if (pendingServiceData) {
+                try {
+                  const serviceData = JSON.parse(pendingServiceData);
+                  const enhancedService = {
+                    id: 0,
+                    service_id: serviceData.id,
+                    service_name: serviceData.name,
+                    quantity: serviceData.quantity || 1,
+                    price: serviceData.price?.toString() || '0',
+                    features: serviceData.features || [],
+                    description: serviceData.description || ''
                   };
-                  
-                  setBasketItems(prev => [...prev, enhancedService]);
+                  setBasketItems([enhancedService]);
+                } catch (error) {
+                  console.error('[ERROR] Error recovering from pending service:', error);
+                  setBasketItems([]);
                 }
-              } catch (error) {
-                console.error('[ERROR] Error handling pending service data:', error);
-                sessionStorage.removeItem('pendingServiceData');
+              } else {
+                setBasketItems([]);
               }
+            } else {
+              console.error('[ERROR] Failed to fetch cart:', response.status, response.statusText);
+              toast.error('Failed to load your cart. Please try again.');
+            }
+          } else if (pendingServiceData) {
+            // No cart but we have pending service
+            try {
+              const serviceData = JSON.parse(pendingServiceData);
+              const enhancedService = {
+                id: 0,
+                service_id: serviceData.id,
+                service_name: serviceData.name,
+                quantity: serviceData.quantity || 1,
+                price: serviceData.price?.toString() || '0',
+                features: serviceData.features || [],
+                description: serviceData.description || ''
+              };
+              setBasketItems([enhancedService]);
+            } catch (error) {
+              console.error('[ERROR] Error handling pending service data:', error);
+              setBasketItems([]);
             }
           }
         } catch (error) {
           console.error('[ERROR] Error loading basket items:', error);
+          toast.error('Failed to load cart items');
         }
       };
       

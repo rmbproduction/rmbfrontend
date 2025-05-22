@@ -7,7 +7,7 @@ import ManufacturerSelect from '../components/ManufacturerSelect';
 import { toast } from 'react-toastify';
 import MultiStepVehicleSelector from '../components/SelectVehicle';
 import { checkUserAuthentication } from '../utils/auth';
-import { categoryService, serviceService } from '../services/apiService';
+import { categoryService, serviceService, cartService } from '../services/apiService';
 import { API_CONFIG } from '../config/api.config';
 
 // Type definitions
@@ -504,8 +504,8 @@ const ServiceDetails: React.FC = () => {
     }
   };
 
-  // Update the addToRepairsBasket function
-  const addToRepairsBasket = async (serviceId: number, skipExistingCheck = false) => {
+  // Update the addToRepairsBasket function to use cartService
+  const addToRepairsBasket = async (serviceId: number) => {
     try {
       setProcessingService(serviceId);
       
@@ -515,26 +515,40 @@ const ServiceDetails: React.FC = () => {
         return false;
       }
       
+      // Get or create cart using cartService
       let currentCartId = cartId;
       if (!currentCartId) {
-        currentCartId = await createCart();
+        try {
+          const newCart = await cartService.createCart();
+          currentCartId = newCart.id;
+        } catch (error) {
+          console.error('Error creating cart:', error);
+          throw new Error('Failed to create cart');
+        }
+      }
+      
+      if (!currentCartId) {
+        throw new Error('Failed to get or create cart');
       }
       
       // Get the actual price for the vehicle if available
       let servicePrice = serviceToAdd.price;
-      if (userVehicle && selectedServiceIndex !== null) {
+      if (userVehicle && typeof selectedServiceIndex === 'number') {
         const customPriceForVehicle = getServicePrice(services.findIndex(s => s.id === serviceId));
         if (customPriceForVehicle) {
           servicePrice = customPriceForVehicle;
         }
       }
       
-      // Add to cart using the service
-      await serviceService.addToCart(currentCartId, serviceId, {
+      // Add to cart using cartService
+      await cartService.addToCart(currentCartId, serviceId, {
         price: servicePrice.replace('₹', ''),
         quantity: 1,
         vehicle_data: userVehicle || undefined
       });
+      
+      // Update cart icon
+      window.dispatchEvent(new Event('cartUpdated'));
       
       toast.success('Service added to repairs basket');
       return true;
@@ -547,189 +561,44 @@ const ServiceDetails: React.FC = () => {
     }
   };
 
-  // Update the getServiceNow function
-  const getServiceNow = async (serviceId: number) => {
+  // Update the handleGetServiceNow function to use cartService
+  const handleGetServiceNow = async (serviceId: number) => {
     try {
-      // Set UI state for processing
       setProcessingService(serviceId);
       
-      // Find the service by ID for data storage regardless of auth status
-      const serviceToBook = services.find(s => s.id === serviceId);
-      if (!serviceToBook) {
-        toast.error('Service details not found');
-        return;
+      const serviceToAdd = services.find(s => s.id === serviceId);
+      if (!serviceToAdd) {
+        toast.error('Service not found');
+        return false;
       }
       
       // Get the actual price for the vehicle if available
-      let servicePrice = serviceToBook.price;
-      if (userVehicle) {
-        const serviceIndex = services.findIndex(s => s.id === serviceId);
-        if (serviceIndex !== -1) {
-          const customPriceForVehicle = getServicePrice(serviceIndex);
-          if (customPriceForVehicle) {
-            servicePrice = customPriceForVehicle;
-          }
+      let servicePrice = serviceToAdd.price;
+      if (userVehicle && typeof selectedServiceIndex === 'number') {
+        const customPriceForVehicle = getServicePrice(services.findIndex(s => s.id === serviceId));
+        if (customPriceForVehicle) {
+          servicePrice = customPriceForVehicle;
         }
       }
       
-      // First check if user is authenticated
-      const isAuthenticated = checkUserAuthentication();
-      
-      if (!isAuthenticated) {
-        // Store service data in sessionStorage for recovery after login
-        const serviceData = {
-          id: serviceId,
-          name: serviceToBook.name,
-          price: servicePrice.replace('₹', ''), // Remove currency symbol
-          quantity: 1
-        };
-        
-        console.log('Service selected for booking:', serviceData);
-        sessionStorage.setItem('pendingServiceData', JSON.stringify(serviceData));
-        
-        // Store full vehicle data for processing
-        if (userVehicle) {
-          sessionStorage.setItem('pendingVehicleData', JSON.stringify(userVehicle));
-        }
-        
-        // Save intended action in sessionStorage for post-login redirect
-        sessionStorage.setItem('postLoginRedirect', '/service-checkout');
-        sessionStorage.setItem('selectedServiceId', serviceId.toString());
-        
-        // Show message and redirect to login
-        toast.info('Please login to continue with booking');
-        navigate('/login-signup');
-        return;
-      }
-      
-      // If user is authenticated, store service data directly in sessionStorage 
-      // for immediate checkout without adding to basket first
-      const serviceData = {
+      // Use cartService to handle direct checkout
+      await cartService.handleDirectCheckout({
         id: serviceId,
-        name: serviceToBook.name,
-        price: servicePrice.replace('₹', ''), // Remove currency symbol
+        name: serviceToAdd.name,
+        price: servicePrice,
+        description: serviceToAdd.description,
+        features: serviceToAdd.features,
         quantity: 1
-      };
+      });
       
-      // Store service data in sessionStorage for checkout to use
-      console.log('[DEBUG] Storing service for direct checkout:', serviceData);
-      sessionStorage.setItem('pendingServiceData', JSON.stringify(serviceData));
-      
-      // Clear any existing cartId to prevent loading old basket items
-      // We want only this service to show in the Order Summary
-      sessionStorage.removeItem('cartId');
-      
-      // Store vehicle data if available - make sure we're storing the complete vehicle data with names
-      if (userVehicle) {
-        console.log('[DEBUG] Storing vehicle data for checkout:', userVehicle);
-        
-        // Check if userVehicle has name fields already
-        if (!userVehicle.vehicle_type_name || !userVehicle.manufacturer_name || !userVehicle.model_name) {
-          console.log('[DEBUG] Vehicle data is missing name fields, fetching...');
-          
-          try {
-            // Fetch vehicle details before checkout
-            // Get vehicle type name
-            let typeName = userVehicle.vehicle_type_name || '';
-            if (!typeName) {
-              const typeResponse = await fetch(API_CONFIG.getApiUrl(`/vehicle/vehicle-types/${userVehicle.vehicle_type}/`), {
-                credentials: 'omit'
-              });
-              
-              if (typeResponse.ok) {
-                const typeData = await typeResponse.json();
-                typeName = typeData.name;
-              }
-            }
-            
-            // Get manufacturer name
-            let mfgName = userVehicle.manufacturer_name || '';
-            if (!mfgName) {
-              const mfgResponse = await fetch(API_CONFIG.getApiUrl('/repairing-service/manufacturers/'), {
-                credentials: 'omit'
-              });
-              
-              if (mfgResponse.ok) {
-                const manufacturers = await mfgResponse.json();
-                const manufacturer = manufacturers.find((m: any) => m.id == userVehicle.manufacturer);
-                if (manufacturer) {
-                  mfgName = manufacturer.name;
-                }
-              }
-            }
-            
-            // Get model name
-            let modelName = userVehicle.model_name || '';
-            if (!modelName) {
-              const modelResponse = await fetch(API_CONFIG.getApiUrl(`/repairing-service/vehicle-models/?manufacturer_id=${userVehicle.manufacturer}`), {
-                credentials: 'omit'
-              });
-              
-              if (modelResponse.ok) {
-                const models = await modelResponse.json();
-                const model = models.find((m: any) => m.id == userVehicle.model);
-                if (model) {
-                  modelName = model.name;
-                }
-              }
-            }
-            
-            // Create enhanced vehicle object
-            const enhancedVehicle = {
-              ...userVehicle,
-              vehicle_type_name: typeName || `Type ${userVehicle.vehicle_type}`,
-              manufacturer_name: mfgName || `Manufacturer ${userVehicle.manufacturer}`,
-              model_name: modelName || `Model ${userVehicle.model}`
-            };
-            
-            // Store the enhanced vehicle data
-            sessionStorage.setItem('pendingVehicleData', JSON.stringify(enhancedVehicle));
-            sessionStorage.setItem('userVehicleOwnership', JSON.stringify(enhancedVehicle));
-            localStorage.setItem('userVehicleData', JSON.stringify(enhancedVehicle));
-            
-            // Update the userVehicle state
-            setUserVehicle(enhancedVehicle);
-          } catch (error) {
-            console.error('Error enhancing vehicle data:', error);
-            // Continue with unenhanced data
-            sessionStorage.setItem('pendingVehicleData', JSON.stringify(userVehicle));
-            sessionStorage.setItem('userVehicleOwnership', JSON.stringify(userVehicle));
-            localStorage.setItem('userVehicleData', JSON.stringify(userVehicle));
-          }
-        } else {
-          // Vehicle data already has names, store it directly
-          sessionStorage.setItem('pendingVehicleData', JSON.stringify(userVehicle));
-          sessionStorage.setItem('userVehicleOwnership', JSON.stringify(userVehicle));
-          localStorage.setItem('userVehicleData', JSON.stringify(userVehicle));
-        }
-      }
-      
-      // Store current date and time for immediate checkout
-      const currentDate = new Date();
-      const formattedDate = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
-      const hours = currentDate.getHours();
-      const minutes = currentDate.getMinutes();
-      const formattedTime = `${hours < 10 ? '0' + hours : hours}:${minutes < 10 ? '0' + minutes : minutes}`;
-      
-      // Store schedule information
-      sessionStorage.setItem('scheduledDate', formattedDate);
-      sessionStorage.setItem('scheduledTime', formattedTime);
-      
-      // Dispatch event before navigation for any components that need to update
-      window.dispatchEvent(new Event('directCheckout'));
-      
-      // Navigate to checkout immediately
-      toast.success('Proceeding to checkout');
-      
-      // Small timeout to ensure sessionStorage is written before navigation
-      setTimeout(() => {
-        navigate('/service-checkout');
-      }, 100);
+      // Navigate to checkout
+      navigate('/service-checkout');
+      return true;
     } catch (error) {
-      console.error('Error processing service request:', error);
-      toast.error('Failed to process your request. Please try again.');
+      console.error('Error processing direct checkout:', error);
+      toast.error('Failed to process service request');
+      return false;
     } finally {
-      // Clear processing state
       setProcessingService(null);
     }
   };
@@ -1202,7 +1071,7 @@ const ServiceDetails: React.FC = () => {
                           Add to Basket
                         </button>
                         <button
-                          onClick={() => getServiceNow(service.id || index)}
+                          onClick={() => handleGetServiceNow(service.id || index)}
                           className="bg-[#FF5733] text-white px-6 py-2 rounded-md hover:bg-opacity-90 transition-colors"
                           disabled={processingService === (service.id || index)}
                         >
