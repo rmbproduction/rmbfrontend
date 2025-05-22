@@ -104,8 +104,11 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
     
-    // Allow more characters during typing
+    // Allow numbers, +, -, and spaces during typing
     value = value.replace(/[^\d\+\-\s]/g, '');
+    
+    // Limit length to 15 characters
+    value = value.slice(0, 15);
     
     // Create a synthetic event with the formatted value
     const syntheticEvent = {
