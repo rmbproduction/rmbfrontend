@@ -489,10 +489,9 @@ const ServiceDetails: React.FC = () => {
     }
   }, []);
 
-  // Add a function to create a new cart
+  // Update the createCart function
   const createCart = async (): Promise<number> => {
     try {
-      // Use the centralized API service
       const data = await serviceService.createCart();
       // Save cart ID to session storage
       sessionStorage.setItem('cartId', data.id.toString());
@@ -505,18 +504,20 @@ const ServiceDetails: React.FC = () => {
     }
   };
 
-  // Function to add service to repairs basket
+  // Update the addToRepairsBasket function
   const addToRepairsBasket = async (serviceId: number, skipExistingCheck = false) => {
     try {
-      // Set processing state for UI feedback
       setProcessingService(serviceId);
       
-      // Find the service to add
       const serviceToAdd = services.find(s => s.id === serviceId);
       if (!serviceToAdd) {
-        console.error(`Service with ID ${serviceId} not found`);
         toast.error('Service not found');
         return false;
+      }
+      
+      let currentCartId = cartId;
+      if (!currentCartId) {
+        currentCartId = await createCart();
       }
       
       // Get the actual price for the vehicle if available
@@ -528,109 +529,20 @@ const ServiceDetails: React.FC = () => {
         }
       }
       
-      // Add optimistic UI update - immediately update the UI before the API responds
-      const pendingServiceData = {
-        id: serviceId,
-        name: serviceToAdd.name,
-        price: servicePrice.replace('₹', ''), // Remove currency symbol for consistent formatting
-        quantity: 1
-      };
-      
-      // Store vehicle data with the service if available
-      if (userVehicle) {
-        // Make sure userVehicle data has names - fetch if needed
-        if (!userVehicle.vehicle_type_name || !userVehicle.manufacturer_name || !userVehicle.model_name) {
-          console.log('[DEBUG] Vehicle data is missing name fields, storing what we have...');
-          
-          // Store available vehicle data
-          sessionStorage.setItem('pendingVehicleData', JSON.stringify(userVehicle));
-          sessionStorage.setItem('userVehicleOwnership', JSON.stringify(userVehicle));
-          localStorage.setItem('userVehicleData', JSON.stringify(userVehicle));
-        } else {
-          // Store complete vehicle data
-          sessionStorage.setItem('pendingVehicleData', JSON.stringify(userVehicle));
-          sessionStorage.setItem('userVehicleOwnership', JSON.stringify(userVehicle));
-          localStorage.setItem('userVehicleData', JSON.stringify(userVehicle));
-        }
-      }
-      
-      // Show success message immediately
-      toast.success('Service added to your repairs basket!', {
-        position: 'top-center',
-        autoClose: 2000
+      // Add to cart using the service
+      await serviceService.addToCart(currentCartId, serviceId, {
+        price: servicePrice.replace('₹', ''),
+        quantity: 1,
+        vehicle_data: userVehicle || undefined
       });
       
-      // Store service data in session storage for immediate UI update
-      sessionStorage.setItem('pendingServiceData', JSON.stringify(pendingServiceData));
-      
-      // Dispatch an event to notify other components about the pending cart update
-      window.dispatchEvent(new Event('cartUpdated'));
-      
-      // Get or create a cart in the background
-      let currentCartId = cartId;
-      
-      if (!currentCartId) {
-        try {
-          // Create cart and update both state and sessionStorage
-          currentCartId = await createCart();
-          setCartId(currentCartId);
-          sessionStorage.setItem('cartId', currentCartId.toString());
-        } catch (createError) {
-          console.error('Error creating cart:', createError);
-          // We already have the optimistic update, so we can continue
-        }
-      }
-      
-      // If we have a cart ID and aren't skipping checks, check if service already exists
-      if (currentCartId && !skipExistingCheck) {
-        try {
-          const existingItems = await serviceService.getCartItems(currentCartId);
-          const serviceExists = existingItems.some((item: CartItem) => item.service_id === serviceId);
-          
-          if (serviceExists) {
-            console.log(`Service ${serviceId} already in cart ${currentCartId}`);
-            // Don't store pendingServiceData here as it can lead to duplication
-            // Just return true to indicate success
-            return true; // Indicate that the service is already in the basket
-          }
-        } catch (error) {
-          console.error('Error checking existing cart items:', error);
-          // Continue with add operation even if check fails
-        }
-      }
-      
-      // Now add the service to the cart using the centralized API service
-      if (currentCartId) {
-        try {
-          // Perform the actual API call in the background
-          const data = await serviceService.addToCart(currentCartId, serviceId, 1, serviceToAdd.name);
-          console.log('Added service to repairs basket:', data);
-          
-          // Update the cart ID in session storage to ensure consistency
-          if (data && data.id) {
-            sessionStorage.setItem('cartId', data.id.toString());
-            // Clear the pending service data since it's now in the cart
-            sessionStorage.removeItem('pendingServiceData');
-          }
-          
-          // Dispatch event to notify other components
-          window.dispatchEvent(new Event('cartUpdated'));
-          return true;
-        } catch (addError) {
-          console.error('Error in API call to add service:', addError);
-          return true;
-        }
-      } else {
-        // If we couldn't get a cart ID, the local representation is still shown
-        console.warn('No cart ID available, but service added locally');
-        return true;
-      }
+      toast.success('Service added to repairs basket');
+      return true;
     } catch (error) {
       console.error('Error adding to repairs basket:', error);
-      toast.error('Failed to add to repairs basket. Please try again.');
+      toast.error('Failed to add service to repairs basket');
       return false;
     } finally {
-      // Always clear the processing state
       setProcessingService(null);
     }
   };

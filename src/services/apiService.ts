@@ -105,7 +105,7 @@ export const serviceService = {
   // Get services by category ID
   getServicesByCategory: async (categoryId: string) => {
     try {
-      const url = `${API_BASE}/services/?category_id=${categoryId}`;
+      const url = `${API_BASE}/service-categories/${categoryId}/`;
       console.log(`[API] Fetching services by category ID from: ${url}`);
       
       const response = await fetch(url, {
@@ -152,7 +152,7 @@ export const serviceService = {
   createCart: async () => {
     try {
       const url = `${API_BASE}/cart/create/`;
-      console.log(`[API] Creating cart: ${url}`);
+      console.log(`[API] Creating new cart at: ${url}`);
       
       const response = await fetch(url, {
         method: 'POST',
@@ -160,39 +160,38 @@ export const serviceService = {
       });
       
       if (!response.ok) {
-        throw new Error('Failed to create cart');
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
       }
       
       return await response.json();
     } catch (error) {
-      console.error('Error creating cart:', error);
+      console.error('Failed to create cart:', error);
       throw error;
     }
   },
   
   // Add service to cart
-  addToCart: async (cartId: number, serviceId: number, quantity: number, serviceName: string) => {
+  addToCart: async (cartId: number, serviceId: number, data: any) => {
     try {
       const url = `${API_BASE}/cart/${cartId}/add/`;
-      console.log(`[API] Adding service ${serviceId} to cart ${cartId}: ${url}`);
+      console.log(`[API] Adding item to cart: ${url}`, data);
       
       const response = await fetch(url, {
         method: 'POST',
         ...defaultOptions,
         body: JSON.stringify({
           service_id: serviceId,
-          quantity,
-          service_name: serviceName
+          ...data
         })
       });
       
       if (!response.ok) {
-        throw new Error('Failed to add service to repairs basket');
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
       }
       
       return await response.json();
     } catch (error) {
-      console.error('Error adding to repairs basket:', error);
+      console.error('Failed to add item to cart:', error);
       throw error;
     }
   },
@@ -215,6 +214,28 @@ export const serviceService = {
       return await response.json();
     } catch (error) {
       console.error('Error getting cart items:', error);
+      throw error;
+    }
+  },
+
+  // Get cart details
+  getCartDetails: async (cartId: number) => {
+    try {
+      const url = `${API_BASE}/cart/${cartId}/`;
+      console.log(`[API] Fetching cart details: ${url}`);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        ...defaultOptions
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to fetch cart details:', error);
       throw error;
     }
   }

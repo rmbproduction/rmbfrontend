@@ -32,6 +32,7 @@ const getApiBaseUrl = () => {
   return import.meta.env.VITE_API_URL || `${HOST_PROTOCOL}://${HOST_DOMAIN}/api`;
 };
 
+// Get media base URL
 const getMediaBaseUrl = () => {
   if (isProduction()) {
     return `${HOST_PROTOCOL}://${HOST_DOMAIN}`;
