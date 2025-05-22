@@ -28,28 +28,71 @@ interface Booking {
   schedule_time?: string;
 }
 
+// Add interface for API errors
+interface ApiError {
+  name?: string;
+  code?: string;
+  message: string;
+}
+
 const MyBookingsTab: React.FC = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 2000; // 2 seconds
 
   // Function to refresh the bookings list
   const refreshBookings = () => {
+    setRetryCount(0); // Reset retry count on manual refresh
     setRefreshKey(prevKey => prevKey + 1);
   };
 
   useEffect(() => {
+    let isMounted = true;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.DEFAULT_TIMEOUT);
+
     const fetchBookings = async () => {
+      if (!isMounted) return;
+      
       setLoading(true);
       try {
+        // Use the abort controller signal with the API call
         const bookingsData = await marketplaceService.getUserBookings();
+        
+        if (!isMounted) return;
+        
         console.log('Fetched bookings:', bookingsData);
         setBookings(bookingsData);
         setError(null);
-      } catch (err) {
+        setRetryCount(0); // Reset retry count on successful fetch
+        
+        // Cache the successful response
+        sessionStorage.setItem('user_vehicle_bookings', JSON.stringify(bookingsData));
+      } catch (err: unknown) {
         console.error('Error fetching bookings:', err);
-        setError('Failed to load your bookings. Please try again later.');
+        
+        if (!isMounted) return;
+
+        const error = err as ApiError;
+        // Handle abort/timeout specifically
+        if (error.name === 'AbortError' || (error.code && error.code === 'ECONNABORTED')) {
+          if (retryCount < MAX_RETRIES) {
+            setRetryCount(prev => prev + 1);
+            setTimeout(() => {
+              setRefreshKey(prev => prev + 1);
+            }, RETRY_DELAY * (retryCount + 1)); // Exponential backoff
+            setError('Request timed out. Retrying...');
+          } else {
+            setError('Failed to load your bookings. Please try again later.');
+          }
+        } else {
+          setError('Failed to load your bookings. Please try again later.');
+        }
+
         // Try to use cached bookings if available
         try {
           const cachedBookings = sessionStorage.getItem('user_vehicle_bookings');
@@ -61,12 +104,21 @@ const MyBookingsTab: React.FC = () => {
           console.error('Error reading cached bookings:', cacheErr);
         }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchBookings();
-  }, [refreshKey]);
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [refreshKey, retryCount]);
 
   const handleCancelBooking = async (bookingId: string | number) => {
     if (!confirm('Are you sure you want to cancel this booking?')) {
@@ -74,12 +126,22 @@ const MyBookingsTab: React.FC = () => {
     }
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.DEFAULT_TIMEOUT);
+
       await marketplaceService.cancelBooking(String(bookingId));
+      clearTimeout(timeoutId);
+      
       toast.success('Booking cancelled successfully');
       refreshBookings();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error cancelling booking:', err);
-      toast.error('Failed to cancel booking. Please try again.');
+      const error = err as ApiError;
+      if (error.name === 'AbortError' || (error.code && error.code === 'ECONNABORTED')) {
+        toast.error('Request timed out. Please try again.');
+      } else {
+        toast.error('Failed to cancel booking. Please try again.');
+      }
     }
   };
 
@@ -177,8 +239,11 @@ const MyBookingsTab: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#FF5733]"></div>
+      <div className="flex flex-col justify-center items-center min-h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#FF5733] mb-4"></div>
+        {retryCount > 0 && (
+          <p className="text-gray-600">Retry attempt {retryCount} of {MAX_RETRIES}...</p>
+        )}
       </div>
     );
   }
