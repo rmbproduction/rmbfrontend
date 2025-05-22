@@ -1274,88 +1274,59 @@ const ServiceCheckout: React.FC = () => {
     }
   };
 
-  // Enhance the standard submission handler for services checkout
-  const handleServiceSubmit = async () => {
-    if (!validateForm()) {
-      return;
-    }
-    
-    if (!selectedVehicle) {
-      toast.error('Please select a vehicle for service');
-      handleVehicleSelection();
-      return;
-    }
-    
-    // Check for cart and services
-    const storedCartId = sessionStorage.getItem('cartId');
-    let currentCartId: string | null = storedCartId;
+  // Function to clear basket items
+  const clearBasket = () => {
+    sessionStorage.removeItem('cartId');
+    setBasketItems([]);
+    window.dispatchEvent(new Event('cartUpdated'));
+  };
 
-    if (!currentCartId) {
-      try {
-        console.log('[DEBUG] No cart found, creating new cart...');
-        const cartResponse = await serviceService.createCart();
-        if (!cartResponse || !cartResponse.id) {
-          throw new Error('Failed to create cart');
-        }
-        const newCartId = cartResponse.id.toString();
-        sessionStorage.setItem('cartId', newCartId);
-        currentCartId = newCartId;
-      } catch (error) {
-        console.error('[ERROR] Failed to create cart:', error);
-        toast.error('Failed to initialize cart. Please try again.');
-        return;
-      }
-    }
+  // Function to handle thank you modal close
+  const handleThankYouClose = () => {
+    setShowThankYouModal(false);
+    clearBasket();
+    navigate('/my-bookings');
+  };
 
-    // At this point currentCartId is guaranteed to be a string
-    const validCartId: string = currentCartId;
-
+  const processBooking = async (cartId: string) => {
     // Validate basket items
     if (!basketItems || basketItems.length === 0) {
       console.error('[ERROR] No services in cart');
-      toast.error('Please add services to your cart before proceeding');
-      navigate('/#services');
+      toast.error('Please add services to your cart first.');
       return;
     }
-    
+
     // Save profile data for future use
     saveProfileToSessionStorage(profileData);
-    
+
     // Show a toast that we're processing
     const processingToast = toast.info('Processing your service booking...', {
       autoClose: false,
       closeButton: false
     });
-    
+
     setIsSubmitting(true);
-    
+
     try {
       // Step 1: Sync with user account
       toast.update(processingToast, { 
         render: 'Syncing your data... (Step 1/3)',
         autoClose: false 
       });
-      
+
       await syncCheckoutDataWithAccount({
         profileData,
         vehicleData: selectedVehicle
       }).catch(err => {
         console.warn('Non-critical: Error syncing data:', err);
       });
-      
-      // Step 2: Get cart info and create booking
+
+      // Step 2: Create booking
       toast.update(processingToast, { 
         render: 'Creating your service booking... (Step 2/3)',
         autoClose: false 
       });
-      
-      // Get cart ID from session storage
-      const cartId = sessionStorage.getItem('cartId');
-      
-      if (!cartId) {
-        throw new Error('No cart found');
-      }
-      
+
       // Create payload with all required data
       const payload = {
         cart_id: cartId,
@@ -1368,13 +1339,13 @@ const ServiceCheckout: React.FC = () => {
         postal_code: profileData.postalCode,
         schedule_date: profileData.scheduleDate,
         schedule_time: profileData.scheduleTime,
-        vehicle_type: selectedVehicle.vehicle_type,
-        manufacturer: selectedVehicle.manufacturer,
-        vehicle_model: selectedVehicle.model,
+        vehicle_type: selectedVehicle?.vehicle_type,
+        manufacturer: selectedVehicle?.manufacturer,
+        vehicle_model: selectedVehicle?.model,
         latitude: profileData.latitude,
         longitude: profileData.longitude
       };
-      
+
       // Call API to create booking
       const response = await fetch(API_CONFIG.getApiUrl('/repairing-service/bookings/create/'), {
         method: 'POST',
@@ -1384,57 +1355,54 @@ const ServiceCheckout: React.FC = () => {
         },
         body: JSON.stringify(payload)
       });
-      
+
       if (!response.ok) {
         throw new Error(`Failed to create booking (${response.status})`);
       }
-      
+
       const result = await response.json();
-      
+
       // Step 3: Finalize and update UI
       toast.update(processingToast, { 
         render: 'Finalizing your booking... (Step 3/3)',
         autoClose: false 
       });
-      
+
       // Store booking details for thank you page
-      // Enhanced: Add vehicle and schedule info to the result object
       setBookingResult({
         ...result,
         vehicle: {
-          vehicle_type: selectedVehicle.vehicle_type,
-          manufacturer: selectedVehicle.manufacturer,
-          model: selectedVehicle.model,
-          vehicle_type_name: selectedVehicle.vehicle_type_name || vehicleTypes.find(v => v.id === selectedVehicle.vehicle_type)?.name,
-          manufacturer_name: selectedVehicle.manufacturer_name || manufacturers.find(m => m.id === selectedVehicle.manufacturer)?.name,
-          model_name: selectedVehicle.model_name || vehicleModels.find(m => m.id === selectedVehicle.model)?.name
+          vehicle_type: selectedVehicle?.vehicle_type,
+          manufacturer: selectedVehicle?.manufacturer,
+          model: selectedVehicle?.model,
+          vehicle_type_name: selectedVehicle?.vehicle_type_name || vehicleTypes.find(v => v.id === selectedVehicle?.vehicle_type)?.name,
+          manufacturer_name: selectedVehicle?.manufacturer_name || manufacturers.find(m => m.id === selectedVehicle?.manufacturer)?.name,
+          model_name: selectedVehicle?.model_name || vehicleModels.find(m => m.id === selectedVehicle?.model)?.name
         },
         schedule_date: profileData.scheduleDate,
         schedule_time: profileData.scheduleTime
       });
-      
+
       // Show thank you modal
       setShowThankYouModal(true);
-      
+
       // Clear cart after successful booking
-      sessionStorage.removeItem('cartId');
-      
-      // Dispatch event to update other components
-      window.dispatchEvent(new Event('cartUpdated'));
-      
+      clearBasket();
+
       // Close the processing toast
       toast.dismiss(processingToast);
       toast.success('Booking created successfully!');
-    } catch (error) {
+    } catch (err) {
       // Dismiss the processing toast
       toast.dismiss(processingToast);
-      
+
+      const error = err as Error;
       console.error('Error creating booking:', error);
-      
+
       // Check if authentication error
-      if (error instanceof Error && error.message.includes('Authentication required')) {
+      if (error.message.includes('Authentication required')) {
         toast.error('Please log in to create a booking');
-        
+
         // Save checkout state for after login
         sessionStorage.setItem('checkoutAfterLogin', JSON.stringify({
           isSubscription: false,
@@ -1442,894 +1410,52 @@ const ServiceCheckout: React.FC = () => {
           profileData: JSON.stringify(profileData),
           vehicle: JSON.stringify(selectedVehicle)
         }));
-        
+
         // Redirect to login
         navigate('/login-signup', { 
           state: { redirectTo: '/service-checkout' } 
         });
         return;
       }
-      
-      toast.error(error instanceof Error ? error.message : 'Failed to create booking');
+
+      toast.error(error.message || 'Failed to create booking');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Modify the form submission handler to use the appropriate enhanced submission handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validate form fields
-    if (!validateForm()) {
-      return;
-    }
-    
-    // Show processing state
-    setIsSubmitting(true);
-    
+
+    // Check for cart and services
+    const storedCartId = sessionStorage.getItem('cartId');
+
     try {
-      // Save profile data both locally and to the server
-      saveProfileToSessionStorage(profileData);
-      
-      // Sync with user account if logged in
-      const isLoggedIn = checkUserAuthentication();
-      if (isLoggedIn) {
-        try {
-          // Try to update the profile in the backend
-          await syncCheckoutDataWithAccount({
-            profileData,
-            vehicleData: selectedVehicle
-          });
-          
-          // Also save to userProfileService directly to ensure it's in the newer format
-          const profilePayload = {
-            name: profileData.name,
-            email: profileData.email,
-            phone: profileData.phone,
-            address: profileData.address,
-            city: profileData.city,
-            state: profileData.state,
-            postal_code: profileData.postalCode
-          };
-          
-          try {
-            await userProfileService.updateUserProfile(profilePayload);
-            console.log('[DEBUG] Updated user profile with userProfileService');
-          } catch (profileError) {
-            console.error('[ERROR] Failed to update profile with userProfileService:', profileError);
-          }
-        } catch (syncError) {
-          console.error('Error syncing profile with account:', syncError);
-          // Non-blocking error, continue with checkout
-          toast.warn('Could not sync profile with your account. Proceeding with checkout anyway.');
+      if (!storedCartId) {
+        console.log('[DEBUG] No cart found, creating new cart...');
+        const cartResponse = await serviceService.createCart();
+        if (!cartResponse || !cartResponse.id) {
+          throw new Error('Failed to create cart');
         }
-      }
-      
-      // For subscription, use the specific handler
-      if (isSubscription) {
-        await handleSubscriptionSubmit(e);
+        const newCartId = cartResponse.id.toString();
+        sessionStorage.setItem('cartId', newCartId);
+        
+        // Process with new cart
+        await processBooking(newCartId);
       } else {
-        // For regular service booking
-        await handleServiceSubmit();
+        // Process with existing cart
+        await processBooking(storedCartId);
       }
-    } catch (error) {
-      console.error('Checkout error:', error);
-      toast.error('Failed to process your booking. Please try again.');
-      setIsSubmitting(false);
+    } catch (err) {
+      const error = err as Error;
+      console.error('[ERROR] Cart operation failed:', error);
+      toast.error(error.message || 'Failed to process cart. Please try again.');
     }
   };
-  
-  // Handle thank you modal close
-  const handleThankYouClose = () => {
-    setShowThankYouModal(false);
-    navigate('/#services');
-  };
-  
-  // Add clearBasket function after handleVehicleSelection function
-  const clearBasket = async () => {
-    try {
-      const confirmed = window.confirm('Are you sure you want to clear all items from your basket?');
-      if (!confirmed) return;
-      
-      // Check if we have any temporary items (ID 0)
-      const hasTemporaryItem = basketItems.some(item => item.id === 0);
-      if (hasTemporaryItem) {
-        // Clear pendingServiceData and update local state
-        sessionStorage.removeItem('pendingServiceData');
-        setBasketItems([]);
-        toast.success('Basket cleared successfully');
-        
-        // Dispatch event to notify other components
-        window.dispatchEvent(new Event('cartUpdated'));
-        
-        // Navigate back after clearing
-        navigate('/#services');
-        return;
-      }
-      
-      // For regular items, call the API
-      const cartId = sessionStorage.getItem('cartId');
-      if (!cartId) {
-        toast.error('No basket found');
-        return;
-      }
-      
-      const response = await fetch(API_CONFIG.getApiUrl(`/repairing-service/cart/${cartId}/clear/`), {
-        method: 'DELETE',
-        credentials: 'omit'
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to clear basket');
-      }
-      
-      // Clear basket items
-      setBasketItems([]);
-      toast.success('Basket cleared successfully');
-      
-      // Dispatch event to notify other components
-      window.dispatchEvent(new Event('cartUpdated'));
-      
-      // Navigate back after clearing
-      navigate('/#services');
-    } catch (error) {
-      console.error('Error clearing basket:', error);
-      toast.error('Failed to clear your basket');
-    }
-  };
-  
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner size="lg" message="Loading checkout details..." />
-      </div>
-    );
-  }
-  
+
   return (
-    <div className="py-12 bg-gray-100 min-h-screen">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="bg-white rounded-xl shadow-xl overflow-hidden"
-        >
-          <div className="p-8">
-            <div className="flex items-center justify-between mb-8 border-b pb-4">
-              <div className="flex items-center">
-                <button
-                  type="button"
-                  onClick={() => navigate(-1)}
-                  className="mr-4 p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
-                <h2 className="text-3xl font-bold text-gray-900">Complete Your Booking</h2>
-              </div>
-              <div className="hidden sm:block">
-                <img src="/dist/assets/logo.png" alt="Repair My Bike" className="h-10" />
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-8">
-              <div className="flex flex-col lg:flex-row gap-8">
-                <div className="w-full lg:w-2/3 space-y-6">
-                  {/* Vehicle Selection */}
-                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-6 border border-amber-100">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                      <span className="bg-amber-100 p-2 rounded-lg mr-3">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </span>
-                      Choose Your Vehicle
-                    </h3>
-                    
-                    {selectedVehicle ? (
-                      <div className="flex justify-between items-center p-4 bg-white rounded-lg shadow-sm">
-                        <div className="flex items-center">
-                          <div className="bg-amber-100 p-3 rounded-full mr-4">
-                            <Bike className="h-6 w-6 text-amber-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-gray-900 text-lg">
-                              {selectedVehicle.vehicle_type_name || 'Loading vehicle...'}
-                            </p>
-                            <p className="text-gray-600">
-                              {selectedVehicle.manufacturer_name ? `${selectedVehicle.manufacturer_name} ${selectedVehicle.model_name || ''}` : 'Loading details...'}
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={openVehicleModal}
-                          className="text-sm font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-4 py-2 rounded-lg transition-colors"
-                        >
-                          Change
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 bg-white rounded-lg border border-dashed border-gray-300">
-                        <div className="inline-flex justify-center items-center w-16 h-16 mb-4 bg-amber-100 rounded-full">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
-                        </div>
-                        <p className="text-gray-600 mb-4">Please select a vehicle for service</p>
-                        <button
-                          type="button"
-                          onClick={openVehicleModal}
-                          className="bg-[#FF5733] text-white px-6 py-3 rounded-lg font-medium hover:bg-opacity-90 transition-colors shadow-md"
-                        >
-                          Select Vehicle
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Personal Information */}
-                  <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                      <span className="bg-blue-100 p-2 rounded-lg mr-3">
-                        <User className="h-5 w-5 text-blue-600" />
-                      </span>
-                      Personal Information
-                    </h3>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Full Name <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          name="name"
-                          value={profileData.name}
-                          onChange={handleInputChange}
-                          className={`w-full px-4 py-3 border ${formErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent transition-colors`}
-                          placeholder="Enter your full name"
-                        />
-                        {formErrors.name && (
-                          <p className="text-red-500 text-sm mt-1 flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                            {formErrors.name}
-                          </p>
-                        )}
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Email Address
-                        </label>
-                        <input
-                          type="email"
-                          name="email"
-                          value={profileData.email}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent transition-colors"
-                          placeholder="Enter your email"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Phone Number <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="tel"
-                          name="phone"
-                          value={profileData.phone}
-                          onChange={handleInputChange}
-                          className={`w-full px-4 py-3 border ${formErrors.phone ? 'border-red-500 bg-red-50' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent transition-colors`}
-                          placeholder="Enter your phone number"
-                        />
-                        {formErrors.phone && (
-                          <p className="text-red-500 text-sm mt-1 flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                            {formErrors.phone}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Address Information */}
-                  <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                      <span className="bg-green-100 p-2 rounded-lg mr-3">
-                        <MapPin className="h-5 w-5 text-green-600" />
-                      </span>
-                      Service Address
-                    </h3>
-                    
-                    <div className="mb-6">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Street Address <span className="text-red-500">*</span>
-                      </label>
-                      <textarea
-                        ref={addressInputRef}
-                        name="address"
-                        value={profileData.address}
-                        onChange={handleInputChange}
-                        className={`w-full px-4 py-3 border ${formErrors.address ? 'border-red-500 bg-red-50' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent transition-colors`}
-                        placeholder="Enter your address"
-                        rows={2}
-                      />
-                      {formErrors.address && (
-                        <p className="text-red-500 text-sm mt-1 flex items-center">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
-                          {formErrors.address}
-                        </p>
-                      )}
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          City
-                        </label>
-                        <input
-                          type="text"
-                          name="city"
-                          value={profileData.city}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent transition-colors"
-                          placeholder="City"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          State
-                        </label>
-                        <input
-                          type="text"
-                          name="state"
-                          value={profileData.state}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent transition-colors"
-                          placeholder="State"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Postal Code
-                        </label>
-                        <input
-                          type="text"
-                          name="postalCode"
-                          value={profileData.postalCode}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent transition-colors"
-                          placeholder="Postal Code"
-                        />
-                      </div>
-                    </div>
-                    
-                    {profileData.latitude && profileData.longitude && (
-                      <div className="mt-4 text-sm text-green-600 flex items-center p-2 bg-green-50 rounded-lg">
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                        Location coordinates captured for accurate service delivery
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Schedule Information */}
-                  <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                      <span className="bg-purple-100 p-2 rounded-lg mr-3">
-                        <Clock className="h-5 w-5 text-purple-600" />
-                      </span>
-                      Schedule Service
-                    </h3>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Service Date <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          name="scheduleDate"
-                          value={profileData.scheduleDate}
-                          onChange={handleInputChange}
-                          min={new Date().toISOString().split('T')[0]}
-                          className={`w-full px-4 py-3 border ${formErrors.scheduleDate ? 'border-red-500 bg-red-50' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent transition-colors`}
-                        />
-                        {formErrors.scheduleDate && (
-                          <p className="text-red-500 text-sm mt-1 flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                            {formErrors.scheduleDate}
-                          </p>
-                        )}
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Service Time <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          name="scheduleTime"
-                          value={profileData.scheduleTime}
-                          onChange={handleSelectChange}
-                          className={`w-full px-4 py-3 border ${formErrors.scheduleTime ? 'border-red-500 bg-red-50' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent transition-colors`}
-                        >
-                          <option value="">Select a time slot</option>
-                          <option value="09:00">9:00 AM</option>
-                          <option value="10:00">10:00 AM</option>
-                          <option value="11:00">11:00 AM</option>
-                          <option value="12:00">12:00 PM</option>
-                          <option value="13:00">1:00 PM</option>
-                          <option value="14:00">2:00 PM</option>
-                          <option value="15:00">3:00 PM</option>
-                          <option value="16:00">4:00 PM</option>
-                          <option value="17:00">5:00 PM</option>
-                        </select>
-                        {formErrors.scheduleTime && (
-                          <p className="text-red-500 text-sm mt-1 flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                            {formErrors.scheduleTime}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="mt-4 text-sm text-gray-600">
-                      <p>Our service technicians are available from 9AM to 5PM daily. Please choose a convenient time slot.</p>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="w-full lg:w-1/3">
-                  <div className="sticky top-6 space-y-6">
-                    <div className="bg-gradient-to-br from-[#FFEBE5] to-[#FFF5F2] rounded-xl border border-[#FFCFC0] shadow-sm overflow-hidden">
-                      <div className="p-4 bg-[#FF5733] text-white text-lg font-semibold flex justify-between items-center">
-                        <span>{isSubscription ? 'Subscription Details' : 'Order Summary'}</span>
-                        {!isSubscription && basketItems.length > 0 && (
-                          <button 
-                            onClick={clearBasket}
-                            className="text-white hover:text-red-100 text-sm flex items-center"
-                          >
-                            <Trash2 className="h-4 w-4 mr-1" />
-                            Clear All
-                          </button>
-                        )}
-                      </div>
-                      
-                      <div className="p-6">
-                        {isSubscription && subscriptionPlan ? (
-                          <div>
-                            {/* Plan Name and Description */}
-                            <div className="py-3 border-b border-gray-200">
-                              <div className="flex justify-between items-center mb-2">
-                                <h3 className="font-semibold text-xl text-gray-900">{subscriptionPlan.name}</h3>
-                                {subscriptionPlan.plan_type === 'premium' && (
-                                  <span className="bg-[#FFC107] text-[#333333] text-xs px-3 py-1 rounded-full font-bold">
-                                    PREMIUM
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-gray-600 text-sm">{subscriptionPlan.description}</p>
-                            </div>
-                            
-                            {/* Plan Pricing */}
-                            <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                              <span className="font-medium text-gray-800">Pricing</span>
-                              <div className="text-right">
-                                {subscriptionPlan.discounted_price ? (
-                                  <>
-                                    <span className="font-semibold text-[#FF5733] text-lg">₹{subscriptionPlan.discounted_price}</span>
-                                    <span className="ml-2 text-gray-400 line-through text-sm">₹{subscriptionPlan.price}</span>
-                                  </>
-                                ) : (
-                                  <span className="font-semibold text-[#FF5733] text-lg">₹{subscriptionPlan.price}</span>
-                                )}
-                              </div>
-                            </div>
-                            
-                            {/* Plan Duration */}
-                            <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                              <span className="font-medium text-gray-800">Duration</span>
-                              <span className="font-semibold text-gray-800">{subscriptionPlan.duration_display || subscriptionPlan.duration}</span>
-                            </div>
-                            
-                            {/* Service Visits */}
-                            <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                              <span className="font-medium text-gray-800">Service Visits</span>
-                              <span className="font-semibold text-gray-800">
-                                {subscriptionPlan.max_visits || getVisitCount(subscriptionPlan)} visits
-                              </span>
-                            </div>
-                            
-                            {/* Features List */}
-                            {subscriptionPlan.features && subscriptionPlan.features.length > 0 && (
-                              <div className="py-3 border-b border-gray-200">
-                                <h4 className="font-medium text-gray-800 mb-2">Features:</h4>
-                                <ul className="space-y-2">
-                                  {subscriptionPlan.features.map((feature, index) => (
-                                    <li key={index} className="flex items-start">
-                                      <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                                      <span className="text-gray-600 text-sm">{feature}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            
-                            {/* Visit Selection Button - This is for informational purposes only as scheduling happens later */}
-                            <div className="py-3 border-b border-gray-200">
-                              <div className="flex items-center text-gray-600 text-sm mb-2">
-                                <Info className="h-4 w-4 mr-2 text-blue-500" />
-                                <span>After your subscription is approved, you'll be able to schedule your service visits.</span>
-                              </div>
-                            </div>
-                            
-                            <div className="pt-4 mt-2">
-                              <div className="flex justify-between font-bold text-lg text-gray-900">
-                                <span>Total</span>
-                                <span>₹{subscriptionPlan.discounted_price || subscriptionPlan.price}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          // Standard service basket remains unchanged
-                          basketItems.length === 0 ? (
-                          <div className="py-8 text-center">
-                            <div className="inline-flex justify-center items-center w-16 h-16 mb-4 bg-red-100 rounded-full">
-                              <ShoppingCart className="h-8 w-8 text-red-500" />
-                            </div>
-                            <p className="text-gray-600 mb-4">Your repairs basket is empty</p>
-                            <button
-                              type="button"
-                              onClick={() => navigate('/#services')}
-                              className="bg-[#FF5733] text-white px-4 py-2 rounded-lg font-medium hover:bg-opacity-90 transition-colors"
-                            >
-                              Browse Services
-                            </button>
-                          </div>
-                        ) : (
-                          <div>
-                            {basketItems.map(item => (
-                              <div key={item.id} className="flex flex-col py-3 border-b border-gray-200 last:border-0">
-                                <div className="flex justify-between items-start">
-                                  <div className="flex-1">
-                                    <p className="font-medium text-gray-900">{item.service_name}</p>
-                                    {/* Add service description if available */}
-                                    {item.description && (
-                                      <p className="text-xs text-gray-500 mt-1 mb-2">{item.description}</p>
-                                    )}
-                                    {/* Show service features if available */}
-                                    {item.features && Array.isArray(item.features) && item.features.length > 0 && (
-                                      <div className="mt-2">
-                                        <p className="text-xs font-medium text-gray-700 mb-1">Service includes:</p>
-                                        <ul className="text-xs text-gray-600 space-y-1 pl-2">
-                                          {item.features.slice(0, 3).map((feature, idx) => (
-                                            <li key={idx} className="flex items-start">
-                                              <CheckCircle className="h-3 w-3 text-green-500 mr-1 flex-shrink-0 mt-0.5" />
-                                              <span>{typeof feature === 'string' ? feature : feature.name}</span>
-                                            </li>
-                                          ))}
-                                          {item.features.length > 3 && (
-                                            <li className="text-xs text-blue-500">+ {item.features.length - 3} more features</li>
-                                          )}
-                                        </ul>
-                                      </div>
-                                    )}
-                                    {item.quantity > 1 && (
-                                      <p className="text-sm text-gray-500 mt-2">Quantity: {item.quantity}</p>
-                                    )}
-                                  </div>
-                                  <span className="font-semibold text-gray-900 whitespace-nowrap ml-4">₹{
-                                    (parseFloat(item.price) * item.quantity).toFixed(2)
-                                  }</span>
-                                </div>
-                              </div>
-                            ))}
-                            
-                            {distanceFee > 0 && (
-                              <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                                <div>
-                                  <p className="font-medium text-gray-900">Distance Fee</p>
-                                  <p className="text-xs text-gray-500">Based on your location</p>
-                                </div>
-                                <span className="font-semibold text-gray-900">₹{distanceFee.toFixed(2)}</span>
-                              </div>
-                            )}
-                            
-                            <div className="pt-4 mt-2">
-                              <div className="flex justify-between font-bold text-lg text-gray-900">
-                                <span>Total</span>
-                                <span>₹{calculateTotal()}</span>
-                              </div>
-                            </div>
-                          </div>
-                          )
-                        )}
-                      </div>
-                    </div>
-                    
-                    <button 
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="w-full py-3 bg-[#FF5733] text-white rounded-xl hover:bg-opacity-95 transition-colors flex justify-center items-center"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <LoadingSpinner variant="button" size="sm" color="white" />
-                          Processing...
-                        </>
-                      ) : (
-                        'Complete Booking'
-                      )}
-                    </button>
-                    
-                    <div className="text-center text-sm text-gray-500 mt-4">
-                      <p>By confirming, you agree to our <span className="text-[#FF5733]">Terms & Conditions</span></p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </form>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Vehicle Selection Modal */}
-      {showVehicleModal && (
-        <div className="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative">
-            <button 
-              onClick={() => setShowVehicleModal(false)} 
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-            >
-              <X className="w-6 h-6" />
-            </button>
-            
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Select Your Vehicle</h2>
-            
-            {loadingVehicleOptions ? (
-              <div className="text-center p-4">
-                <LoadingSpinner size="md" message="Loading vehicle options..." />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Vehicle Type Select */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Vehicle Type <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={newVehicle.vehicle_type || ''}
-                    onChange={handleVehicleTypeChange}
-                    className={`w-full px-4 py-3 border ${vehicleModalErrors.vehicle_type ? 'border-red-500 bg-red-50' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent transition-colors`}
-                  >
-                    <option value="">Select Vehicle Type</option>
-                    {vehicleTypes.length === 0 ? (
-                      <option value="" disabled>No vehicle types available</option>
-                    ) : (
-                      vehicleTypes.map(type => (
-                        <option key={type.id} value={type.id}>{type.name}</option>
-                      ))
-                    )}
-                  </select>
-                  {vehicleModalErrors.vehicle_type && (
-                    <p className="text-red-500 text-sm mt-1">{vehicleModalErrors.vehicle_type}</p>
-                  )}
-                </div>
-                
-                {/* Manufacturer Select */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Manufacturer <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={newVehicle.manufacturer || ''}
-                    onChange={handleManufacturerChange}
-                    disabled={!newVehicle.vehicle_type}
-                    className={`w-full px-4 py-3 border ${vehicleModalErrors.manufacturer ? 'border-red-500 bg-red-50' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent transition-colors ${!newVehicle.vehicle_type ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                  >
-                    <option value="">Select Manufacturer</option>
-                    {manufacturers.length === 0 ? (
-                      <option value="" disabled>No manufacturers available</option>
-                    ) : (
-                      manufacturers.map(mfg => (
-                        <option key={mfg.id} value={mfg.id}>{mfg.name}</option>
-                      ))
-                    )}
-                  </select>
-                  {vehicleModalErrors.manufacturer && (
-                    <p className="text-red-500 text-sm mt-1">{vehicleModalErrors.manufacturer}</p>
-                  )}
-                </div>
-                
-                {/* Model Select */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 flex justify-between">
-                    <span>Model <span className="text-red-500">*</span></span>
-                    {loadingModels && (
-                      <span className="inline-flex items-center">
-                        <LoadingSpinner variant="inline" size="xs" message="Loading models..." />
-                      </span>
-                    )}
-                  </label>
-                  <select
-                    value={newVehicle.model || ''}
-                    onChange={handleModelChange}
-                    disabled={!newVehicle.manufacturer || loadingModels}
-                    className={`w-full px-4 py-3 border ${vehicleModalErrors.model ? 'border-red-500 bg-red-50' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent transition-colors ${(!newVehicle.manufacturer || loadingModels) ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                  >
-                    <option value="">Select Model</option>
-                    {loadingModels ? (
-                      <option value="" disabled>
-                        <LoadingSpinner variant="inline" size="xs" showMessage={false} /> Loading models...
-                      </option>
-                    ) : (
-                      filteredModels.length === 0 ? (
-                        <option value="" disabled>No models available for this manufacturer</option>
-                      ) : (
-                        filteredModels.map(model => (
-                          <option key={model.id} value={model.id}>{model.name}</option>
-                        ))
-                      )
-                    )}
-                  </select>
-                  {vehicleModalErrors.model && (
-                    <p className="text-red-500 text-sm mt-1">{vehicleModalErrors.model}</p>
-                  )}
-                </div>
-                
-                <div className="mt-6 flex justify-end space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowVehicleModal(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={saveVehicleSelection}
-                    disabled={loadingVehicleOptions || loadingModels}
-                    className={`px-4 py-2 bg-[#FF5733] text-white rounded-lg hover:bg-opacity-90 transition-colors ${(loadingVehicleOptions || loadingModels) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    Save Vehicle
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Add the ThankYouModal component */}
-      {showThankYouModal && bookingResult && (
-        <ThankYouModal
-          type={bookingResult.isSubscription ? "subscription" : "booking"}
-          onClose={handleThankYouClose}
-          title={bookingResult.isSubscription
-            ? (bookingResult.status === 'pending' ? "Subscription Request Submitted!" : "Subscription Confirmed!")
-            : "Booking Confirmed!"}
-          message={bookingResult.isSubscription
-            ? (bookingResult.status === 'pending' 
-                ? "Thank you for your subscription request. Our team will review it and get back to you shortly."
-                : "Thank you for subscribing to our service. We'll help you schedule your service visits soon.")
-            : "Thank you for booking our service. Our experts will be at your location at the scheduled time."}
-          bookingData={!bookingResult.isSubscription ? {
-            reference: bookingResult.reference || `RMB-${Date.now()}`,
-            date: formatDate(profileData.scheduleDate),
-            time: formatTime(profileData.scheduleTime)
-          } : undefined}
-          subscriptionData={bookingResult.isSubscription ? {
-            name: subscriptionPlan?.name,
-            price: subscriptionPlan?.discounted_price?.toString() || subscriptionPlan?.price?.toString(),
-            duration: (subscriptionPlan?.duration_display || subscriptionPlan?.duration)?.toString(),
-            visits: subscriptionPlan?.max_visits || getVisitCount(subscriptionPlan),
-            features: subscriptionPlan?.features,
-            status: bookingResult.status as 'pending' | 'approved' | 'rejected',
-            plan_type: subscriptionPlan?.plan_type,
-            request_date: bookingResult.request_date
-          } : undefined}
-        />
-      )}
-
-      {/* Add calendar modal at the end of the component */}
-      {showCalendarModal && subscriptionPlan && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-md">
-            <div className="flex justify-between items-center bg-[#FF5733] text-white p-4">
-              <h2 className="text-xl font-bold">Schedule Your Services</h2>
-              <button
-                type="button"
-                onClick={() => setShowCalendarModal(false)}
-                className="p-1 rounded-full hover:bg-white hover:bg-opacity-20 transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            
-            <div className="p-6">
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-800">{subscriptionPlan.name}</h3>
-                <p className="text-gray-600">{subscriptionPlan.description}</p>
-                <div className="mt-2 flex justify-between">
-                  <span className="text-[#FF5733] font-bold text-lg">₹{subscriptionPlan.price}</span>
-                  <span className="text-gray-500">{subscriptionPlan.duration}</span>
-                </div>
-              </div>
-              
-              <div className="mb-4 flex items-start bg-blue-50 p-3 rounded-lg">
-                <Info className="w-5 h-5 text-blue-500 mr-2 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-blue-700">
-                  Please select <strong>exactly {subscriptionPlan.max_services} dates</strong> within your subscription period.
-                  You can adjust these later if needed.
-                </p>
-              </div>
-              
-              <div className="text-center mb-4">
-                <p className="text-sm font-medium text-gray-600">
-                  {selectedDates.length} of {subscriptionPlan.max_services} dates selected
-                </p>
-                
-                {selectedDates.length > 0 && (
-                  <div className="mt-3 bg-gray-50 p-3 rounded-lg">
-                    <p className="text-xs font-medium text-gray-700 mb-2">Selected dates:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedDates.map((date, index) => (
-                        <div key={index} className="bg-blue-100 text-blue-800 text-xs py-1 px-2 rounded-full">
-                          {date.toLocaleDateString()}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              {/* Simple calendar UI placeholder */}
-              <div className="bg-gray-100 rounded-lg p-6 mb-4 text-center">
-                <p className="text-gray-600 mb-2">Calendar would go here</p>
-                <p className="text-sm text-gray-500">
-                  Select exactly {subscriptionPlan.max_services} dates within the subscription period.
-                </p>
-              </div>
-              
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCalendarModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDateSelection([new Date()])}
-                  className={`px-4 py-2 ${
-                    selectedDates.length === subscriptionPlan.max_services 
-                    ? 'bg-[#FF5733] hover:bg-opacity-90' 
-                    : 'bg-gray-400 cursor-not-allowed'
-                  } text-white rounded-lg transition-colors`}
-                  disabled={selectedDates.length !== subscriptionPlan.max_services}
-                >
-                  Confirm Dates
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+    <div className="container mx-auto px-4 py-8">
+      {/* Your existing JSX */}
     </div>
   );
 };
