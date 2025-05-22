@@ -158,31 +158,39 @@ export const serviceService = {
         
         const response = await fetch(url, {
           method: 'POST',
-          ...defaultOptions,
           headers: {
-            ...defaultOptions.headers,
+            'Accept': 'application/json',
             'Content-Type': 'application/json'
-          }
+          },
+          credentials: 'omit'
         });
         
         if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`[API] Cart creation failed with status ${response.status}:`, errorText);
           throw new Error(`API request failed: ${response.status} ${response.statusText}`);
         }
         
         const data = await response.json();
-        if (!data.id) {
+        console.log('[API] Cart creation response:', data);
+        
+        if (!data || !data.id) {
+          console.error('[API] Invalid cart data received:', data);
           throw new Error('Invalid cart data received from server');
         }
         
+        // Store cart ID in session storage
+        sessionStorage.setItem('cartId', data.id.toString());
+        
         return data;
       } catch (error) {
+        console.error(`[API] Cart creation attempt ${4 - retries} failed:`, error);
         retries--;
         if (retries === 0) {
-          console.error('Failed to create cart after all retries:', error);
           throw new Error('Failed to create cart. Please try again.');
         }
-        // Wait before retrying (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, (3 - retries) * 1000));
+        // Exponential backoff
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, 3 - retries) * 1000));
       }
     }
     throw new Error('Failed to create cart after all retries');

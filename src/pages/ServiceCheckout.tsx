@@ -20,7 +20,7 @@ import { ArrowLeft, User, MapPin, Phone, Clock, CheckCircle, AlertTriangle, Navi
 import { checkUserAuthentication } from '../utils/auth';
 import ThankYouModal from '../components/ThankYouModal';
 import { SubscriptionPlan } from '../models/subscription-plan';
-import apiService, { userProfileService } from '../services/apiService';
+import apiService, { userProfileService, serviceService } from '../services/apiService';
 import { API_CONFIG } from '../config/api.config';
 import LoadingSpinner from '../components/LoadingSpinner';
 import MultiStepVehicleSelector from '../components/SelectVehicle';
@@ -1286,8 +1286,35 @@ const ServiceCheckout: React.FC = () => {
       return;
     }
     
-    if (basketItems.length === 0) {
-      toast.error('Your cart is empty. Please add services before checkout.');
+    // Check for cart and services
+    const storedCartId = sessionStorage.getItem('cartId');
+    let currentCartId: string | null = storedCartId;
+
+    if (!currentCartId) {
+      try {
+        console.log('[DEBUG] No cart found, creating new cart...');
+        const cartResponse = await serviceService.createCart();
+        if (!cartResponse || !cartResponse.id) {
+          throw new Error('Failed to create cart');
+        }
+        const newCartId = cartResponse.id.toString();
+        sessionStorage.setItem('cartId', newCartId);
+        currentCartId = newCartId;
+      } catch (error) {
+        console.error('[ERROR] Failed to create cart:', error);
+        toast.error('Failed to initialize cart. Please try again.');
+        return;
+      }
+    }
+
+    // At this point currentCartId is guaranteed to be a string
+    const validCartId: string = currentCartId;
+
+    // Validate basket items
+    if (!basketItems || basketItems.length === 0) {
+      console.error('[ERROR] No services in cart');
+      toast.error('Please add services to your cart before proceeding');
+      navigate('/#services');
       return;
     }
     

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { X, Phone, AlertCircle } from 'lucide-react';
 import userProfileDataService from '../services/userProfileDataService';
 import { API_CONFIG } from '../config/api.config';
 import { toast } from 'react-toastify';
@@ -26,7 +26,23 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
   bookingError,
   bookingLoading
 }) => {
-  // Pre-fill the form with user's phone number immediately when the modal opens
+  const [validationError, setValidationError] = useState<string | null>(null);
+  
+  // Handle escape key
+  const handleEscapeKey = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onClose();
+    }
+  }, [onClose]);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscapeKey);
+      return () => document.removeEventListener('keydown', handleEscapeKey);
+    }
+  }, [isOpen, handleEscapeKey]);
+
+  // Pre-fill the form with user's phone number
   useEffect(() => {
     if (isOpen) {
       // Immediately try to grab the phone number from multiple sources
@@ -81,7 +97,6 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
           // Limit length
           cleanPhone = cleanPhone.slice(0, 15);
           
-          console.log('Setting formatted phone number in booking modal:', cleanPhone);
           const mockEvent = {
             target: {
               name: 'contact_number',
@@ -90,8 +105,6 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
           } as React.ChangeEvent<HTMLInputElement>;
           
           onBookingInputChange(mockEvent);
-        } else {
-          console.warn('No phone number found in any storage location');
         }
       } catch (error) {
         console.error('Error retrieving phone number for booking modal:', error);
@@ -101,11 +114,11 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Format phone number as user types
+  // Format phone number as user types with better UX
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
     
-    // Remove all non-numeric characters except +
+    // Remove all non-numeric characters except + at the start
     value = value.replace(/[^\d+]/g, '');
     
     // Ensure only one + at start
@@ -121,6 +134,9 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
     // Limit length to 15 characters
     value = value.slice(0, 15);
     
+    // Clear validation error when user types
+    setValidationError(null);
+    
     // Create a synthetic event with the formatted value
     const syntheticEvent = {
       ...e,
@@ -134,68 +150,116 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
     onBookingInputChange(syntheticEvent);
   };
 
-  // Add phone number validation
-  const isValidPhoneNumber = (phone: string): boolean => {
+  // Enhanced phone number validation
+  const validatePhoneNumber = (phone: string): boolean => {
     // Must start with + and have 10-15 digits
     const phoneRegex = /^\+\d{10,14}$/;
-    return phoneRegex.test(phone);
+    const isValid = phoneRegex.test(phone);
+    
+    if (!isValid) {
+      if (!phone.startsWith('+')) {
+        setValidationError('Phone number must start with country code (e.g., +91)');
+      } else if (phone.length < 11) {
+        setValidationError('Phone number is too short');
+      } else if (phone.length > 15) {
+        setValidationError('Phone number is too long');
+      } else {
+        setValidationError('Please enter a valid phone number');
+      }
+    } else {
+      setValidationError(null);
+    }
+    
+    return isValid;
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validatePhoneNumber(bookingData.contact_number)) {
+      return;
+    }
+    onSubmit(e);
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div 
+      className="fixed inset-0 z-50 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="booking-modal-title"
+    >
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-          <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
-        </div>
+        {/* Backdrop */}
+        <div 
+          className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" 
+          aria-hidden="true"
+          onClick={onClose}
+        />
 
         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
           <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium text-gray-900">Book Vehicle</h3>
+              <h3 
+                id="booking-modal-title"
+                className="text-lg font-medium text-gray-900 flex items-center"
+              >
+                Book Vehicle
+              </h3>
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-500"
+                className="text-gray-400 hover:text-gray-500 transition-colors p-2 rounded-full hover:bg-gray-100"
+                aria-label="Close modal"
               >
                 <X className="h-6 w-6" />
               </button>
             </div>
 
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              if (!isValidPhoneNumber(bookingData.contact_number)) {
-                toast.error('Please enter a valid phone number (e.g., +911234567890)');
-                return;
-              }
-              onSubmit(e);
-            }}>
-              <div className="mb-4">
-                <label htmlFor="contact_number" className="block text-sm font-medium text-gray-700 mb-1">
-                  Contact Number*
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label 
+                  htmlFor="contact_number" 
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Contact Number <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="tel"
-                  id="contact_number"
-                  name="contact_number"
-                  value={bookingData.contact_number}
-                  onChange={handlePhoneChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
-                  placeholder="+91XXXXXXXXXX"
-                  required
-                  pattern="\\+[0-9]{10,14}"
-                  title="Please enter a valid phone number starting with + followed by 10-14 digits"
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Phone className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="tel"
+                    id="contact_number"
+                    name="contact_number"
+                    value={bookingData.contact_number}
+                    onChange={handlePhoneChange}
+                    className={`w-full pl-10 pr-3 py-2 border ${
+                      validationError || bookingError ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                    } rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] transition-colors`}
+                    placeholder="+91XXXXXXXXXX"
+                    required
+                    aria-invalid={!!validationError}
+                    aria-describedby={validationError ? "phone-error" : undefined}
+                  />
+                </div>
+                {(validationError || bookingError) && (
+                  <div 
+                    id="phone-error" 
+                    className="mt-1 flex items-center text-sm text-red-600"
+                  >
+                    <AlertCircle className="h-4 w-4 mr-1" />
+                    <span>{validationError || bookingError}</span>
+                  </div>
+                )}
                 <p className="mt-1 text-xs text-gray-500">
                   Format: +91XXXXXXXXXX (must start with country code)
                 </p>
-                {bookingData.contact_number && !isValidPhoneNumber(bookingData.contact_number) && (
-                  <p className="mt-1 text-xs text-red-500">
-                    Please enter a valid phone number with country code (e.g., +911234567890)
-                  </p>
-                )}
               </div>
 
-              <div className="mb-4">
-                <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
+              <div>
+                <label 
+                  htmlFor="notes" 
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
                   Additional Notes
                 </label>
                 <textarea
@@ -204,22 +268,16 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
                   value={bookingData.notes}
                   onChange={onBookingInputChange}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] transition-colors"
                   placeholder="Any specific requirements or questions..."
                 />
               </div>
 
-              {bookingError && (
-                <div className="mb-4 p-2 bg-red-50 border border-red-200 rounded-md">
-                  <p className="text-sm text-red-600">{bookingError}</p>
-                </div>
-              )}
-
               <div className="mt-5 sm:mt-6">
                 <button
                   type="submit"
-                  disabled={bookingLoading}
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-[#FF5733] text-base font-medium text-white hover:bg-[#ff4019] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FF5733] sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={bookingLoading || !!validationError}
+                  className="w-full inline-flex justify-center items-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-[#FF5733] text-base font-medium text-white hover:bg-[#ff4019] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FF5733] sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   {bookingLoading ? (
                     <>
@@ -242,4 +300,4 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
   );
 };
 
-export default BookingVehicleModal; 
+export default BookingVehicleModal;
