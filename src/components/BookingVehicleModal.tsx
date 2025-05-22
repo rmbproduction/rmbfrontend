@@ -104,19 +104,8 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
     
-    // Remove all non-numeric characters except '+'
-    value = value.replace(/[^\d+]/g, '');
-    
-    // Ensure only one '+' at the start
-    if (value.includes('+')) {
-      value = '+' + value.replace(/\+/g, '');
-    }
-    
-    // Limit length to 15 characters
-    value = value.slice(0, 15);
-    
-    // Validate the phone number format
-    const isValid = API_CONFIG.validatePhone(value);
+    // Allow more characters during typing
+    value = value.replace(/[^\d\+\-\s]/g, '');
     
     // Create a synthetic event with the formatted value
     const syntheticEvent = {
@@ -163,12 +152,10 @@ const BookingVehicleModal: React.FC<BookingVehicleModalProps> = ({
                   onChange={handlePhoneChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
                   placeholder="+91XXXXXXXXXX"
-                  pattern="\\+?[0-9]{10,15}"
-                  title="Phone number must be between 10-15 digits with optional + prefix"
                   required
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Format: +91XXXXXXXXXX (10-15 digits with optional + prefix)
+                  Format: +91XXXXXXXXXX or 816-812-1711
                 </p>
               </div>
 

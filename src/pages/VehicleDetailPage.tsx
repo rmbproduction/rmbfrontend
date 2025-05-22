@@ -684,28 +684,20 @@ const VehicleDetailPage = () => {
     e.preventDefault();
     if (!vehicle || !id) return;
     
-    // Enhanced phone number validation
+    // Get the raw phone number
     const phone = bookingData.contact_number.trim();
     
-    // Remove any spaces or special characters except +
-    let cleanPhone = phone.replace(/[^\d+]/g, '');
+    // Clean the phone number - remove all non-numeric characters
+    const cleanPhone = phone.replace(/[^\d]/g, '');
     
-    // Ensure it starts with +
-    if (!cleanPhone.startsWith('+')) {
-      cleanPhone = '+' + cleanPhone;
-    }
-    
-    // Ensure only one + at start
-    cleanPhone = '+' + cleanPhone.replace(/\+/g, '');
-    
-    // Limit length
-    cleanPhone = cleanPhone.slice(0, 15);
-    
-    // Validate using the centralized validator
-    if (!API_CONFIG.validatePhone(cleanPhone)) {
-      setBookingError('Please enter a valid phone number (10-15 digits with optional + prefix)');
+    // Validate length after cleaning
+    if (cleanPhone.length < 10 || cleanPhone.length > 15) {
+      setBookingError('Phone number must be between 10-15 digits');
       return;
     }
+    
+    // Format for API - add + prefix if not international
+    const formattedPhone = phone.startsWith('+') ? phone : `+${cleanPhone}`;
     
     setBookingLoading(true);
     setBookingError(null);
@@ -719,7 +711,7 @@ const VehicleDetailPage = () => {
         
         const enhancedBookingData = {
           ...bookingData,
-          contact_number: cleanPhone,
+          contact_number: formattedPhone,
           original_front_image_url: originalVehicleData.front_image_url,
           referrer: window.location.pathname
         };
@@ -730,7 +722,7 @@ const VehicleDetailPage = () => {
         
         // Save the validated phone number to user profile
         userProfileDataService.saveProfileData({
-          phone: cleanPhone
+          phone: formattedPhone
         });
         
         toast.success('Booking request submitted successfully! Our team will contact you shortly.');
