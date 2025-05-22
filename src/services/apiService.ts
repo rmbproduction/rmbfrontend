@@ -105,7 +105,7 @@ export const serviceService = {
   // Get services by category ID
   getServicesByCategory: async (categoryId: string) => {
     try {
-      const url = `${API_BASE}/service-categories/${categoryId}/`;
+      const url = `${API_BASE}/services/?category_id=${categoryId}`;
       console.log(`[API] Fetching services by category ID from: ${url}`);
       
       const response = await fetch(url, {
