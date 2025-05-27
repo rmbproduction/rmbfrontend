@@ -406,7 +406,7 @@ export const apiService = {
     updateCartItem: (cartId: number, itemId: number, quantity: number) => 
       axiosInstance.post(API_ENDPOINTS.services.updateCartItem(cartId), { cart_item_id: itemId, quantity }),
     clearCart: (cartId: number) => 
-      axiosInstance.post(API_ENDPOINTS.services.clearCart(cartId)),
+      axiosInstance.delete(API_ENDPOINTS.services.clearCart(cartId)),
     removeCartItem: (itemId: number) => 
       axiosInstance.delete(API_ENDPOINTS.services.removeCartItem(itemId)),
     

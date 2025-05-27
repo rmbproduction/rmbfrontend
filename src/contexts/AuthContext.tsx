@@ -116,13 +116,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (!refreshToken) {
         // If no refresh token, just clear local state
+        console.log('No refresh token found, clearing local state only');
         TokenManager.clearTokens();
         queryClient.clear();
         return;
-    }
+      }
 
       // Try to logout from server first
-      await logoutMutation.mutateAsync({ refresh_token: refreshToken });
+      await logoutMutation.mutateAsync({ 
+        refresh_token: refreshToken.replace('Bearer ', '') 
+      });
       
       // Only clear local state after successful server logout
       TokenManager.clearTokens();
@@ -135,11 +138,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       TokenManager.clearTokens();
       queryClient.clear();
 
-      const message = error.response?.data?.detail || 
-                     error.response?.data?.error || 
-                     error.message || 
-                     'Logout failed';
-      toast.error(message);
+      // Don't show error toast since we're logging out anyway
+      console.log('Logged out locally (server logout failed)');
     }
   }, [logoutMutation, queryClient]);
 
