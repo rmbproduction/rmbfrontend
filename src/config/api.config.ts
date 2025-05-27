@@ -1,13 +1,27 @@
 import axios from 'axios';
+import TokenManager from '../services/tokenManager';
 
 // Base configuration
-const API_BASE_URL = import.meta.env.DEV 
-  ? '/api'  // Use relative path in development
-  : (import.meta.env.VITE_API_BASE_URL || 'https://repairmybike.up.railway.app/api');
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://repairmybike.up.railway.app/api';
 
 // Export API configuration for components that need it
 export const API_CONFIG = {
   baseURL: API_BASE_URL,
+  withCredentials: true, // Enable sending cookies in cross-origin requests
+};
+
+// CDN Configuration
+export const CDN_CONFIG = {
+  baseURL: 'https://api.cloudinary.com/v1_1',
+  uploadPreset: import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'rmb_preset',
+  cloudName: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dz81bjuea',
+  apiKey: import.meta.env.VITE_CLOUDINARY_API_KEY,
+  apiSecret: import.meta.env.VITE_CLOUDINARY_API_SECRET,
+  folders: {
+    photos: 'vehicle_photos',
+    documents: 'vehicle_documents',
+    models: 'vehicle_models'
+  }
 };
 
 // Create axios instance with default config
@@ -15,63 +29,143 @@ export const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
-    'X-Requested-With': 'XMLHttpRequest'
+    'Accept': 'application/json',
   },
-  withCredentials: true // This is crucial for sending/receiving cookies
+  withCredentials: true, // Enable sending cookies in cross-origin requests
 });
 
-// Add request interceptor to handle CSRF token
+// Add request interceptor for adding auth token
 axiosInstance.interceptors.request.use(
-  (config) => {
-    // For non-GET requests, we need to include the CSRF token
-    if (config.method !== 'get') {
-      const csrfToken = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('csrftoken='))
-        ?.split('=')[1];
+  async (config) => {
+    console.log('Making request:', {
+      url: config.url,
+      method: config.method,
+      headers: config.headers,
+      withCredentials: config.withCredentials
+    });
 
-      if (csrfToken) {
-        config.headers['X-CSRFToken'] = csrfToken;
+    // Ensure CORS headers for all requests
+    config.withCredentials = true;
+    if (!config.headers['Content-Type'] && !config.url?.includes('/upload')) {
+      config.headers['Content-Type'] = 'application/json';
+    }
+
+    const token = TokenManager.getAccessToken();
+    // Skip authentication for public endpoints
+    if (token && !config.url?.includes('/login') && !config.url?.includes('/verify-email/')) {
+      // Check token expiration before making request
+      if (TokenManager.isTokenExpired()) {
+        try {
+          const refreshToken = TokenManager.getRefreshToken();
+          if (!refreshToken) {
+            TokenManager.clearTokens();
+            // Only redirect if not accessing a public route
+            if (!isPublicRoute(config.url || '')) {
+              window.location.href = '/login';
+            }
+            return Promise.reject(new Error('Session expired'));
+          }
+
+          const response = await axios.post(`${API_BASE_URL}/accounts/token/refresh/`, {
+            refresh: refreshToken
+          }, {
+            withCredentials: true,
+          });
+
+          const { access, refresh } = response.data;
+          TokenManager.setTokens({ access, refresh }, true);
+          config.headers.Authorization = `Bearer ${access}`;
+        } catch (error) {
+          TokenManager.clearTokens();
+          // Only redirect if not accessing a public route
+          if (!isPublicRoute(config.url || '')) {
+            window.location.href = '/login';
+          }
+          return Promise.reject(error);
+        }
+      } else {
+        config.headers.Authorization = `Bearer ${token}`;
       }
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    console.error('Request error:', error);
+    return Promise.reject(error);
+  }
 );
 
-// Add response interceptor to handle 401 errors and token refresh
+// Helper function to check if a route is public
+const isPublicRoute = (url: string): boolean => {
+  const publicRoutes = [
+    '/login',
+    '/verify-email',
+    '/resend-verification',
+    '/reset-password',
+    '/password-reset-confirmation',
+    '/',
+    '/vehicles',
+    '/service',
+    '/contact'
+  ];
+  return publicRoutes.some(route => url.includes(route));
+};
+
+// Add response interceptor for handling auth errors and token refresh
 axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+
+    // Handle rate limiting
+    if (error.response?.status === 429) {
+      const retryAfter = error.response.headers['retry-after'];
+      const waitTime = retryAfter ? parseInt(retryAfter) : 15 * 60; // Default to 15 minutes
+      const lockoutTime = Date.now() + waitTime * 1000;
+      localStorage.setItem('loginLockoutUntil', lockoutTime.toString());
+      throw new Error(`Too many attempts. Please try again in ${Math.ceil(waitTime / 60)} minutes.`);
+    }
 
     // If the error is 401 and we haven't tried to refresh the token yet
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
+        const refreshToken = TokenManager.getRefreshToken();
+        if (!refreshToken) {
+          throw new Error('No refresh token available');
+        }
+
         // Try to refresh the token
-        await axios.post(`${API_BASE_URL}/accounts/token/refresh/`, {}, {
-          withCredentials: true,
-          headers: {
-            'X-Requested-With': 'XMLHttpRequest'
-          }
+        const response = await axios.post(`${API_BASE_URL}/accounts/token/refresh/`, {
+          refresh: refreshToken
         });
 
-        // Retry the original request
+        const { access, refresh } = response.data;
+        TokenManager.setTokens({ access, refresh }, true);
+
+        // Update the original request with new token
+        originalRequest.headers.Authorization = `Bearer ${access}`;
         return axiosInstance(originalRequest);
       } catch (refreshError) {
-        // If refresh token fails, redirect to login
-        window.location.href = '/login';
+        // If refresh fails, clear tokens and only redirect if not on a public route
+        TokenManager.clearTokens();
+        if (!isPublicRoute(originalRequest.url || '')) {
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       }
+    }
+
+    // If it's a 500 error on the profile endpoint, handle it gracefully
+    if (error.response?.status === 500 && error.config.url?.includes('/accounts/profile/')) {
+      return Promise.resolve({ data: null });
     }
 
     return Promise.reject(error);
   }
 );
 
-// API Endpoints configuration
 export const API_ENDPOINTS = {
   // Auth endpoints
   auth: {
@@ -82,6 +176,7 @@ export const API_ENDPOINTS = {
     passwordReset: '/accounts/password-reset/',
     passwordResetConfirm: (token: string) => `/accounts/password-reset/${token}/`,
     verifyEmail: (token: string) => `/accounts/verify-email/${token}/`,
+    resendVerification: '/accounts/resend-verification/',
     googleLogin: '/accounts/google/login/',
     googleCallback: '/accounts/google/callback/',
     profile: '/accounts/profile/',
@@ -107,36 +202,28 @@ export const API_ENDPOINTS = {
 
   // Repair service endpoints
   services: {
-    manufacturers: '/services/manufacturers/',
-    vehicleModels: '/services/vehicle-models/',
-    categories: '/services/service-categories/',
-    services: '/services/services/',
-    servicePrice: (id: number) => `/services/service-price/${id}/`,
+    // Categories and services
+    categories: '/repairing-service/service-categories/',
+    services: '/repairing-service/services/',
+    servicePrice: (id: string) => `/repairing-service/service-price/${id}/`,
+    manufacturers: '/repairing-service/manufacturers/',
+    vehicleModels: '/repairing-service/vehicle-models/',
     
     // Cart related
-    createCart: '/services/cart/create/',
-    cart: (id: number) => `/services/cart/${id}/`,
-    addToCart: (cartId: number) => `/services/cart/${cartId}/add/`,
-    updateCartItem: (cartId: number) => `/services/cart/${cartId}/update-item/`,
-    clearCart: (cartId: number) => `/services/cart/${cartId}/clear/`,
-    removeCartItem: (itemId: number) => `/services/cart/items/${itemId}/`,
+    createCart: '/repairing-service/cart/create/',
+    listCarts: '/repairing-service/cart/list/',
+    cartDetail: (id: number) => `/repairing-service/cart/${id}/`,
+    addToCart: (id: number) => `/repairing-service/cart/${id}/add/`,
+    updateCartItem: (cartId: number) => `/repairing-service/cart/${cartId}/update-item/`,
+    removeCartItem: (id: number) => `/repairing-service/cart/items/${id}/`,
+    clearCart: (id: number) => `/repairing-service/cart/${id}/clear/`,
     
     // Bookings
-    userBookings: '/services/bookings/',
-    createBooking: '/services/bookings/create/',
-    cancelBooking: (id: number) => `/services/bookings/${id}/cancel/`,
-    clearCancelledBookings: '/services/bookings/clear-cancelled/',
-    
-    // Service requests
-    serviceRequests: '/services/service-requests/',
-    serviceRequest: (id: number) => `/services/service-requests/${id}/`,
-    serviceRequestResponses: (id: number) => `/services/service-requests/${id}/responses/`,
-    liveLocation: (id: number) => `/services/service-requests/${id}/location/`,
-    calculateDistanceFee: '/services/calculate-distance-fee/',
-    pricingPlans: '/services/pricing-plans/',
-    
-    // Field staff
-    fieldStaff: '/services/field-staff/',
+    myRepairs: '/repairing-service/bookings/',
+    createBooking: '/repairing-service/bookings/create/',
+    serviceNow: '/repairing-service/service-now/',
+    cancelServiceNow: (id: string) => `/repairing-service/service-now/${id}/cancel/`,
+    calculateDistanceFee: '/repairing-service/calculate-distance-fee/',
   },
 
   // Chatbot endpoints
@@ -152,63 +239,241 @@ export const API_ENDPOINTS = {
     notifications: '/services/admin/notifications/',
     requests: '/services/admin/requests/',
     updateRequestStatus: (id: string) => `/services/admin/requests/${id}/status/`,
-  }
+  },
+
+  // CDN endpoints
+  cdn: {
+    baseUrl: `https://res.cloudinary.com/${CDN_CONFIG.cloudName}`,
+    upload: `${CDN_CONFIG.baseURL}/${CDN_CONFIG.cloudName}/upload`,
+    imageTransform: (transformation: string, publicId: string) => 
+      `https://res.cloudinary.com/${CDN_CONFIG.cloudName}/image/upload/${transformation}/${publicId}`,
+    document: (publicId: string) => 
+      `https://res.cloudinary.com/${CDN_CONFIG.cloudName}/raw/upload/${publicId}`,
+  },
+
+  // Profile endpoints
+  profile: {
+    details: '/accounts/profile/',
+    update: '/accounts/profile/update/',
+    changePassword: '/accounts/profile/change-password/',
+  },
 };
 
 // API service functions
 export const apiService = {
   // Auth services
   auth: {
-    login: async (data: { email: string; password: string }) => {
-      const response = await axiosInstance.post(API_ENDPOINTS.auth.login, data);
-      return response;
+    login: async (data: { email: string; password: string; rememberMe?: boolean }) => {
+      console.log('Attempting login with:', { 
+        email: data.email, 
+        rememberMe: data.rememberMe,
+        url: API_ENDPOINTS.auth.login
+      });
+      
+      try {
+        const response = await axiosInstance.post(API_ENDPOINTS.auth.login, data, {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          withCredentials: true
+        });
+        
+        console.log('Login response:', {
+          status: response.status,
+          data: response.data,
+          headers: response.headers
+        });
+
+        if (!response.data?.tokens) {
+          console.error('No tokens in login response');
+          throw new Error('Invalid login response: No tokens received');
+        }
+        
+        return response;
+      } catch (error: any) {
+        console.error('Login error:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+          headers: error.response?.headers
+        });
+        throw error;
+      }
     },
-    signup: (data: any) => 
-      axiosInstance.post(API_ENDPOINTS.auth.signup, data),
-    logout: async () => {
-      const response = await axiosInstance.post(API_ENDPOINTS.auth.logout);
-      return response;
+    signup: async (data: { username: string; email: string; password: string }) => {
+      try {
+        const response = await axiosInstance.post(API_ENDPOINTS.auth.signup, data);
+        return response;
+      } catch (error) {
+        console.error('Signup error:', error);
+        throw error;
+      }
     },
-    getProfile: () => 
-      axiosInstance.get(API_ENDPOINTS.auth.profile),
-    updateProfile: (data: any) => 
-      axiosInstance.patch(API_ENDPOINTS.auth.profile, data),
-    forgotPassword: (data: { email: string }) =>
+    verifyEmail: async (token: string) => {
+      try {
+        // Using GET request with token in URL path to match backend route exactly
+        const url = API_ENDPOINTS.auth.verifyEmail(token);
+        console.log('Making verification request to:', url);
+        const response = await axiosInstance.get(url);
+        console.log('Verification response:', response);
+        return response;
+      } catch (error) {
+        console.error('Email verification error:', error);
+        throw error;
+      }
+    },
+    resendVerification: (email: string) =>
+      axiosInstance.post(API_ENDPOINTS.auth.resendVerification, { email }),
+    resetPassword: (data: { password: string; confirmPassword: string }) =>
       axiosInstance.post(API_ENDPOINTS.auth.passwordReset, data),
-    googleLogin: () =>
-      axiosInstance.get(API_ENDPOINTS.auth.googleLogin),
+    resetPasswordConfirm: (token: string, data: { password: string; confirmPassword: string }) =>
+      axiosInstance.post(API_ENDPOINTS.auth.passwordResetConfirm(token), data),
+    logout: async (data: { refresh_token: string }) => {
+      return axiosInstance.post(API_ENDPOINTS.auth.logout, data);
+    },
+    getProfile: async () => {
+      return axiosInstance.get(API_ENDPOINTS.auth.profile);
+    },
+    updateProfile: async (data: any) => {
+      return axiosInstance.patch(API_ENDPOINTS.auth.profile, data);
+    },
+    forgotPassword: async (data: { email: string }) => {
+      return axiosInstance.post(API_ENDPOINTS.auth.passwordReset, data);
+    },
+    googleLogin: async () => {
+      return axiosInstance.get(API_ENDPOINTS.auth.googleLogin);
+    },
   },
 
   // Vehicle marketplace services
   marketplace: {
-    getVehicles: (params?: any) => 
-      axiosInstance.get(API_ENDPOINTS.marketplace.vehicles, { params }),
-    getVehicle: (id: string) => 
-      axiosInstance.get(API_ENDPOINTS.marketplace.vehicle(id)),
-    createSellRequest: (data: any) => 
-      axiosInstance.post(API_ENDPOINTS.marketplace.sellRequests, data),
-    createBooking: (data: any) => 
-      axiosInstance.post(API_ENDPOINTS.marketplace.bookings, data),
+    getVehicles: async (params?: any) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.marketplace.vehicles, { params });
+      return response.data;
+    },
+    getVehicle: async (id: string) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.marketplace.vehicle(id));
+      return response.data;
+    },
+    createSellRequest: (formData: FormData) => 
+      axiosInstance.post(API_ENDPOINTS.marketplace.sellRequests, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }),
+    updateSellRequest: async (id: string, data: any) => {
+      const response = await axiosInstance.patch(
+        API_ENDPOINTS.marketplace.sellRequest(id),
+        data,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      return response.data;
+    },
+    getSellRequests: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.marketplace.sellRequests);
+      return response.data;
+    },
+    getSellRequest: async (id: string) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.marketplace.sellRequest(id));
+      return response.data;
+    },
+    createBooking: async (data: any) => {
+      const response = await axiosInstance.post(API_ENDPOINTS.marketplace.bookings, data);
+      return response.data;
+    },
   },
 
   // Repair service functions
   services: {
-    getManufacturers: () => 
-      axiosInstance.get(API_ENDPOINTS.services.manufacturers),
-    getVehicleModels: (params?: any) => 
-      axiosInstance.get(API_ENDPOINTS.services.vehicleModels, { params }),
-    getServiceCategories: () => 
-      axiosInstance.get(API_ENDPOINTS.services.categories),
-    getServices: (params?: any) => 
-      axiosInstance.get(API_ENDPOINTS.services.services, { params }),
-    createCart: () => 
-      axiosInstance.post(API_ENDPOINTS.services.createCart),
-    addToCart: (cartId: number, data: any) => 
-      axiosInstance.post(API_ENDPOINTS.services.addToCart(cartId), data),
-    createBooking: (data: any) => 
-      axiosInstance.post(API_ENDPOINTS.services.createBooking, data),
-    getUserBookings: () => 
-      axiosInstance.get(API_ENDPOINTS.services.userBookings),
+    // Categories and services
+    getCategories: () => axiosInstance.get(API_ENDPOINTS.services.categories),
+    getServices: () => axiosInstance.get(API_ENDPOINTS.services.services),
+    
+    // Service pricing
+    getServicePrice: (serviceId: string) => 
+      axiosInstance.get(API_ENDPOINTS.services.servicePrice(serviceId)),
+    
+    // Cart related
+    createCart: () => axiosInstance.post(API_ENDPOINTS.services.createCart),
+    getUserCarts: () => axiosInstance.get(API_ENDPOINTS.services.listCarts),
+    getCart: (cartId: number) => axiosInstance.get(API_ENDPOINTS.services.cartDetail(cartId)),
+    addToCart: (cartId: number, item: any) => 
+      axiosInstance.post(API_ENDPOINTS.services.addToCart(cartId), item),
+    updateCartItem: (cartId: number, itemId: number, quantity: number) => 
+      axiosInstance.post(API_ENDPOINTS.services.updateCartItem(cartId), { cart_item_id: itemId, quantity }),
+    clearCart: (cartId: number) => 
+      axiosInstance.post(API_ENDPOINTS.services.clearCart(cartId)),
+    removeCartItem: (itemId: number) => 
+      axiosInstance.delete(API_ENDPOINTS.services.removeCartItem(itemId)),
+    
+    // Bookings
+    getUserBookings: () => axiosInstance.get(API_ENDPOINTS.services.myRepairs),
+
+    // Create a booking
+    createBooking: (data: {
+      service_id: string;
+      package_id?: string;
+      vehicle_manufacturer_id: number;
+      vehicle_model_id: number;
+      price: string;
+      is_custom_price: boolean;
+      quantity: number;
+    }) => 
+      axiosInstance.post('/repairing-service/bookings/create/', data),
+  },
+
+  // Profile functions
+  profile: {
+    getDetails: async () => {
+      try {
+        console.log('Getting profile - checking token...');
+        const token = TokenManager.getAccessToken();
+        if (!token) {
+          console.log('No access token found');
+          return { data: null };
+        }
+
+        console.log('Making profile request...');
+        const response = await axiosInstance.get(API_ENDPOINTS.profile.details);
+        console.log('Profile response:', response);
+
+        if (!response.data) {
+          console.error('No data in profile response');
+          return { data: null };
+        }
+
+        // Ensure the response data is properly structured
+        const profileData = {
+          data: {
+            user: {
+              ...response.data,
+              profile: response.data.profile || {}
+            }
+          }
+        };
+
+        return profileData;
+      } catch (error: any) {
+        console.error('Profile fetch error:', {
+          message: error.message,
+          status: error.response?.status,
+          data: error.response?.data
+        });
+        
+        if (error.response?.status === 401) {
+          TokenManager.clearTokens();
+        }
+        return { data: null };
+      }
+    },
+    update: (data: any) => 
+      axiosInstance.patch(API_ENDPOINTS.profile.update, data),
+    changePassword: (data: { currentPassword: string; newPassword: string }) =>
+      axiosInstance.post(API_ENDPOINTS.profile.changePassword, data),
   },
 };
 

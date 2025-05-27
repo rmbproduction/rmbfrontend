@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle, Home, ArrowRight, Calendar, Clock, MapPin } from 'lucide-react';
+import { CheckCircle, ArrowRight, Calendar, Clock, MapPin, Wrench } from 'lucide-react';
 import Modal from './Modal';
 
 interface BookingData {
@@ -32,46 +32,57 @@ interface OrderSuccessModalProps {
   isOpen: boolean;
   onClose: () => void;
   mode: 'cart' | 'buy-now';
+  bookingReference?: string | null;
 }
 
-const OrderSuccessModal = ({ isOpen, onClose, mode }: OrderSuccessModalProps) => {
+const OrderSuccessModal = ({ isOpen, onClose, mode, bookingReference }: OrderSuccessModalProps) => {
   const navigate = useNavigate();
   const [bookingData, setBookingData] = useState<BookingData | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      // Generate a random reference number
-      const generateReference = () => {
-        const prefix = 'BK';
-        const timestamp = Date.now().toString().slice(-6);
-        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-        return `${prefix}${timestamp}${random}`;
-      };
+      try {
+        // Get booking data from localStorage
+        const checkoutItem = JSON.parse(localStorage.getItem('checkoutItem') || 'null');
+        const customerInfo = JSON.parse(localStorage.getItem('customerInfo') || 'null');
+        
+        console.log('Modal Data:', { checkoutItem, customerInfo, bookingReference });
 
-      // Get booking data from localStorage
-      let data;
-      if (mode === 'cart') {
-        data = JSON.parse(localStorage.getItem('cartItems') || '[]')[0];
-      } else {
-        data = JSON.parse(localStorage.getItem('checkoutItem') || 'null');
-      }
-
-      const customerInfo = JSON.parse(localStorage.getItem('customerInfo') || 'null');
-      
-      if (data) {
-        setBookingData({
-          reference: generateReference(),
-          serviceDate: customerInfo?.serviceDate || new Date().toISOString(),
-          serviceTime: customerInfo?.serviceTime || '9 AM - 12 PM',
-          vehicle: data.vehicle,
-          serviceName: data.serviceName,
-          packageName: data.packageName,
-          features: data.features,
-          customerInfo
-        });
+        if (checkoutItem) {
+          setBookingData({
+            reference: bookingReference || generateReference(),
+            serviceDate: customerInfo?.serviceDate,
+            serviceTime: customerInfo?.serviceTime,
+            vehicle: checkoutItem.vehicle,
+            serviceName: checkoutItem.serviceName,
+            packageName: checkoutItem.packageName,
+            features: checkoutItem.features,
+            customerInfo
+          });
+        }
+      } catch (error) {
+        console.error('Error loading booking data:', error);
       }
     }
-  }, [isOpen, mode]);
+  }, [isOpen, bookingReference]);
+
+  const handleViewRepairs = () => {
+    onClose();
+    navigate('/profile');
+  };
+
+  const handleBackToHome = () => {
+    onClose();
+    navigate('/');
+  };
+
+  // Generate a reference number
+  const generateReference = () => {
+    const prefix = 'BK';
+    const timestamp = Date.now().toString().slice(-6);
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `${prefix}${timestamp}${random}`;
+  };
 
   // Format date for display
   const formatDate = (dateString?: string): string => {
@@ -93,156 +104,73 @@ const OrderSuccessModal = ({ isOpen, onClose, mode }: OrderSuccessModalProps) =>
     }
   };
 
-  if (!bookingData) {
-    return null;
-  }
-
-  const handleClose = () => {
-    onClose();
-    // Clear localStorage
-    if (mode === 'cart') {
-      localStorage.removeItem('cartItems');
-    } else {
-      localStorage.removeItem('checkoutItem');
-    }
-    localStorage.removeItem('customerInfo');
-    localStorage.removeItem('checkoutMode');
-    
-    // Dispatch cart updated event to refresh the cart count
-    window.dispatchEvent(new Event('cartUpdated'));
-  };
+  // If modal is not open, don't render anything
+  if (!isOpen) return null;
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose}>
-      {/* Success Header */}
-      <div className="bg-[#FF5733] text-white px-6 py-8 text-center">
-        <div className="flex justify-center">
-          <CheckCircle className="h-16 w-16 mx-auto mb-4" />
+    <Modal isOpen={isOpen} onClose={onClose}>
+      <div className="p-6 text-center">
+        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <CheckCircle className="w-8 h-8 text-green-500" />
         </div>
-        <h1 className="text-3xl font-bold">Booking Confirmed!</h1>
-        <p className="mt-2 text-lg opacity-90">
-          Thank you for choosing our service. Our experts will contact you shortly.
+        
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+          Booking Confirmed!
+        </h2>
+        
+        <p className="text-gray-600 mb-4">
+          Your booking reference: <span className="font-semibold">{bookingData?.reference || bookingReference}</span>
         </p>
-      </div>
-      
-      {/* Details Section */}
-      <div className="p-6">
-        <div className="space-y-4">
-          {/* Booking Reference */}
-          <div className="mb-4">
-            <h3 className="text-lg font-medium text-gray-800 mb-2">Booking Reference</h3>
-            <div className="bg-gray-50 rounded-lg p-3 text-center">
-              <span className="text-lg font-medium text-[#FF5733]">{bookingData.reference}</span>
-            </div>
-          </div>
-          
-          {/* Service Information */}
-          <div className="p-4 bg-orange-50 rounded-lg border border-orange-100">
-            <h3 className="font-medium text-gray-800 mb-3">Service Details</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Service:</span>
-                <span className="font-medium">{bookingData.serviceName}</span>
+
+        {bookingData && (
+          <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-gray-600" />
+                <span className="text-sm">
+                  {formatDate(bookingData.serviceDate)} at {bookingData.serviceTime}
+                </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Package:</span>
-                <span className="font-medium">{bookingData.packageName}</span>
-              </div>
-              {bookingData.features && bookingData.features.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-orange-200">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Service Includes:</h4>
-                  <ul className="text-sm text-gray-600 space-y-1">
-                    {bookingData.features.slice(0, 3).map((feature, index) => (
-                      <li key={index} className="flex items-start">
-                        <CheckCircle className="h-3 w-3 text-orange-500 mr-2 mt-1 flex-shrink-0" />
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                    {bookingData.features.length > 3 && (
-                      <li className="text-xs text-orange-600 ml-5">
-                        +{bookingData.features.length - 3} more features
-                      </li>
-                    )}
-                  </ul>
+              {bookingData.vehicle && (
+                <div className="flex items-center gap-2">
+                  <Wrench className="w-4 h-4 text-gray-600" />
+                  <span className="text-sm">
+                    {bookingData.vehicle.manufacturer} {bookingData.vehicle.model}
+                  </span>
+                </div>
+              )}
+              {bookingData.customerInfo?.address && (
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-gray-600" />
+                  <span className="text-sm">
+                    {bookingData.customerInfo.address.street}, {bookingData.customerInfo.address.city}
+                  </span>
                 </div>
               )}
             </div>
           </div>
+        )}
 
-          {/* Schedule Information */}
-          <div className="p-4 bg-green-50 rounded-lg border border-green-100">
-            <div className="flex items-center mb-3">
-              <Clock className="h-5 w-5 text-green-600 mr-2" />
-              <h3 className="font-medium text-gray-800">Scheduled Service</h3>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Date:</span>
-                <span className="font-medium">{formatDate(bookingData.serviceDate)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Time Slot:</span>
-                <span className="font-medium">{bookingData.serviceTime}</span>
-              </div>
-            </div>
-          </div>
-          
-          {/* Vehicle Information */}
-          <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-            <div className="flex items-center mb-3">
-              <Calendar className="h-5 w-5 text-blue-600 mr-2" />
-              <h3 className="font-medium text-gray-800">Vehicle Information</h3>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Vehicle:</span>
-                <span className="font-medium">
-                  {bookingData.vehicle?.manufacturer} {bookingData.vehicle?.model}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Fuel Type:</span>
-                <span className="font-medium">{bookingData.vehicle?.fuelType}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Service Location */}
-          <div className="p-4 bg-purple-50 rounded-lg border border-purple-100">
-            <div className="flex items-center mb-3">
-              <MapPin className="h-5 w-5 text-purple-600 mr-2" />
-              <h3 className="font-medium text-gray-800">Service Location</h3>
-            </div>
-            <p className="text-sm text-gray-600">
-              {bookingData.customerInfo?.address.street}, {bookingData.customerInfo?.address.city},
-              {bookingData.customerInfo?.address.state} - {bookingData.customerInfo?.address.zipCode}
-            </p>
-          </div>
-        </div>
-        
-        {/* Action Buttons */}
-        <div className="mt-6 flex flex-col sm:flex-row gap-3">
-          <Link
-            to="/"
-            className="flex-1 py-3 px-4 bg-[#FF5733] text-white rounded-lg text-center font-medium hover:bg-opacity-90 transition-colors flex items-center justify-center"
-            onClick={handleClose}
+        <div className="flex flex-col gap-3">
+          <button
+            onClick={handleViewRepairs}
+            className="w-full bg-[#FF5733] text-white py-3 rounded-lg hover:bg-[#ff4019] transition-colors flex items-center justify-center gap-2"
           >
-            <Home size={18} className="mr-2" />
-            Go to Home
-          </Link>
+            View My Repairs
+            <ArrowRight className="w-4 h-4" />
+          </button>
           
           <button
-            type="button"
-            onClick={() => {
-              handleClose();
-              navigate('/bookings');
-            }}
-            className="flex-1 py-3 px-4 border border-gray-300 text-gray-700 rounded-lg text-center font-medium hover:bg-gray-50 transition-colors flex items-center justify-center"
+            onClick={handleBackToHome}
+            className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 transition-colors"
           >
-            <ArrowRight size={18} className="mr-2" />
-            View Bookings
+            Back to Home
           </button>
         </div>
+
+        <p className="text-sm text-gray-500 mt-4">
+          Need help? Contact our support team
+        </p>
       </div>
     </Modal>
   );

@@ -1,90 +1,158 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authApi } from '../services/api';
-import { User } from '../schemas/auth';
+import React, { createContext, useContext, useCallback, useMemo, useEffect } from 'react';
+import { useLogin, useLogout, useProfile } from '../hooks/auth/useAuth';
+import TokenManager from '../services/tokenManager';
+import { toast } from 'react-toastify';
+import { User, LoginResponse } from '../schemas/auth';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<LoginResponse>;
   logout: () => Promise<void>;
-  checkAuth: () => Promise<void>;
-  isInitialized: boolean;
+  isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const loginMutation = useLogin();
+  const logoutMutation = useLogout();
+  const { data: user, isLoading: profileLoading, refetch: refetchProfile } = useProfile();
+  const queryClient = useQueryClient();
 
-  // Check authentication status on mount, but only once
+  // Check token expiration periodically
   useEffect(() => {
-    const token = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('jwt='));
-    
-    if (token) {
-      // Only check auth if we have a token
-      checkAuth();
-    } else {
-      setIsInitialized(true);
-    }
-  }, []);
-
-  const checkAuth = async () => {
-    try {
-      const token = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('jwt='));
-
-      if (!token) {
-        setUser(null);
-        setIsAuthenticated(false);
-        return;
+    const checkTokenInterval = setInterval(() => {
+      if (TokenManager.isTokenExpired() && TokenManager.getRefreshToken()) {
+        refetchProfile();
       }
+    }, 60000); // Check every minute
 
-      // Only make the API call if we have a token
-      const response = await authApi.getCurrentUser();
-      setUser(response.user);
-      setIsAuthenticated(true);
+    return () => clearInterval(checkTokenInterval);
+  }, [refetchProfile]);
+
+  const verifyTokenStorage = (tokens: { access: string; refresh: string }, rememberMe: boolean): boolean => {
+    try {
+      TokenManager.setTokens(tokens, rememberMe);
+      const storedAccess = TokenManager.getAccessToken();
+      const storedRefresh = TokenManager.getRefreshToken();
+      
+      if (!storedAccess || !storedRefresh) {
+        console.error('Token verification failed - tokens not found after storage');
+        return false;
+      }
+      
+      if (storedAccess !== tokens.access || storedRefresh !== tokens.refresh) {
+        console.error('Token verification failed - stored tokens do not match');
+        return false;
+      }
+      
+      return true;
     } catch (error) {
-      setUser(null);
-      setIsAuthenticated(false);
-    } finally {
-      setIsInitialized(true);
+      console.error('Token storage failed:', error);
+      return false;
     }
   };
 
-  const login = async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string, rememberMe: boolean = false) => {
+    console.log('Login attempt started:', { email, rememberMe });
     try {
-      const response = await authApi.login({ email, password });
-      setUser(response.user || null);
-      setIsAuthenticated(true);
+      console.log('Making login request...');
+      const response = await loginMutation.mutateAsync({ email, password, rememberMe });
+      console.log('Login response received:', response);
+
+      if (!response.data?.tokens) {
+        throw new Error('Login failed: No tokens received');
+      }
+      
+      console.log('Setting tokens in TokenManager...');
+      const tokensStored = verifyTokenStorage(response.data.tokens, rememberMe);
+      
+      if (!tokensStored) {
+        throw new Error('Login failed: Unable to store authentication tokens');
+      }
+      
+      console.log('Tokens set successfully');
+      
+      // Set user data if available
+      if (response.data.user) {
+        console.log('User data received, fetching profile...');
+        try {
+          await refetchProfile();
+          console.log('Profile fetched successfully');
+          } catch (error) {
+          console.error('Profile fetch failed:', error);
+          // Don't throw here - we still want to complete login even if profile fetch fails
+          }
+      } else {
+        console.log('No user data in response');
+      }
+      
+      console.log('Login process completed successfully');
+      return response.data;
     } catch (error: any) {
-      throw new Error(error.response?.data?.error || 'Login failed');
-    }
-  };
+      console.error('Login error:', {
+        error,
+        response: error.response,
+        status: error.response?.status,
+        data: error.response?.data,
+        headers: error.response?.headers
+  });
 
-  const logout = async () => {
+      // Clear any partially stored tokens
+      TokenManager.clearTokens();
+      
+      const message = error.response?.data?.detail || error.message || 'Login failed';
+      toast.error(message);
+      throw error;
+    }
+  }, [loginMutation, refetchProfile]);
+
+  const logout = useCallback(async () => {
     try {
-      await authApi.logout();
-    } catch (error) {
-      console.error('Logout failed:', error);
-    } finally {
-      setUser(null);
-      setIsAuthenticated(false);
+      // Get refresh token before clearing
+      const refreshToken = TokenManager.getRefreshToken();
+      
+      if (!refreshToken) {
+        // If no refresh token, just clear local state
+        TokenManager.clearTokens();
+        queryClient.clear();
+        return;
     }
-  };
 
-  if (!isInitialized) {
-    return <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
-    </div>;
-  }
+      // Try to logout from server first
+      await logoutMutation.mutateAsync({ refresh_token: refreshToken });
+      
+      // Only clear local state after successful server logout
+      TokenManager.clearTokens();
+      queryClient.clear();
+      
+      toast.success('Successfully logged out');
+    } catch (error: any) {
+      console.error('Logout error:', error);
+      // Even if server logout fails, clear local state for security
+      TokenManager.clearTokens();
+      queryClient.clear();
+
+      const message = error.response?.data?.detail || 
+                     error.response?.data?.error || 
+                     error.message || 
+                     'Logout failed';
+      toast.error(message);
+    }
+  }, [logoutMutation, queryClient]);
+
+  const value = useMemo(() => ({
+    isAuthenticated: !!TokenManager.getAccessToken() && !TokenManager.isTokenExpired(),
+    user: user || null,
+    login,
+    logout,
+    isLoading: profileLoading
+  }), [user, login, logout, profileLoading]);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, logout, checkAuth, isInitialized }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

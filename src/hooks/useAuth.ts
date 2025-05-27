@@ -1,10 +1,5 @@
 import { useState, useCallback } from 'react';
-
-interface User {
-  id: string;
-  email: string;
-  username: string;
-}
+import { User } from '../schemas/auth';
 
 interface Tokens {
   access: string;

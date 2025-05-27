@@ -11,30 +11,84 @@ const iconMap = {
   LifeBuoy,
 };
 
-// Function to fetch services
-// Add type safety
-type ServiceData = {
-  icon: string;
-  id: string;
-  title: string;
-  description: string;
-  features?: string[];
-  packages?: any[];
+// Types for the API response
+type Feature = {
+  id: number;
+  name: string;
 };
 
-export const fetchServices = async () => {
+type ServiceDetail = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  base_price: string;
+  duration: string;
+  warranty: string;
+  recommended: string;
+  category: string;
+  manufacturers: number[];
+  vehicles_models: number[];
+  features: Feature[];
+  image: string | null;
+  image_url: string | null;
+};
+
+type ServiceCategory = {
+  uuid: string;
+  name: string;
+  slug: string;
+  image: string | null;
+  description: string;
+  services: ServiceDetail[];
+};
+
+// Frontend type that both API and static data will conform to
+export type FrontendService = {
+  id: string;
+  icon: typeof Tool;
+  title: string;
+  description: string;
+  slug: string;
+  services: Array<{
+    id: string;
+    name: string;
+    duration: string;
+    warranty: string;
+    recommended: string;
+    base_price?: string;
+    features: string[];
+    image_url?: string | null;
+  }>;
+};
+
+// Function to fetch service categories
+export const fetchServiceCategories = async (): Promise<FrontendService[]> => {
   try {
-    const response = await fetch('http://localhost:3001/services');
-    const data = await response.json() as ServiceData[];
+    const response = await fetch('https://repairmybike.up.railway.app/api/repairing-service/service-categories/');
+    const data = await response.json() as ServiceCategory[];
     
-    // Add null check and validation
     if (!Array.isArray(data)) {
       throw new Error('Invalid data format');
     }
     
-    return data.map(service => ({
-      ...service,
-      icon: iconMap[service.icon as keyof typeof iconMap] || Tool // Fallback to Tool icon
+    // Transform the data to match our frontend structure
+    return data.map(category => ({
+      id: category.uuid,
+      icon: getIconForCategory(category.slug),
+      title: category.name,
+      description: category.description,
+      slug: category.slug,
+      services: category.services.map(service => ({
+        id: service.id.toString(),
+        name: service.name,
+        duration: service.duration,
+        warranty: service.warranty,
+        recommended: service.recommended,
+        base_price: service.base_price,
+        features: service.features.map(f => f.name),
+        image_url: service.image_url
+      }))
     }));
   } catch (error) {
     console.error('Error fetching services:', error);
@@ -42,13 +96,35 @@ export const fetchServices = async () => {
   }
 };
 
-export const services = [
+// Helper function to determine icon based on category slug
+export function getIconForCategory(slug: string) {
+  switch (slug) {
+    case 'periodic-service':
+      return Tool;
+    case 'roadside-assistance':
+      return LifeBuoy;
+    case 'bike-insurance':
+      return Shield;
+    case 'battery-replacement':
+      return Battery;
+    case 'engine-repair':
+      return Wrench;
+    case 'accidental-repair':
+      return AlertTriangle;
+    default:
+      return Tool;
+  }
+}
+
+// Fallback static data in case API fails
+export const services: FrontendService[] = [
   { 
     id: 'periodic-service',
     icon: Tool, 
     title: 'Periodic Service', 
     description: 'Regular maintenance to keep your bike in top condition',
-    packages: [
+    slug: 'periodic-service',
+    services: [
       {
         id: 'basic-service',
         name: 'Basic Service',
@@ -84,77 +160,41 @@ export const services = [
     icon: LifeBuoy, 
     title: 'Roadside Assistance', 
     description: '24/7 emergency support wherever you are',
-    features: [
-      'Immediate Response',
-      'Nationwide Coverage',
-      'Towing Service',
-      'Fuel Delivery',
-      'Tire Change'
-    ]
+    slug: 'roadside-assistance',
+    services: [{
+      id: 'roadside-assistance-1',
+      name: 'Roadside Assistance',
+      duration: '1 Hr',
+      warranty: 'Per Service',
+      recommended: 'As Needed',
+      features: [
+        'Immediate Response',
+        'Nationwide Coverage',
+        'Towing Service',
+        'Fuel Delivery',
+        'Tire Change'
+      ]
+    }]
   },
   { 
     id: 'bike-insurance',
     icon: Shield, 
     title: 'Bike Insurance', 
     description: 'Comprehensive coverage for your peace of mind',
-    features: [
-      'Accident Coverage',
-      'Third-party Liability',
-      'Natural Disaster Protection',
-      'Theft Coverage',
-      'Zero Depreciation'
-    ]
-  },
-  { 
-    id: 'battery-replacement',
-    icon: Battery, 
-    title: 'Battery Replacement', 
-    description: 'Quick and reliable battery solutions',
-    features: [
-      'Free Battery Testing',
-      'All Brands Available',
-      'Warranty Service',
-      'Old Battery Disposal',
-      'Emergency Service'
-    ]
-  },
-  { 
-    id: 'tyre-care',
-    icon: Gauge, 
-    title: 'Tyre Care', 
-    description: 'Expert tire maintenance and replacement',
-    features: [
-      'Tire Pressure Check',
-      'Wheel Balancing',
-      'Tire Rotation',
-      'Alignment Service',
-      'Puncture Repair'
-    ]
-  },
-  { 
-    id: 'engine-repair',
-    icon: Wrench, 
-    title: 'Engine Repair', 
-    description: 'Complete engine diagnostics and repair',
-    features: [
-      'Engine Diagnostics',
-      'Performance Tuning',
-      'Parts Replacement',
-      'Oil Service',
-      'Cooling System'
-    ]
-  },
-  { 
-    id: 'accidental-repair',
-    icon: AlertTriangle, 
-    title: 'Accidental Repair', 
-    description: 'Specialized repair for accident damage',
-    features: [
-      'Damage Assessment',
-      'Insurance Coordination',
-      'Body Work',
-      'Paint Service',
-      'Parts Replacement'
-    ]
+    slug: 'bike-insurance',
+    services: [{
+      id: 'bike-insurance-1',
+      name: 'Bike Insurance',
+      duration: 'Annual',
+      warranty: '1 Year',
+      recommended: 'Yearly Renewal',
+      features: [
+        'Accident Coverage',
+        'Third-party Liability',
+        'Natural Disaster Protection',
+        'Theft Coverage',
+        'Zero Depreciation'
+      ]
+    }]
   }
 ];

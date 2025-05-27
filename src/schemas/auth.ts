@@ -11,13 +11,16 @@ export type LoginInput = z.infer<typeof loginSchema>;
 
 // Signup Schema
 export const signupSchema = z.object({
-  username: z.string().min(3, 'Username must be at least 3 characters'),
   email: z.string().email('Invalid email address'),
   password: z.string()
     .min(8, 'Password must be at least 8 characters')
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
     .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number'),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
 });
 
 export type SignupInput = z.infer<typeof signupSchema>;
@@ -48,17 +51,22 @@ export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 // User Type
 export interface User {
   id: number;
-  username: string;
   email: string;
-  firstName?: string;
-  lastName?: string;
-  isVerified: boolean;
-  avatar?: string;
-  created_at: string;
+  username: string;
+  is_first_login?: boolean;
+  isVerified?: boolean;
+  created_at?: string;
   name?: string;
   phone?: string;
   address?: string;
   preferred_location?: string;
+  profile?: {
+    name: string;
+    phone: string;
+    address: string;
+    profile_photo?: string;
+    preferred_location?: string;
+  };
 }
 
 // API Response Types
@@ -71,8 +79,12 @@ export interface AuthResponse {
 }
 
 export interface LoginResponse extends AuthResponse {
-  access_token: string;
-  refresh_token: string;
+  tokens: {
+    access: string;
+    refresh: string;
+  };
+  is_first_login: boolean;
+  user: User;
 }
 
 export interface UserResponse {

@@ -1,161 +1,91 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { authApi } from '../services/api';
-import { getTokenError } from '../utils/tokenUtils';
+import { useVerifyEmail } from '../hooks/auth/useEmailVerification';
+
+interface VerificationState {
+  status: 'verifying' | 'success' | 'error';
+  message: string;
+}
 
 const EmailVerification = () => {
-  const { token } = useParams();
+  const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const [verifying, setVerifying] = useState(true);
-  const [verified, setVerified] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const verificationAttempted = useRef(false);
+  const [state, setState] = useState<VerificationState>({
+    status: 'verifying',
+    message: 'Verifying your email...'
+  });
+
+  const verifyEmail = useVerifyEmail();
 
   useEffect(() => {
-    const verifyEmail = async () => {
-      // Prevent double verification attempts
-      if (verificationAttempted.current) return;
-      verificationAttempted.current = true;
-
+    const verifyToken = async () => {
       if (!token) {
-        console.log('No token provided');
-        setError('Verification token is missing');
-        setVerifying(false);
-        return;
-      }
-
-      console.log('Attempting to verify email with token:', token);
-
-      // Validate token format
-      const tokenError = getTokenError(token);
-      if (tokenError) {
-        console.log('Token validation failed:', tokenError);
-        setError(tokenError);
-        setVerifying(false);
-        toast.error(tokenError);
+        setState({
+          status: 'error',
+          message: 'No verification token provided.'
+        });
         return;
       }
 
       try {
-        console.log('Making API request to verify email...');
-        const response = await authApi.verifyEmail(token);
-        console.log('Verification API response:', response);
-        
-        setVerified(true);
-        setError(null);
-        toast.success(response.message || 'Email verified successfully!');
-        
-        // Extract path from full URL if needed and map to correct frontend route
-        let redirectPath = response.redirect_url || '/login/';
-        try {
-          if (redirectPath.startsWith('http')) {
-            const url = new URL(redirectPath);
-            redirectPath = url.pathname + url.search + url.hash;
-          }
-          
-          // Map backend routes to frontend routes
-          const routeMapping: Record<string, string> = {
-            '/login-signup': '/login/',
-            'http://localhost:5173/login-signup': '/login/'
-          };
-          
-          redirectPath = routeMapping[redirectPath] || redirectPath;
-        } catch (e) {
-          redirectPath = '/login/';
-        }
-
-        setTimeout(() => {
-          navigate(redirectPath, { replace: true });
-        }, 3000);
+        await verifyEmail.mutateAsync(token);
+        setState({
+          status: 'success',
+          message: 'Email verified successfully!'
+        });
+        toast.success('Email verified successfully!');
+        // Redirect to login after 3 seconds
+        setTimeout(() => navigate('/login'), 3000);
       } catch (error: any) {
-        console.error('Verification failed:', error);
-        console.error('Error response:', error.response);
-        console.error('Error message:', error.message);
-        
-        // Handle the case where the email was already verified
-        if (error.response?.status === 400 && error.response?.data?.verified) {
-          setVerified(true);
-          setError(null);
-          toast.info('Email was already verified. Redirecting to login...');
-          setTimeout(() => {
-            navigate('/login', { replace: true });
-          }, 3000);
-          return;
-        }
-
-        const errorMessage = 
-          error.response?.data?.message ||
-          error.response?.data?.detail ||
-          error.response?.data?.error ||
-          (error.response?.status === 400 ? 'Invalid or expired verification link' : 'Failed to verify email');
-        
-        setError(errorMessage);
-        toast.error(errorMessage);
-      } finally {
-        setVerifying(false);
+        setState({
+          status: 'error',
+          message: error.response?.data?.detail || 'Failed to verify email.'
+        });
+        toast.error('Failed to verify email.');
       }
     };
 
-    verifyEmail();
-  }, [token, navigate]);
+    verifyToken();
+  }, [token, navigate, verifyEmail]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
-            Email Verification
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            {verifying
-              ? 'Verifying your email...'
-              : verified
-              ? 'Your email has been verified!'
-              : error || 'Failed to verify email'}
-          </p>
-        </div>
-
-        <div className="mt-8 flex justify-center">
-          {verifying ? (
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900" />
-          ) : verified ? (
-            <div className="text-center">
-              <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
-              <p className="mt-4 text-sm text-gray-600">
-                Redirecting to login page...
-              </p>
-            </div>
-          ) : (
-            <div className="text-center">
-              {error?.includes('expired') ? (
-                <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500" />
-              ) : (
-                <XCircle className="mx-auto h-12 w-12 text-red-500" />
-              )}
-              <p className="mt-4 text-sm text-gray-600">
-                {error || 'Please try again or contact support if the problem persists.'}
-              </p>
-              <div className="mt-4 space-y-2">
-                <button
-                  onClick={() => navigate('/login')}
-                  className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#FF5733] hover:bg-[#ff4019] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FF5733]"
-                >
-                  Go to Login
-                </button>
-                {error?.includes('expired') && (
-                  <button
-                    onClick={() => navigate('/resend-verification')}
-                    className="w-full inline-flex justify-center items-center px-4 py-2 border border-[#FF5733] text-sm font-medium rounded-md shadow-sm text-[#FF5733] bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FF5733]"
-                  >
-                    Resend Verification Email
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-white to-[#ffe4d4] p-6">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-8 text-center">
+        {state.status === 'verifying' && (
+          <>
+            <AlertTriangle className="mx-auto h-16 w-16 text-yellow-500" />
+            <h2 className="mt-4 text-2xl font-bold text-gray-800">Verifying Email</h2>
+          </>
+        )}
+        
+        {state.status === 'success' && (
+          <>
+            <CheckCircle className="mx-auto h-16 w-16 text-green-500" />
+            <h2 className="mt-4 text-2xl font-bold text-gray-800">Email Verified!</h2>
+          </>
+        )}
+        
+        {state.status === 'error' && (
+          <>
+            <XCircle className="mx-auto h-16 w-16 text-red-500" />
+            <h2 className="mt-4 text-2xl font-bold text-gray-800">Verification Failed</h2>
+          </>
+        )}
+        
+        <p className="mt-2 text-gray-600">{state.message}</p>
+        
+        {state.status === 'error' && (
+          <div className="mt-6">
+            <button
+              onClick={() => navigate('/resend-verification')}
+              className="text-[#FF5733] hover:underline"
+            >
+              Resend verification email
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

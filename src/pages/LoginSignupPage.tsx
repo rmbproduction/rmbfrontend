@@ -1,19 +1,21 @@
 // LoginSignupPage.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaGoogle, FaFacebookF, FaEye, FaEyeSlash } from "react-icons/fa";
 import { Loader } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
 import { toast } from "react-toastify";
+
+// Import our custom hooks and context
 import { useAuth } from "../contexts/AuthContext";
-import { apiService } from "../config/api.config";
+import { useSignup, useForgotPassword, useGoogleLogin } from "../hooks/auth/useAuth";
 
-// Schema imports
-import { loginSchema, signupSchema, forgotPasswordSchema } from "../schemas/auth";
-import type { LoginInput, SignupInput, ForgotPasswordInput } from "../schemas/auth";
-
-// Define a static API URL for the static version
+interface FormData {
+  username: string;
+  email: string;
+  password: string;
+  rememberMe: boolean;
+}
 
 type Mode = "login" | "signup" | "forgot";
 
@@ -44,13 +46,20 @@ const pageVariants = {
 const LoginSignupPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, isLoading: authLoading, isAuthenticated } = useAuth();
   
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
   // Get redirect path from location state
   const from = location.state?.from?.pathname || "/profile";
   
   const [mode, setMode] = useState<Mode>("login");
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     username: "",
     email: "",
     password: "",
@@ -59,94 +68,41 @@ const LoginSignupPage = () => {
   const [error, setError] = useState("");
   const [direction, setDirection] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
 
-  // Login mutation
-  const loginMutation = useMutation({
-    mutationFn: async (data: LoginInput) => {
-      try {
-        const validatedData = loginSchema.parse(data);
-        await login(validatedData.email, validatedData.password);
-        return { success: true };
-      } catch (error: any) {
-        if (error.errors) {
-          throw new Error(error.errors[0].message);
-        }
-        throw error;
-      }
-    },
-    onSuccess: () => {
-      navigate(from, { replace: true });
-      toast.success("Successfully logged in!");
-    },
-    onError: (error: any) => {
-      handleApiError(error);
-    },
-  });
+  // Use our custom hooks
+  const signupMutation = useSignup();
+  const forgotPasswordMutation = useForgotPassword();
+  const googleLoginMutation = useGoogleLogin();
 
-  // Signup mutation
-  const signupMutation = useMutation({
-    mutationFn: async (data: SignupInput) => {
-      try {
-        const validatedData = signupSchema.parse(data);
-        return await apiService.auth.signup(validatedData);
-      } catch (error: any) {
-        if (error.errors) {
-          throw new Error(error.errors[0].message);
-        }
-        throw error;
-      }
-    },
-    onSuccess: (response) => {
-      if (response?.data?.verification_token || response?.data?.key) {
-        const token = response.data.verification_token || response.data.key;
-        navigate(`/verify-email/${token}`);
+  // Check for existing lockout
+  useEffect(() => {
+    const storedLockout = localStorage.getItem('loginLockoutUntil');
+    if (storedLockout) {
+      const lockoutTime = parseInt(storedLockout);
+      if (lockoutTime > Date.now()) {
+        setLockoutUntil(lockoutTime);
       } else {
-        navigate("/verify-email");
+        localStorage.removeItem('loginLockoutUntil');
       }
-      toast.success(response?.data?.message || "Account created! Please verify your email.");
-    },
-    onError: (error: any) => {
-      handleApiError(error);
-    },
-  });
+    }
+  }, []);
 
-  // Forgot password mutation
-  const forgotPasswordMutation = useMutation({
-    mutationFn: async (data: ForgotPasswordInput) => {
-      try {
-        const validatedData = forgotPasswordSchema.parse(data);
-        const response = await apiService.auth.forgotPassword(validatedData);
-        return response.data;
-      } catch (error: any) {
-        if (error.errors) {
-          throw new Error(error.errors[0].message);
-        }
-        throw error;
-      }
-    },
-    onSuccess: () => {
-      sessionStorage.setItem('resetPasswordEmail', formData.email);
-      navigate("/password-reset-confirmation");
-      toast.success("Password reset link sent to your email!");
-    },
-    onError: (error: any) => {
-      handleApiError(error);
-    },
-  });
-
-  // Google login mutation
-  const googleLoginMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiService.auth.googleLogin();
-      return response.data;
-    },
-    onSuccess: (data: { auth_url: string }) => {
-      window.location.href = data.auth_url;
-    },
-    onError: (error: any) => {
-      handleApiError(error);
-    },
-  });
+  const handleLoginFailure = () => {
+    const newAttempts = loginAttempts + 1;
+    setLoginAttempts(newAttempts);
+    
+    if (newAttempts >= 5) {
+      const lockoutTime = Date.now() + 15 * 60 * 1000; // 15 minutes
+      setLockoutUntil(lockoutTime);
+      localStorage.setItem('loginLockoutUntil', lockoutTime.toString());
+      toast.error("Too many failed attempts. Please try again in 15 minutes.", {
+        autoClose: 10000 // Show for 10 seconds
+      });
+      setError("Account is temporarily locked. Please try again in 15 minutes.");
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
@@ -159,6 +115,17 @@ const LoginSignupPage = () => {
   };
 
   const handleApiError = (error: any) => {
+    if (error.response?.status === 429) {
+      const retryAfter = error.response.headers['retry-after'];
+      const waitTime = retryAfter ? parseInt(retryAfter) : 15 * 60; // Default to 15 minutes
+      const minutesLeft = Math.ceil(waitTime / 60);
+      toast.error(`Too many attempts. Please try again in ${minutesLeft} minutes.`, {
+        autoClose: 10000 // Show for 10 seconds
+      });
+      setError(`Account is temporarily locked. Please try again in ${minutesLeft} minutes.`);
+      return;
+    }
+
     if (error.response?.data) {
       const data = error.response.data;
       if (data.detail) {
@@ -182,33 +149,69 @@ const LoginSignupPage = () => {
     e.preventDefault();
     setError("");
     
+    // Check for lockout
+    if (lockoutUntil && Date.now() < lockoutUntil) {
+      const minutesLeft = Math.ceil((lockoutUntil - Date.now()) / (60 * 1000));
+      toast.error(`Account is temporarily locked. Please try again in ${minutesLeft} minutes.`, {
+        autoClose: 5000
+      });
+      setError(`Account is temporarily locked. Please try again in ${minutesLeft} minutes.`);
+      return;
+    }
+    
     try {
       if (mode === "login") {
-        loginMutation.mutate({
-          email: formData.email,
-          password: formData.password,
-          rememberMe: formData.rememberMe
-        });
+        const response = await login(formData.email, formData.password, formData.rememberMe);
+        // Reset attempts on successful login
+        setLoginAttempts(0);
+        localStorage.removeItem('loginLockoutUntil');
+        toast.success("Successfully logged in!");
+        
+        // Navigate after successful login
+        if (response.is_first_login) {
+          navigate('/');
+        } else {
+          navigate(from || '/', { replace: true });
+        }
       } else if (mode === "signup") {
-        signupMutation.mutate({
+        const response = await signupMutation.mutateAsync({
           username: formData.username,
           email: formData.email,
           password: formData.password
         });
+        
+        if (response.data?.verification_token) {
+          navigate(`/verify-email/${response.data.verification_token}`);
+          toast.success("Account created! Please verify your email.");
+        } else {
+          navigate("/verify-email");
+          toast.success("Account created! Please check your email for verification.");
+        }
       } else if (mode === "forgot") {
-        forgotPasswordMutation.mutate({
+        await forgotPasswordMutation.mutateAsync({
           email: formData.email
         });
+        sessionStorage.setItem('resetPasswordEmail', formData.email);
+        navigate("/password-reset-confirmation");
+        toast.success("Password reset link sent to your email!");
       }
     } catch (error: any) {
-      if (error.errors) {
-        setError(error.errors[0].message);
+      if (mode === "login") {
+        handleLoginFailure();
       }
+      handleApiError(error);
     }
   };
 
-  const handleGoogleLogin = () => {
-    googleLoginMutation.mutate();
+  const handleGoogleLogin = async () => {
+    try {
+      const response = await googleLoginMutation.mutateAsync();
+      if (response.data?.auth_url) {
+        window.location.href = response.data.auth_url;
+      }
+    } catch (error: any) {
+      handleApiError(error);
+    }
   };
 
   const switchMode = (newMode: Mode) => {
@@ -229,8 +232,17 @@ const LoginSignupPage = () => {
     setMode(newMode);
   };
 
-  const isLoading = loginMutation.isPending || signupMutation.isPending || 
+  const isLoading = authLoading || signupMutation.isPending || 
                     forgotPasswordMutation.isPending || googleLoginMutation.isPending;
+
+  // Prevent rendering during initial auth check
+  if (authLoading && !error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-white to-[#ffe4d4]">
+        <Loader className="animate-spin h-8 w-8 text-[#FF5733]" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-white to-[#ffe4d4] p-6">

@@ -1,20 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import VehicleFilters from '../components/VehicleFilters';
-import { marketplaceService } from '../services/marketplaceService';
-
-interface Vehicle {
-  id: string;
-  name: string;
-  brand: string;
-  model: string;
-  year: number;
-  price: number;
-  status: 'available' | 'sold' | 'under_inspection';
-  kms_driven: number;
-  image: string;
-  fuel_type?: string;
-}
+import { Vehicle } from '../types/vehicle';
+import { motion } from 'framer-motion';
 
 const VehicleList = () => {
   const navigate = useNavigate();
@@ -22,81 +10,79 @@ const VehicleList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [vehicleCount, setVehicleCount] = useState(0);
-
-  // Mock data - replace with API call
-  const mockVehicles: Vehicle[] = [
-    {
-      id: '1',
-      name: 'Royal Enfield Bullet',
-      brand: 'Royal Enfield',
-      model: 'Bullet',
-      year: 2021,
-      price: 34000,
-      status: 'under_inspection',
-      kms_driven: 34000,
-      image: '/images/vehicles/bullet-1.jpg',
-      fuel_type: 'petrol'
-    },
-    {
-      id: '2',
-      name: 'Honda Splender',
-      brand: 'Honda',
-      model: 'Splender',
-      year: 2021,
-      price: 34000,
-      status: 'under_inspection',
-      kms_driven: 34000,
-      image: '/images/vehicles/splender.jpg',
-      fuel_type: 'petrol'
-    }
-  ];
-
-  const handleFiltersChange = (filters: any) => {
-    setLoading(true);
-    // Here you would make an API call with the filters
-    // For now, we'll just simulate filtering the mock data
-    const filteredVehicles = mockVehicles.filter(vehicle => {
-      // Search filter
-      if (filters.search && !vehicle.name.toLowerCase().includes(filters.search.toLowerCase())) {
-        return false;
-      }
-
-      // Status filter
-      if (filters.status.length > 0 && !filters.status.includes(vehicle.status)) {
-        return false;
-      }
-
-      // Brand filter
-      if (filters.brand.length > 0 && !filters.brand.includes(vehicle.brand.toLowerCase().replace(' ', '_'))) {
-        return false;
-      }
-
-      // Price range filter
-      if (vehicle.price < filters.priceRange.min || vehicle.price > filters.priceRange.max) {
-        return false;
-      }
-
-      // Year range filter
-      if (vehicle.year < filters.yearRange.min || vehicle.year > filters.yearRange.max) {
-        return false;
-      }
-
-      return true;
-    });
-
-    setTimeout(() => {
-      setVehicles(filteredVehicles);
-      setVehicleCount(filteredVehicles.length);
-      setLoading(false);
-    }, 300); // Reduced delay for better UX
-  };
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    // Initial load
-    setVehicles(mockVehicles);
-    setVehicleCount(mockVehicles.length);
-    setLoading(false);
+    const fetchVehicles = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('https://repairmybike.up.railway.app/api/marketplace/vehicles/');
+        if (!response.ok) {
+          throw new Error('Failed to fetch vehicles');
+        }
+        const data = await response.json();
+        setVehicles(data);
+        setVehicleCount(data.length);
+      } catch (error) {
+        console.error('Error fetching vehicles:', error);
+        setError(error instanceof Error ? error.message : 'Failed to load vehicles');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchVehicles();
   }, []);
+
+  const handleFiltersChange = async (filters: any) => {
+    try {
+      setLoading(true);
+      // TODO: Implement filter params in API call
+      const response = await fetch('https://repairmybike.up.railway.app/api/marketplace/vehicles/');
+      if (!response.ok) {
+        throw new Error('Failed to fetch vehicles');
+      }
+      const data = await response.json();
+      
+      // Client-side filtering until API supports filter parameters
+      const filteredVehicles = data.filter((vehicle: Vehicle) => {
+        // Search filter
+        if (filters.search && !`${vehicle.brand} ${vehicle.model}`.toLowerCase().includes(filters.search.toLowerCase())) {
+          return false;
+        }
+
+        // Status filter
+        if (filters.status.length > 0 && !filters.status.includes(vehicle.status)) {
+          return false;
+        }
+
+        // Brand filter
+        if (filters.brand.length > 0 && !filters.brand.includes(vehicle.brand.toLowerCase().replace(' ', '_'))) {
+          return false;
+        }
+
+        // Price range filter
+        if (vehicle.display_price.amount < filters.priceRange.min || vehicle.display_price.amount > filters.priceRange.max) {
+          return false;
+        }
+
+        // Year range filter
+        if (vehicle.year < filters.yearRange.min || vehicle.year > filters.yearRange.max) {
+          return false;
+        }
+
+        return true;
+      });
+
+      setVehicles(filteredVehicles);
+      setVehicleCount(filteredVehicles.length);
+    } catch (error) {
+      console.error('Error applying filters:', error);
+      setError(error instanceof Error ? error.message : 'Failed to apply filters');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
@@ -145,12 +131,12 @@ const VehicleList = () => {
         )}
 
         {/* Vehicle Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {loading ? (
             // Loading skeletons
             Array.from({ length: 4 }).map((_, index) => (
               <div key={index} className="bg-white rounded-lg shadow-sm animate-pulse">
-                <div className="h-64 bg-gray-200 rounded-t-lg" />
+                <div className="aspect-[16/10] bg-gray-200 rounded-t-lg" />
                 <div className="p-4 space-y-3">
                   <div className="h-4 bg-gray-200 rounded w-3/4" />
                   <div className="h-4 bg-gray-200 rounded w-1/2" />
@@ -164,15 +150,18 @@ const VehicleList = () => {
             </div>
           ) : (
             vehicles.map(vehicle => (
-              <div
+              <motion.div
                 key={vehicle.id}
-                className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                whileHover={{ scale: 1.02 }}
+                className="bg-white rounded-lg shadow-sm overflow-hidden cursor-pointer"
                 onClick={() => navigate(`/vehicles/${vehicle.id}`)}
               >
                 <div className="aspect-[16/10] relative">
                   <img
-                    src={vehicle.image}
-                    alt={vehicle.name}
+                    src={vehicle.front_image_url}
+                    alt={`${vehicle.brand} ${vehicle.model}`}
                     className="w-full h-full object-cover rounded-t-lg"
                   />
                   <span
@@ -180,12 +169,11 @@ const VehicleList = () => {
                       vehicle.status
                     )}`}
                   >
-                    {vehicle.status.replace('_', ' ').charAt(0).toUpperCase() +
-                      vehicle.status.slice(1)}
+                    {vehicle.status_display}
                   </span>
                 </div>
                 <div className="p-4">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-1">{vehicle.name}</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">{vehicle.brand} {vehicle.model}</h2>
                   <div className="flex items-center text-sm text-gray-500 mb-2">
                     <span>{vehicle.year}</span>
                     <span className="mx-2">•</span>
@@ -198,10 +186,10 @@ const VehicleList = () => {
                     )}
                   </div>
                   <div className="text-[#FF5733] font-semibold">
-                    ₹{vehicle.price.toLocaleString()}.00
+                    {vehicle.display_price.formatted}
                   </div>
                 </div>
-              </div>
+              </motion.div>
             ))
           )}
         </div>

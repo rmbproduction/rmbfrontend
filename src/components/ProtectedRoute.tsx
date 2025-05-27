@@ -7,7 +7,7 @@ interface ProtectedRouteProps {
   requireAuth?: boolean;
 }
 
-export const ProtectedRoute = ({ children, requireAuth = true }: ProtectedRouteProps) => {
+export const ProtectedRoute = ({ children, requireAuth = false }: ProtectedRouteProps) => {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
 
@@ -24,8 +24,8 @@ export const ProtectedRoute = ({ children, requireAuth = true }: ProtectedRouteP
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (isAuthenticated && !requireAuth) {
-    // If user is authenticated and tries to access login/signup pages
+  if (isAuthenticated && !requireAuth && location.pathname === '/login') {
+    // If user is authenticated and tries to access login page
     return <Navigate to="/profile" replace />;
   }
 

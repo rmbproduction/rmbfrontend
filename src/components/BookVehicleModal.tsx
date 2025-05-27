@@ -1,4 +1,5 @@
 import React from 'react';
+import { Loader2 } from 'lucide-react';
 
 interface BookVehicleModalProps {
   isOpen: boolean;
@@ -7,6 +8,7 @@ interface BookVehicleModalProps {
   contactNumber: string;
   notes: string;
   onInputChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  isLoading?: boolean;
 }
 
 const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
@@ -15,7 +17,8 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
   onSubmit,
   contactNumber,
   notes,
-  onInputChange
+  onInputChange,
+  isLoading = false
 }) => {
   if (!isOpen) return null;
 
@@ -40,10 +43,10 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
                 value={contactNumber}
                 onChange={onInputChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent"
-                placeholder="7897891234"
+                placeholder="Enter your contact number"
                 required
+                disabled={isLoading}
               />
-              <p className="mt-1 text-xs text-gray-500">Format: +91123456789 or 1234567890</p>
             </div>
 
             <div>
@@ -58,6 +61,7 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent"
                 placeholder="Any specific details or questions about the vehicle..."
+                disabled={isLoading}
               />
             </div>
           </div>
@@ -66,15 +70,24 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              disabled={isLoading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-[#FF5733] text-white rounded-lg hover:bg-[#ff4019] transition-colors"
+              className="flex-1 px-4 py-2 bg-[#FF5733] text-white rounded-lg hover:bg-[#ff4019] transition-colors disabled:opacity-50 flex items-center justify-center"
+              disabled={isLoading}
             >
-              Submit Booking
+              {isLoading ? (
+                <>
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                  Submitting...
+                </>
+              ) : (
+                'Submit Booking'
+              )}
             </button>
           </div>
         </form>

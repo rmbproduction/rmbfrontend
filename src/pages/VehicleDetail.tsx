@@ -1,146 +1,106 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { 
   Heart, Share2, ChevronLeft, ChevronRight, X
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import BookVehicleModal from '../components/BookVehicleModal';
-
-interface Vehicle {
-  id: string;
-  name: string;
-  brand: string;
-  model: string;
-  year: number;
-  price: number;
-  status: 'available' | 'sold' | 'under_inspection' | 'pending';
-  kms_driven: number;
-  fuel_type: string;
-  color: string;
-  condition: string;
-  seller_notes: string;
-  vehicle_type: 'bike' | 'scooter' | 'electric_bike';
-  engine_capacity: number;
-  mileage: string;
-  location: string;
-  emi_available?: boolean;
-  images: {
-    main: string;
-    gallery: string[];
-  };
-}
-
-interface SimilarVehicle {
-  id: string;
-  brand: string;
-  model: string;
-  year: number;
-  kms_driven: number;
-  price: number;
-  image: string;
-}
+import VehicleImageSlider from '../components/VehicleImageSlider';
+import VehicleCard from '../components/VehicleCard';
+import { Vehicle } from '../types/vehicle';
+import { useCreateBooking } from '../services/bookingService';
+import '../styles/swiper-custom.css';
 
 const VehicleDetail = () => {
   const navigate = useNavigate();
+  const { id } = useParams();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+  const [similarVehicles, setSimilarVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(0);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [bookingData, setBookingData] = useState({
     contactNumber: '',
     notes: ''
   });
 
-  // Mock data - replace with API call
-  const mockVehicle: Vehicle = {
-    id: '1',
-    name: 'Royal Enfield Bullet',
-    brand: 'Royal Enfield',
-    model: 'Bullet',
-    year: 2021,
-    price: 34000,
-    status: 'available',
-    kms_driven: 34000,
-    fuel_type: 'petrol',
-    color: 'Black',
-    condition: 'Used',
-    seller_notes: 'Well maintained bike with all service records',
-    vehicle_type: 'bike',
-    engine_capacity: 350,
-    mileage: '35 kmpl',
-    location: 'Mumbai',
-    emi_available: true,
-    images: {
-      main: '/images/vehicles/bullet-1.jpg',
-      gallery: [
-        '/images/vehicles/bullet-1.jpg',
-        '/images/vehicles/bullet-2.jpg',
-        '/images/vehicles/bullet-3.jpg',
-        '/images/vehicles/bullet-4.jpg',
-      ]
-    }
-  };
-
-  const similarVehicles: SimilarVehicle[] = [
-    {
-      id: '2',
-      brand: 'Yamaha',
-      model: 'yamaha',
-      year: 2001,
-      kms_driven: 56000,
-      price: 45000,
-      image: '/images/vehicles/yamaha.jpg'
-    },
-    {
-      id: '3',
-      brand: 'Hero',
-      model: 'Splender',
-      year: 2013,
-      kms_driven: 54000,
-      price: 78000,
-      image: '/images/vehicles/splender.jpg'
-    },
-    {
-      id: '4',
-      brand: 'Honda',
-      model: 'splender',
-      year: 2012,
-      kms_driven: 45000,
-      price: 49999,
-      image: '/images/vehicles/splender.jpg'
-    }
-  ];
-
   useEffect(() => {
-    // Simulate API call
-    setLoading(true);
-    setTimeout(() => {
-      setVehicle(mockVehicle);
-      setLoading(false);
-    }, 1000);
-  }, []);
+    const fetchVehicleDetail = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`https://repairmybike.up.railway.app/api/marketplace/vehicles/${id}/`);
+        if (!response.ok) {
+          throw new Error('Vehicle not found');
+        }
+        const data = await response.json();
+        setVehicle(data);
+
+        // Fetch similar vehicles
+        try {
+          const similarResponse = await fetch(`https://repairmybike.up.railway.app/api/marketplace/vehicles/?brand=${data.brand}&exclude=${id}`);
+          if (similarResponse.ok) {
+            const similarData = await similarResponse.json();
+            // Check if the response has the expected structure
+            if (similarData && Array.isArray(similarData)) {
+              // If response is an array, use it directly
+              setSimilarVehicles(similarData.slice(0, 4));
+            } else if (similarData && similarData.results && Array.isArray(similarData.results)) {
+              // If response has a results array, use that
+              setSimilarVehicles(similarData.results.slice(0, 4));
+            } else {
+              console.warn('Unexpected similar vehicles response structure:', similarData);
+              setSimilarVehicles([]);
+            }
+          }
+        } catch (similarError) {
+          console.error('Error fetching similar vehicles:', similarError);
+          setSimilarVehicles([]);
+        }
+      } catch (error) {
+        console.error('Error fetching vehicle:', error);
+        setError(error instanceof Error ? error.message : 'Failed to load vehicle');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchVehicleDetail();
+    }
+  }, [id]);
+
+  const getGalleryImages = (vehicle: Vehicle) => {
+    const images = [];
+    if (vehicle.front_image_url) images.push(vehicle.front_image_url);
+    if (vehicle.back_image_url) images.push(vehicle.back_image_url);
+    if (vehicle.left_image_url) images.push(vehicle.left_image_url);
+    if (vehicle.right_image_url) images.push(vehicle.right_image_url);
+    if (vehicle.dashboard_image_url) images.push(vehicle.dashboard_image_url);
+    return images;
+  };
 
   const closeModal = () => {
     setShowModal(false);
   };
 
   const nextImage = () => {
-    if (!vehicle?.images.gallery.length) return;
+    if (!vehicle) return;
+    const images = getGalleryImages(vehicle);
     setActiveImageIndex((prev) => 
-      (prev + 1) % vehicle.images.gallery.length
+      (prev + 1) % images.length
     );
   };
 
   const prevImage = () => {
-    if (!vehicle?.images.gallery.length) return;
+    if (!vehicle) return;
+    const images = getGalleryImages(vehicle);
     setActiveImageIndex((prev) => 
-      prev === 0 ? vehicle.images.gallery.length - 1 : prev - 1
+      prev === 0 ? images.length - 1 : prev - 1
     );
   };
 
@@ -164,7 +124,7 @@ const VehicleDetail = () => {
       if (navigator.share) {
         await navigator.share({
           title: `${vehicle?.brand} ${vehicle?.model}`,
-          text: `Check out this ${vehicle?.brand} ${vehicle?.model} on RepairMyBike!`,
+          text: vehicle?.short_description,
           url: window.location.href
         });
         toast.success('Shared successfully');
@@ -180,26 +140,27 @@ const VehicleDetail = () => {
     }
   };
 
-  const getBrandInitials = (brand: string) => {
-    return brand.split(' ').map(word => word[0]).join('').toUpperCase();
-  };
+  // Initialize the booking mutation
+  const createBooking = useCreateBooking({
+    onSuccess: () => {
+      setShowBookingModal(false);
+      setBookingData({ contactNumber: '', notes: '' });
+    }
+  });
 
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const phoneRegex = /^(\+91|0)?[6789]\d{9}$/;
-    if (!phoneRegex.test(bookingData.contactNumber)) {
-      toast.error('Please enter a valid Indian phone number');
+
+    if (!vehicle) {
+      toast.error('Vehicle not found');
       return;
     }
 
-    try {
-      console.log('Booking submitted:', bookingData);
-      toast.success('Booking submitted successfully!');
-      setShowBookingModal(false);
-      setBookingData({ contactNumber: '', notes: '' });
-    } catch (error) {
-      toast.error('Failed to submit booking. Please try again.');
-    }
+    createBooking.mutate({
+      vehicle: vehicle.id,
+      contact_number: bookingData.contactNumber,
+      notes: bookingData.notes
+    });
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -234,6 +195,8 @@ const VehicleDetail = () => {
     );
   }
 
+  const galleryImages = getGalleryImages(vehicle);
+
   return (
     <div className="min-h-screen bg-gray-50 py-6">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -246,40 +209,74 @@ const VehicleDetail = () => {
           <span>Back to Vehicles</span>
         </button>
 
+        {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Left Column - Images */}
+          {/* Left Column - Images and Details */}
           <div className="lg:col-span-8">
-            {/* Main Image */}
-            <div className="aspect-[4/3] rounded-lg overflow-hidden bg-gray-100">
-              <img
-                src={vehicle.images.gallery[activeImageIndex]}
-                alt={`${vehicle.brand} ${vehicle.model}`}
-                className="w-full h-full object-cover"
-              />
-            </div>
+            {/* Image Slider */}
+            <VehicleImageSlider 
+              images={galleryImages}
+              title={`${vehicle.brand} ${vehicle.model}`}
+            />
 
-            {/* Thumbnail Gallery */}
-            <div className="mt-4 grid grid-cols-5 gap-4">
-              {vehicle.images.gallery.map((image, index) => (
-                <button
-                  key={index}
-                  onClick={() => setSelectedImage(index)}
-                  className={`aspect-square rounded-lg overflow-hidden ${
-                    selectedImage === index ? 'ring-2 ring-[#FF5733]' : ''
-                  }`}
-                >
-                  <img
-                    src={image}
-                    alt={`${vehicle.brand} ${vehicle.model} view ${index + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                </button>
-              ))}
+            {/* Vehicle Details Section */}
+            <div className="mt-8 bg-white rounded-lg shadow-sm">
+              {/* Features Section */}
+              <div className="p-6 border-b border-gray-100">
+                <h3 className="text-xl font-bold text-gray-900 mb-4">Features</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {vehicle.features.map((feature, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center bg-gray-50 rounded-lg p-3 text-gray-700"
+                    >
+                      <div className="h-2 w-2 rounded-full bg-[#FF5733] mr-3"></div>
+                      <span className="text-sm font-medium">{feature}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Specifications */}
+              <div className="p-6">
+                <h3 className="text-xl font-bold text-gray-900 mb-4">Specifications</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="text-sm font-medium text-gray-500 mb-1">Registration</h4>
+                    <p className="text-base font-semibold text-gray-900">{vehicle.registration_number}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="text-sm font-medium text-gray-500 mb-1">Color</h4>
+                    <p className="text-base font-semibold text-gray-900">{vehicle.color}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="text-sm font-medium text-gray-500 mb-1">Engine</h4>
+                    <p className="text-base font-semibold text-gray-900">{vehicle.engine_capacity}cc</p>
+                  </div>
+                  {vehicle.last_service_date && (
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h4 className="text-sm font-medium text-gray-500 mb-1">Last Service</h4>
+                      <p className="text-base font-semibold text-gray-900">
+                        {new Date(vehicle.last_service_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                  )}
+                  {vehicle.insurance_valid_till && (
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h4 className="text-sm font-medium text-gray-500 mb-1">Insurance Valid Till</h4>
+                      <p className="text-base font-semibold text-gray-900">
+                        {new Date(vehicle.insurance_valid_till).toLocaleDateString()}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Right Column - Vehicle Info */}
-          <div className="lg:col-span-4">
+          {/* Right Column - Price, Actions, and Similar Vehicles */}
+          <div className="lg:col-span-4 space-y-8">
+            {/* Price and Actions Card */}
             <div className="bg-white rounded-lg p-6 shadow-sm">
               {/* Vehicle Title */}
               <h1 className="text-2xl font-bold text-gray-900 mb-2">
@@ -291,21 +288,32 @@ const VehicleDetail = () => {
                 <span>{vehicle.year}</span>
                 <span className="mx-2">•</span>
                 <span>{vehicle.kms_driven.toLocaleString()} km</span>
+                <span className="mx-2">•</span>
+                <span>{vehicle.fuel_type}</span>
               </div>
 
               {/* Price */}
               <div className="text-[#FF5733] text-2xl font-bold mb-6">
-                ₹{vehicle.price.toLocaleString()}.00
+                {vehicle.display_price.formatted}
+                {vehicle.display_price.emi_available && 
+                 vehicle.display_price.emi_starting_at && 
+                 vehicle.display_price.emi_starting_at !== '₹0/month' && (
+                  <div className="text-sm text-gray-500 font-normal">
+                    EMI starting at {vehicle.display_price.emi_starting_at}
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}
               <div className="space-y-3">
-                <button 
-                  onClick={() => setShowBookingModal(true)}
-                  className="w-full bg-[#FF5733] text-white py-3 rounded-lg hover:bg-[#ff4019] transition-colors"
-                >
-                  Book Bike
-                </button>
+                {vehicle.bookable && (
+                  <button 
+                    onClick={() => setShowBookingModal(true)}
+                    className="w-full bg-[#FF5733] text-white py-3 rounded-lg hover:bg-[#ff4019] transition-colors"
+                  >
+                    Book Test Ride
+                  </button>
+                )}
                 <button 
                   onClick={() => window.location.href = "tel:+911234567890"}
                   className="w-full border border-[#FF5733] text-[#FF5733] py-3 rounded-lg hover:bg-[#fff8f6] transition-colors"
@@ -345,90 +353,30 @@ const VehicleDetail = () => {
               </div>
             </div>
 
-            {/* Similar Vehicles */}
-            <div className="mt-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                You Might Also Like
-              </h2>
-              <div className="space-y-4">
-                {similarVehicles.map((vehicle) => (
-                  <div
-                    key={vehicle.id}
-                    className="flex items-center space-x-4 bg-white p-4 rounded-lg cursor-pointer hover:shadow-sm transition-shadow"
-                    onClick={() => navigate(`/vehicles/${vehicle.id}`)}
-                  >
-                    <div className="w-12 h-12 bg-[#FF5733] text-white rounded-lg flex items-center justify-center font-bold">
-                      {getBrandInitials(vehicle.brand)}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium text-gray-900">
-                        {vehicle.brand} {vehicle.model}
-                      </h3>
-                      <div className="text-sm text-gray-500">
-                        {vehicle.year} • {vehicle.kms_driven.toLocaleString()} km
-                      </div>
-                      <div className="text-[#FF5733] font-medium">
-                        ₹{vehicle.price.toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                <button
-                  onClick={() => navigate('/vehicles')}
-                  className="text-[#FF5733] hover:text-[#ff4019] font-medium"
+            {/* Similar Vehicles Section */}
+            {similarVehicles.length > 0 && (
+              <div className="bg-white rounded-xl p-6 shadow-sm">
+                <h2 className="text-xl font-bold text-gray-900 mb-4">You Might Also Like</h2>
+                <div className="space-y-2">
+                  {similarVehicles.map((similarVehicle) => (
+                    <VehicleCard
+                      key={similarVehicle.id}
+                      vehicle={similarVehicle}
+                      variant="compact"
+                    />
+                  ))}
+                </div>
+                <Link 
+                  to="/vehicles" 
+                  className="inline-block mt-6 text-[#FF5733] hover:text-[#ff4019] font-medium"
                 >
                   View all vehicles →
-                </button>
+                </Link>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
-
-      {/* Full-screen Image Modal */}
-      {showModal && (
-        <div 
-          className="fixed inset-0 z-50 bg-black bg-opacity-90 flex items-center justify-center"
-          onClick={closeModal}
-        >
-          <button 
-            className="absolute top-4 right-4 text-white p-2"
-            onClick={closeModal}
-          >
-            <X className="h-6 w-6" />
-          </button>
-          
-          <img
-            src={vehicle.images.gallery[activeImageIndex]}
-            alt={vehicle.name}
-            className="max-h-[90vh] max-w-[90vw] object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-          
-          {vehicle.images.gallery.length > 1 && (
-            <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  prevImage();
-                }}
-                className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white p-2"
-              >
-                <ChevronLeft className="h-8 w-8" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  nextImage();
-                }}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white p-2"
-              >
-                <ChevronRight className="h-8 w-8" />
-              </button>
-            </>
-          )}
-        </div>
-      )}
 
       {/* Booking Modal */}
       <BookVehicleModal
@@ -438,6 +386,7 @@ const VehicleDetail = () => {
         contactNumber={bookingData.contactNumber}
         notes={bookingData.notes}
         onInputChange={handleInputChange}
+        isLoading={createBooking.isPending}
       />
     </div>
   );
