@@ -22,6 +22,7 @@ import ResendVerification from './pages/ResendVerification';
 import ResetPassword from './pages/ResetPassword';
 import PasswordResetConfirmation from './pages/PasswordResetConfirmation';
 import SellVehicle from './pages/SellVehicle';
+import Pricing from './pages/pricing';
 
 // Layout wrapper for consistent layout
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -46,6 +47,12 @@ const AppRoutes: React.FC = () => {
           <Services />
           <HowItWorks />
           <Testimonials />
+        </MainLayout>
+      } />
+
+      <Route path="/pricing" element={
+        <MainLayout>
+          <Pricing />
         </MainLayout>
       } />
 

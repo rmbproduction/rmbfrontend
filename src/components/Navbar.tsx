@@ -9,7 +9,7 @@ import { useActiveCart } from '../hooks/cart/useCartQueries';
 const MENU_ITEMS = [
   { label: 'Services', path: '/', section: 'services' },
   { label: 'How It Works', path: '/', section: 'how-it-works' },
-  { label: 'Pricing', path: '/', section: 'pricing' },
+  { label: 'Pricing', path: '/pricing' },
   { label: 'Contact', path: '/contact' },
   { label: 'Buy Vehicle', path: '/vehicles' },
   { label: 'Sell Vehicle', path: '/sell-vehicle' }
@@ -21,7 +21,7 @@ const Navbar = () => {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
   const { cartCount } = useActiveCart();
 
   const handleNavigation = (path: string, section?: string) => {

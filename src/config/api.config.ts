@@ -241,6 +241,15 @@ export const API_ENDPOINTS = {
     updateRequestStatus: (id: string) => `/services/admin/requests/${id}/status/`,
   },
 
+  // Subscription endpoints
+  subscription: {
+    plans: '/subscription/plans/',
+    planVariants: '/subscription/plan-variants/',
+    subscriptionRequests: '/subscription/subscription-requests/',
+    userSubscriptions: '/subscription/subscriptions/',
+    activeSubscription: '/subscription/subscriptions/active/',
+  },
+
   // CDN endpoints
   cdn: {
     baseUrl: `https://res.cloudinary.com/${CDN_CONFIG.cloudName}`,

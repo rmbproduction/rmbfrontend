@@ -13,16 +13,71 @@ const getImageUrl = (image: string | null | undefined): string | null => {
     return image;
   }
   
-  // If it's a relative path, prepend the API base URL
+  // Handle relative paths from your API
+  if (image.startsWith('/media/')) {
+    return `https://repairmybike.up.railway.app${image}`;
+  }
+  
+  // Default case: prepend API base URL
   return `https://repairmybike.up.railway.app${image}`;
 };
 
-// Default placeholder component when no image is available
-const ImagePlaceholder = ({ className = "w-12 h-12" }: { className?: string }) => (
-  <div className={`bg-gray-100 rounded-lg flex items-center justify-center ${className}`}>
-    <ImageIcon className="w-6 h-6 text-gray-400" />
-  </div>
-);
+// Image component with loading and error handling
+const VehicleImage = ({ image, alt, className, size = 'small' }: { 
+  image: string | null | undefined;
+  alt: string;
+  className?: string;
+  size?: 'small' | 'medium' | 'large';
+}) => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+
+  const sizeClasses = {
+    small: 'w-12 h-12',
+    medium: 'w-20 h-16',
+    large: 'w-24 h-20'
+  };
+
+  const imageUrl = getImageUrl(image);
+
+  if (!imageUrl || hasError) {
+    return (
+      <div className={`bg-gray-100 rounded-lg flex items-center justify-center ${className || sizeClasses[size]}`}>
+        <ImageIcon className="w-6 h-6 text-gray-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      className="relative"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {isLoading && (
+        <div className={`animate-pulse bg-gray-200 rounded-lg ${className || sizeClasses[size]}`} />
+      )}
+      <img
+        src={imageUrl}
+        alt={alt}
+        className={`
+          ${className || sizeClasses[size]}
+          object-contain rounded-lg
+          transition-all duration-200
+          ${isHovered ? 'scale-110' : 'scale-100'}
+          ${isLoading ? 'hidden' : 'block'}
+        `}
+        onLoad={() => setIsLoading(false)}
+        onError={() => {
+          console.error('Failed to load image:', imageUrl);
+          setHasError(true);
+          setIsLoading(false);
+        }}
+      />
+    </div>
+  );
+};
 
 // Types
 interface VehicleType {
@@ -86,6 +141,29 @@ const SelectVehicle = ({ onVehicleSelect, serviceId, initialVehicle }: SelectVeh
       setStep(3);
     }
   }, [initialVehicle]);
+
+  // Add state persistence
+  useEffect(() => {
+    // Restore state from localStorage if available
+    const savedState = localStorage.getItem('vehicleSelectionState');
+    if (savedState) {
+      const { savedStep, savedVehicleType, savedManufacturer, savedModel } = JSON.parse(savedState);
+      setStep(savedStep);
+      setSelectedVehicleType(savedVehicleType);
+      setSelectedManufacturer(savedManufacturer);
+      setSelectedModel(savedModel);
+    }
+  }, []);
+
+  // Save state changes to localStorage
+  useEffect(() => {
+    localStorage.setItem('vehicleSelectionState', JSON.stringify({
+      savedStep: step,
+      savedVehicleType: selectedVehicleType,
+      savedManufacturer: selectedManufacturer,
+      savedModel: selectedModel
+    }));
+  }, [step, selectedVehicleType, selectedManufacturer, selectedModel]);
 
   // Fetch vehicle types
   const { data: vehicleTypes } = useQuery<VehicleType[]>({
@@ -155,6 +233,7 @@ const SelectVehicle = ({ onVehicleSelect, serviceId, initialVehicle }: SelectVeh
     setSelectedModel(null);
     setSearchQuery('');
     onVehicleSelect(null);
+    localStorage.removeItem('vehicleSelectionState');
   };
 
   const handleModelSelect = (model: VehicleModel) => {
@@ -175,33 +254,68 @@ const SelectVehicle = ({ onVehicleSelect, serviceId, initialVehicle }: SelectVeh
     }
   };
 
+  const renderVehicleType = (type: VehicleType) => (
+    <div
+      key={type.id}
+      className="flex flex-col items-center p-4 border rounded-lg cursor-pointer hover:border-[#FF5733] hover:shadow-md transition-all"
+      onClick={() => {
+        setSelectedVehicleType(type.id);
+        setStep(2);
+      }}
+    >
+      <VehicleImage 
+        image={type.image}
+        alt={type.name}
+        size="small"
+      />
+      <p className="text-sm font-medium mt-2">{type.name}</p>
+    </div>
+  );
+
+  const renderManufacturer = (manufacturer: Manufacturer) => (
+    <div
+      key={manufacturer.id}
+      className="flex flex-col items-center p-4 border rounded-lg cursor-pointer hover:border-[#FF5733] hover:shadow-md transition-all"
+      onClick={() => {
+        setSelectedManufacturer(manufacturer.id);
+        setStep(3);
+        setSearchQuery('');
+      }}
+    >
+      <VehicleImage 
+        image={manufacturer.image}
+        alt={manufacturer.name}
+        size="medium"
+      />
+      <p className="text-sm font-medium mt-2">{manufacturer.name}</p>
+    </div>
+  );
+
+  const renderModel = (model: VehicleModel) => (
+    <div
+      key={model.id}
+      className="flex flex-col items-center p-4 border rounded-lg cursor-pointer hover:border-[#FF5733] hover:shadow-md transition-all"
+      onClick={() => {
+        handleModelSelect(model);
+        setStep(4);
+      }}
+    >
+      <VehicleImage 
+        image={model.image}
+        alt={model.name}
+        size="large"
+      />
+      <p className="text-sm font-medium mt-2">{model.name}</p>
+    </div>
+  );
+
   const getStepContent = () => {
     switch (step) {
       case 1:
         return (
           <div className="p-6 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              {vehicleTypes?.map(type => (
-                <div
-                  key={type.id}
-                  className="flex flex-col items-center p-4 border rounded-lg cursor-pointer hover:border-[#FF5733] transition-colors"
-                  onClick={() => {
-                    setSelectedVehicleType(type.id);
-                    setStep(2);
-                  }}
-                >
-                  {getImageUrl(type.image) ? (
-                    <img 
-                      src={getImageUrl(type.image) || ''} 
-                      alt={type.name}
-                      className="w-12 h-12 object-contain mb-2 rounded-lg" 
-                    />
-                  ) : (
-                    <ImagePlaceholder />
-                  )}
-                  <p className="text-sm text-center">{type.name}</p>
-                </div>
-              ))}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 min-h-[200px]">
+              {vehicleTypes?.map(renderVehicleType)}
             </div>
           </div>
         );
@@ -209,7 +323,7 @@ const SelectVehicle = ({ onVehicleSelect, serviceId, initialVehicle }: SelectVeh
       case 2:
         return (
           <div className="p-6 space-y-4">
-            <div className="relative">
+            <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type="text"
@@ -219,31 +333,10 @@ const SelectVehicle = ({ onVehicleSelect, serviceId, initialVehicle }: SelectVeh
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 min-h-[200px]">
               {filteredManufacturers
                 ?.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                .map(manufacturer => (
-                  <div
-                    key={manufacturer.id}
-                    className="flex flex-col items-center p-4 border rounded-lg cursor-pointer hover:border-[#FF5733] transition-colors"
-                    onClick={() => {
-                      setSelectedManufacturer(manufacturer.id);
-                      setStep(3);
-                      setSearchQuery('');
-                    }}
-                  >
-                    {getImageUrl(manufacturer.image) ? (
-                      <img 
-                        src={getImageUrl(manufacturer.image) || ''} 
-                        alt={manufacturer.name}
-                        className="w-12 h-12 object-contain mb-2 rounded-lg" 
-                      />
-                    ) : (
-                      <ImagePlaceholder />
-                    )}
-                    <p className="text-sm text-center">{manufacturer.name}</p>
-                  </div>
-                ))}
+                .map(renderManufacturer)}
             </div>
           </div>
         );
@@ -251,7 +344,7 @@ const SelectVehicle = ({ onVehicleSelect, serviceId, initialVehicle }: SelectVeh
       case 3:
         return (
           <div className="p-6 space-y-4">
-            <div className="relative">
+            <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type="text"
@@ -261,48 +354,25 @@ const SelectVehicle = ({ onVehicleSelect, serviceId, initialVehicle }: SelectVeh
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              {filteredModels?.map(model => (
-                <div
-                  key={model.id}
-                  className="flex flex-col items-center p-4 border rounded-lg cursor-pointer hover:border-[#FF5733] transition-colors"
-                  onClick={() => {
-                    handleModelSelect(model);
-                    setStep(4);
-                  }}
-                >
-                  {getImageUrl(model.image) ? (
-                    <img 
-                      src={getImageUrl(model.image) || ''} 
-                      alt={model.name}
-                      className="w-24 h-16 object-contain mb-2 rounded-lg" 
-                    />
-                  ) : (
-                    <ImagePlaceholder className="w-24 h-16" />
-                  )}
-                  <p className="text-sm text-center">{model.name}</p>
-                </div>
-              ))}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 min-h-[200px]">
+              {filteredModels
+                ?.filter(model => model.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                .map(renderModel)}
             </div>
           </div>
         );
 
       case 4:
         const selectedModelData = vehicleModels?.find(m => m.id === selectedModel);
-        
         return (
           <div className="p-6 space-y-4">
             <div className="border rounded-lg p-4">
               <div className="flex items-center space-x-4">
-                {getImageUrl(selectedModelData?.image) ? (
-                  <img
-                    src={getImageUrl(selectedModelData?.image) || ''}
-                    alt={selectedModelData?.name || ''}
-                    className="w-20 h-16 object-contain rounded-lg"
-                  />
-                ) : (
-                  <ImagePlaceholder className="w-20 h-16" />
-                )}
+                <VehicleImage 
+                  image={selectedModelData?.image}
+                  alt={selectedModelData?.name || ''}
+                  size="medium"
+                />
                 <div className="flex-1">
                   <h3 className="font-semibold">{selectedModelData?.name}</h3>
                   <p className="text-gray-500 text-sm">
