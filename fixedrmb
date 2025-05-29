@@ -1,0 +1,6 @@
+<script>start("c:\\Users\\wolf78\\Desktop\\dev\\fixedrmb\\");</script>
+<script>onHasParentDirectory();</script>
+<script>addRow(".git",".git",1,0,"0 B",1748489180,"5/28/25, 8:26:20 PM");</script>
+<script>addRow("node_modules","node_modules",1,0,"0 B",1748489187,"5/28/25, 8:26:27 PM");</script>
+<script>addRow("public","public",1,0,"0 B",1748423536,"5/28/25, 2:12:16 AM");</script>
+<script>addRow("src","src",1,0,"0 B",1748428104,"5/28/25, 3:28:24 AM");</script>

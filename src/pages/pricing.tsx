@@ -1,5 +1,5 @@
 import React from 'react';
-import SubscriptionPlans from '../components/SubscriptionPlans';
+import SubscriptionPlans from '../components/subscription/SubscriptionPlans';
 
 const Pricing: React.FC = () => {
   return (

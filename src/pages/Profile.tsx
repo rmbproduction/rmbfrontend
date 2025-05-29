@@ -4,13 +4,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Settings, LogOut, Key, Bike, Bell, 
   CreditCard, MapPin, Clock, Shield, Menu, X,
-  Loader, Wrench
+  Loader, Wrench, CreditCard as Subscription
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import ForSaleVehicles from '../components/ForSaleVehicles';
 import BookedVehicles from '../components/BookedVehicles';
 import MyRepairs from './MyRepairs';
+import SubscriptionOverview from '../components/subscription/SubscriptionOverview';
 
 interface UserProfile {
   username: string;
@@ -26,7 +27,7 @@ interface SidebarProps {
   className?: string;
 }
 
-type TabType = 'profile' | 'vehicles' | 'bookings' | 'repairs';
+type TabType = 'profile' | 'vehicles' | 'bookings' | 'repairs' | 'subscriptions';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -168,6 +169,99 @@ const Profile = () => {
     }
   ];
 
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'profile':
+        return (
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-semibold text-gray-900">Profile Information</h3>
+              <button
+                onClick={() => setIsEditing(!isEditing)}
+                className="text-sm text-[#FF5733] hover:text-[#ff4019]"
+              >
+                {isEditing ? 'Cancel' : 'Edit Profile'}
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Username and Email inline */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                  <input
+                    type="text"
+                    name="username"
+                    value={formData.username}
+                    onChange={handleInputChange}
+                    disabled={!isEditing}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    disabled={!isEditing}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+                  />
+                </div>
+              </div>
+
+              {/* Additional fields when editing */}
+              {isEditing && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                    <input
+                      type="text"
+                      name="address"
+                      value={formData.address}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      case 'vehicles':
+        return <ForSaleVehicles />;
+      case 'bookings':
+        return <BookedVehicles />;
+      case 'repairs':
+        return <MyRepairs />;
+      case 'subscriptions':
+        return <SubscriptionOverview />;
+      default:
+        return null;
+    }
+  };
+
   const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => (
     <div className={`bg-white rounded-2xl shadow-lg p-6 space-y-6 ${className}`}>
       <div className="text-center">
@@ -203,7 +297,7 @@ const Profile = () => {
           }`}
         >
           <Bike className="h-5 w-5 mr-3" />
-          Vehicles For Sale
+          Vehicles for Sale
         </button>
         <button
           onClick={() => handleTabChange('bookings')}
@@ -227,15 +321,35 @@ const Profile = () => {
           <Wrench className="h-5 w-5 mr-3" />
           My Repairs
         </button>
+        <button
+          onClick={() => handleTabChange('subscriptions')}
+          className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
+            activeTab === 'subscriptions'
+              ? 'bg-[#FFF5F2] text-[#FF5733]'
+              : 'text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          <Subscription className="h-5 w-5 mr-3" />
+          My Subscriptions
+        </button>
       </nav>
 
-      <button
-        onClick={handleLogout}
-        className="w-full flex items-center justify-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
-      >
-        <LogOut className="h-5 w-5 mr-3" />
-        Logout
-      </button>
+      <div className="pt-6 border-t border-gray-200">
+        <button
+          onClick={handlePasswordChange}
+          className="w-full flex items-center px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg"
+        >
+          <Key className="h-5 w-5 mr-3" />
+          Change Password
+        </button>
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg mt-2"
+        >
+          <LogOut className="h-5 w-5 mr-3" />
+          Logout
+        </button>
+      </div>
     </div>
   );
 
@@ -304,95 +418,7 @@ const Profile = () => {
             transition={{ duration: 0.5 }}
             className="lg:col-span-3"
           >
-            {activeTab === 'profile' && (
-              <div className="bg-white rounded-2xl shadow-lg p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-xl font-semibold text-gray-900">Profile Information</h3>
-                  <button
-                    onClick={() => setIsEditing(!isEditing)}
-                    className="text-sm text-[#FF5733] hover:text-[#ff4019]"
-                  >
-                    {isEditing ? 'Cancel' : 'Edit Profile'}
-                  </button>
-                </div>
-
-                <div className="space-y-6">
-                  {/* Username and Email inline */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                      <input
-                        type="text"
-                        name="username"
-                        value={formData.username}
-                        onChange={handleInputChange}
-                        disabled={!isEditing}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                      <input
-                        type="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        disabled={!isEditing}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Additional fields when editing */}
-                  {isEditing && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                        <input
-                          type="text"
-                          name="name"
-                          value={formData.name}
-                          onChange={handleInputChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                        <input
-                          type="tel"
-                          name="phone"
-                          value={formData.phone}
-                          onChange={handleInputChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                        <input
-                          type="text"
-                          name="address"
-                          value={formData.address}
-                          onChange={handleInputChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
-                        />
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'vehicles' && (
-              <ForSaleVehicles />
-            )}
-
-            {activeTab === 'bookings' && (
-              <BookedVehicles />
-            )}
-
-            {activeTab === 'repairs' && (
-              <MyRepairs />
-            )}
+            {renderTabContent()}
           </motion.div>
         </div>
       </div>

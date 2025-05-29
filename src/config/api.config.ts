@@ -243,11 +243,38 @@ export const API_ENDPOINTS = {
 
   // Subscription endpoints
   subscription: {
+    // Plan Management
     plans: '/subscription/plans/',
+    planDetails: (id: string) => `/subscription/plans/${id}/`,
     planVariants: '/subscription/plan-variants/',
-    subscriptionRequests: '/subscription/subscription-requests/',
-    userSubscriptions: '/subscription/subscriptions/',
+    getPlanVariants: (planId: string) => `/subscription/plans/${planId}/variants/`,
+
+    // Subscription Requests
+    requests: '/subscription/subscription-requests/',
+    requestStatus: (id: string) => `/subscription/subscription-requests/${id}/status/`,
+    approveRequest: (id: string) => `/subscription/subscription-requests/${id}/approve/`,
+    rejectRequest: (id: string) => `/subscription/subscription-requests/${id}/reject/`,
+
+    // Active Subscription
+    subscriptions: '/subscription/subscriptions/',
     activeSubscription: '/subscription/subscriptions/active/',
+    subscriptionStatus: (id: string) => `/subscription/subscriptions/${id}/status/`,
+    cancelSubscription: (id: string) => `/subscription/subscriptions/${id}/cancel/`,
+    renewSubscription: (id: string) => `/subscription/subscriptions/${id}/renew/`,
+
+    // Visit Management
+    visits: '/subscription/visits/',
+    upcomingVisits: '/subscription/visits/upcoming/',
+    visitsBySubscription: '/subscription/visits/by-subscription/',
+    visitHistory: '/subscription/visits/visit_history/',
+    visitSummary: '/subscription/visits/subscription_visit_summary/',
+    checkVisitAvailability: '/subscription/visits/check_availability/',
+    availableDates: '/subscription/visits/available_dates/',
+    availableTimes: '/subscription/visits/available_times/',
+    scheduleVisit: '/subscription/visits/schedule_preferred_date/',
+    cancelVisit: (id: string) => `/subscription/visits/${id}/cancel/`,
+    rescheduleVisit: (id: string) => `/subscription/visits/${id}/reschedule/`,
+    completeVisit: (id: string) => `/subscription/visits/${id}/complete/`,
   },
 
   // CDN endpoints
@@ -265,6 +292,17 @@ export const API_ENDPOINTS = {
     details: '/accounts/profile/',
     update: '/accounts/profile/update/',
     changePassword: '/accounts/profile/change-password/',
+  },
+
+  // Vehicle endpoints
+  vehicle: {
+    types: '/vehicle/vehicle-types/',
+    manufacturers: '/vehicle/manufacturers/',
+    models: '/vehicle/vehicle-models/',
+    userVehicles: '/vehicle/user-vehicles/',
+    checkCloudinary: '/vehicle/check-cloudinary/',
+    vehicleImages: (id: string) => `/vehicle/vehicles/${id}/images/`,
+    uploadParams: (id: string) => `/vehicle/vehicles/${id}/upload-params/`,
   },
 };
 
@@ -483,6 +521,118 @@ export const apiService = {
       axiosInstance.patch(API_ENDPOINTS.profile.update, data),
     changePassword: (data: { currentPassword: string; newPassword: string }) =>
       axiosInstance.post(API_ENDPOINTS.profile.changePassword, data),
+  },
+
+  // Subscription services
+  subscription: {
+    // Plan Management
+    getPlans: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.plans);
+      return response.data;
+    },
+    getPlanDetails: async (id: string) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.planDetails(id));
+      return response.data;
+    },
+    getPlanVariants: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.planVariants);
+      return response.data;
+    },
+    getPlanSpecificVariants: async (planId: string) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.getPlanVariants(planId));
+      return response.data;
+    },
+
+    // Subscription Requests
+    createSubscriptionRequest: async (data: any) => {
+      const response = await axiosInstance.post(API_ENDPOINTS.subscription.requests, data);
+      return response.data;
+    },
+    getSubscriptionRequests: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.requests);
+      return response.data;
+    },
+    getRequestStatus: async (id: string) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.requestStatus(id));
+      return response.data;
+    },
+    approveRequest: async (id: string, data: any) => {
+      const response = await axiosInstance.post(API_ENDPOINTS.subscription.approveRequest(id), data);
+      return response.data;
+    },
+    rejectRequest: async (id: string, data: any) => {
+      const response = await axiosInstance.post(API_ENDPOINTS.subscription.rejectRequest(id), data);
+      return response.data;
+    },
+
+    // User Subscriptions
+    getUserSubscriptions: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.subscriptions);
+      return response.data;
+    },
+    getActiveSubscription: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.activeSubscription);
+      return response.data;
+    },
+    cancelSubscription: async (id: string, data?: any) => {
+      const response = await axiosInstance.post(API_ENDPOINTS.subscription.cancelSubscription(id), data);
+      return response.data;
+    },
+
+    // Visit Management
+    getVisits: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.visits);
+      return response.data;
+    },
+    getUpcomingVisits: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.upcomingVisits);
+      return response.data;
+    },
+    getVisitsBySubscription: async (params?: any) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.visitsBySubscription, { params });
+      return response.data;
+    },
+    checkVisitAvailability: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.checkVisitAvailability);
+      return response.data;
+    },
+    getAvailableSlots: async (date: string) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.availableDates, {
+        params: { date }
+      });
+      return response.data;
+    },
+    getVisitHistory: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.visitHistory);
+      return response.data;
+    },
+    getVisitSummary: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.visitSummary);
+      return response.data;
+    },
+    completeVisit: async (id: string, data: any) => {
+      const response = await axiosInstance.post(API_ENDPOINTS.subscription.completeVisit(id), data);
+      return response.data;
+    },
+    cancelVisit: async (id: string, data?: any) => {
+      const response = await axiosInstance.post(API_ENDPOINTS.subscription.cancelVisit(id), data);
+      return response.data;
+    },
+    getSubscriptionStatus: async (id: string) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.subscriptionStatus(id));
+      return response.data;
+    },
+  },
+
+  // Vehicle services
+  vehicle: {
+    getTypes: () => axiosInstance.get(API_ENDPOINTS.vehicle.types),
+    getManufacturers: () => axiosInstance.get(API_ENDPOINTS.vehicle.manufacturers),
+    getModels: () => axiosInstance.get(API_ENDPOINTS.vehicle.models),
+    getUserVehicles: () => axiosInstance.get(API_ENDPOINTS.vehicle.userVehicles),
+    checkCloudinary: () => axiosInstance.get(API_ENDPOINTS.vehicle.checkCloudinary),
+    getVehicleImages: (id: string) => axiosInstance.get(API_ENDPOINTS.vehicle.vehicleImages(id)),
+    getUploadParams: (id: string) => axiosInstance.get(API_ENDPOINTS.vehicle.uploadParams(id)),
   },
 };
 

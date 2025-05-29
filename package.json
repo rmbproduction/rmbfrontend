@@ -32,6 +32,10 @@
     "zod": "^3.25.28"
   },
   "devDependencies": {
+    "@babel/core": "^7.27.3",
+    "@babel/preset-env": "^7.27.2",
+    "@babel/preset-react": "^7.27.1",
+    "@babel/preset-typescript": "^7.27.1",
     "@types/node": "^20.8.9",
     "@types/react": "^18.2.33",
     "@types/react-dom": "^18.2.14",
