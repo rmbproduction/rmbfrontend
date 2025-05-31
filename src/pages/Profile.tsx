@@ -11,7 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 import ForSaleVehicles from '../components/ForSaleVehicles';
 import BookedVehicles from '../components/BookedVehicles';
 import MyRepairs from './MyRepairs';
-import SubscriptionOverview from '../components/subscription/SubscriptionOverview';
+import MySubscription from '../components/subscription/MySubscription';
 
 interface UserProfile {
   username: string;
@@ -256,7 +256,7 @@ const Profile = () => {
       case 'repairs':
         return <MyRepairs />;
       case 'subscriptions':
-        return <SubscriptionOverview />;
+        return <MySubscription />;
       default:
         return null;
     }

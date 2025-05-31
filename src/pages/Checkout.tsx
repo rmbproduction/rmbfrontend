@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useVehicleSelection } from '../hooks/vehicle/useVehicleSelection';
 import { useActiveCart, useClearCartMutation } from '../hooks/cart/useCartQueries';
 import { useQueryClient } from '@tanstack/react-query';
+import { useVehicleTypes } from '../hooks/vehicle/useVehicleTypes';
 
 interface ServiceItem {
   serviceId: string;
@@ -51,6 +52,7 @@ const Checkout = () => {
   const clearCart = useClearCartMutation();
   const createServiceBooking = useCreateServiceBooking();
   const { selectedVehicle } = useVehicleSelection();
+  const { data: vehicleTypes } = useVehicleTypes();
   
   const [formData, setFormData] = useState<CheckoutFormData>({
     name: user?.name || '',
@@ -188,11 +190,16 @@ const Checkout = () => {
         console.error('Error submitting form:', error);
         console.error('Response data:', error?.response?.data);
         
-        // Show specific error message from backend if available
-        const errorMessage = error?.response?.data?.error || 
-                           error?.response?.data?.message || 
-                           error?.response?.data?.detail ||
-                           'Unable to complete booking. Please try again.';
+        let errorMessage = 'Unable to complete booking. Please try again.';
+        
+        if (error.message === 'Invalid vehicle type') {
+          errorMessage = 'Please select a valid vehicle type.';
+        } else {
+          errorMessage = error?.response?.data?.error || 
+                        error?.response?.data?.message || 
+                        error?.response?.data?.detail ||
+                        errorMessage;
+        }
                            
         notification.error({
           message: 'Booking Failed',

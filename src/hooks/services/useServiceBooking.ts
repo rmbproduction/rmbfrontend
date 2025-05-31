@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { axiosInstance, API_ENDPOINTS } from '../../config/api.config';
 import { toast } from 'react-toastify';
+import { getVehicleTypeId } from '../vehicle/useVehicleTypes';
 
 export interface ServiceBookingData {
   cart_id?: number;
@@ -16,7 +17,7 @@ export interface ServiceBookingData {
     postalCode: string;
   };
   vehicle?: {
-    vehicle_type: string;
+    vehicle_type: string | number;
     manufacturer: string;
     model: string;
   };
@@ -59,72 +60,106 @@ export const useCreateServiceBooking = () => {
 
   return useMutation({
     mutationFn: async (data: ServiceBookingData) => {
-      console.log('Making service booking request with data:', JSON.stringify(data, null, 2));
-      
-      // Use different endpoints for cart booking vs buy now
-      const endpoint = data.cart_id ? 
-        API_ENDPOINTS.services.createBooking : 
-        API_ENDPOINTS.services.serviceNow;
-      
-      // Validate required fields based on endpoint
-      if (endpoint === API_ENDPOINTS.services.serviceNow) {
-        // Buy now flow requires service_id
-        if (!data.service_id) {
-          throw new Error('service_id is required for buy now flow');
-        }
-        // Convert service_id to number if it's a string
-        if (typeof data.service_id === 'string') {
-          data.service_id = parseInt(data.service_id);
-        }
-      } else {
-        // Cart checkout flow requires cart_id
-        if (!data.cart_id) {
-          throw new Error('cart_id is required for cart checkout');
-        }
-        // Convert cart_id to number if it's a string
-        if (typeof data.cart_id === 'string') {
-          data.cart_id = parseInt(data.cart_id);
-        }
-      }
-      
-      const response = await axiosInstance.post(endpoint, data);
-      console.log('Service booking response:', response.data);
-      
-      // Store the booking data in localStorage for the success modal
-      localStorage.setItem('lastBookingData', JSON.stringify({
-        ...response.data,
-        reference: response.data.reference,
-        status: response.data.status,
-        total_amount: response.data.total_amount,
-        distance_fee: response.data.distance_fee,
-        scheduled_date: response.data.scheduled_date,
-        schedule_time: response.data.schedule_time,
-        customerInfo: {
-          name: response.data.customer_name,
-          email: response.data.customer_email,
-          phone: response.data.customer_phone,
-          address: {
-            street: response.data.address,
-            city: response.data.city,
-            state: response.data.state,
-            zipCode: response.data.postal_code
+      try {
+        console.log('Making service booking request with data:', JSON.stringify(data, null, 2));
+        
+        // Use different endpoints for cart booking vs buy now
+        const endpoint = data.cart_id ? 
+          API_ENDPOINTS.services.createBooking : 
+          API_ENDPOINTS.services.serviceNow;
+        
+        // Validate required fields based on endpoint
+        if (endpoint === API_ENDPOINTS.services.serviceNow) {
+          // Buy now flow requires service_id
+          if (!data.service_id) {
+            throw new Error('service_id is required for buy now flow');
           }
-        },
-        vehicle: {
-          vehicle_type: response.data.vehicle_type_id,
-          manufacturer: response.data.manufacturer_id,
-          model: response.data.vehicle_model_id,
-          manufacturer_name: response.data.manufacturer_name,
-          model_name: response.data.model_name
-        },
-        service: {
-          id: response.data.services?.[0]?.id,
-          name: response.data.services?.[0]?.name,
-          package: response.data.services?.[0]?.package
+          // Convert service_id to number if it's a string
+          if (typeof data.service_id === 'string') {
+            data.service_id = parseInt(data.service_id);
+          }
+        } else {
+          // Cart checkout flow requires cart_id
+          if (!data.cart_id) {
+            throw new Error('cart_id is required for cart checkout');
+          }
+          // Convert cart_id to number if it's a string
+          if (typeof data.cart_id === 'string') {
+            data.cart_id = parseInt(data.cart_id);
+          }
         }
-      }));
-      
-      return response.data;
+
+        // Handle vehicle type conversion
+        if (data.vehicle) {
+          const vehicleData = { ...data.vehicle };
+          
+          // Convert vehicle_type to ID if it's a string
+          if (typeof vehicleData.vehicle_type === 'string') {
+            try {
+              vehicleData.vehicle_type = await getVehicleTypeId(vehicleData.vehicle_type);
+            } catch (err) {
+              console.error('Error converting vehicle type:', err);
+              throw new Error('Invalid vehicle type');
+            }
+          }
+
+          // Convert manufacturer and model to numbers
+          vehicleData.manufacturer = String(vehicleData.manufacturer);
+          vehicleData.model = String(vehicleData.model);
+
+          // Update the data with converted vehicle info
+          data = {
+            ...data,
+            vehicle: vehicleData
+          };
+        }
+        
+        const response = await axiosInstance.post(endpoint, data);
+        console.log('Service booking response:', response.data);
+        
+        // Store the booking data in localStorage for the success modal
+        localStorage.setItem('lastBookingData', JSON.stringify({
+          ...response.data,
+          reference: response.data.reference,
+          status: response.data.status,
+          total_amount: response.data.total_amount,
+          distance_fee: response.data.distance_fee,
+          scheduled_date: response.data.scheduled_date,
+          schedule_time: response.data.schedule_time,
+          customerInfo: {
+            name: response.data.customer_name,
+            email: response.data.customer_email,
+            phone: response.data.customer_phone,
+            address: {
+              street: response.data.address,
+              city: response.data.city,
+              state: response.data.state,
+              zipCode: response.data.postal_code
+            }
+          },
+          vehicle: {
+            vehicle_type: response.data.vehicle_type_id,
+            manufacturer: response.data.manufacturer_id,
+            model: response.data.vehicle_model_id,
+            manufacturer_name: response.data.manufacturer_name,
+            model_name: response.data.model_name
+          },
+          service: {
+            id: response.data.services?.[0]?.id,
+            name: response.data.services?.[0]?.name,
+            package: response.data.services?.[0]?.package
+          }
+        }));
+        
+        return response.data;
+      } catch (error: any) {
+        console.error('Service booking error:', {
+          status: error?.response?.status,
+          data: error?.response?.data,
+          message: error?.message
+        });
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['myRepairs'] });

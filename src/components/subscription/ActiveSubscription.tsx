@@ -1,53 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Calendar, Clock, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import subscriptionService from '../../services/subscriptionService';
-
-interface ActiveSubscriptionData {
-  id: number;
-  plan_name: string;
-  plan_type: string;
-  duration_type: string;
-  start_date: string;
-  end_date: string;
-  remaining_visits: number;
-  max_visits: number;
-  status: string;
-  is_currently_active: boolean;
-  remaining_days: number;
-}
-
-interface UpcomingVisit {
-  id: number;
-  scheduled_date: string;
-  status: string;
-  service_notes?: string;
-}
+import { useSubscription } from '../../contexts/SubscriptionContext';
 
 const ActiveSubscription: React.FC = () => {
-  const [subscription, setSubscription] = useState<ActiveSubscriptionData | null>(null);
-  const [upcomingVisits, setUpcomingVisits] = useState<UpcomingVisit[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [subscriptionRes, visitsRes] = await Promise.all([
-          subscriptionService.getActiveSubscription(),
-          subscriptionService.getUpcomingVisits()
-        ]);
-        setSubscription(subscriptionRes.data);
-        setUpcomingVisits(visitsRes.data);
-      } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to fetch subscription data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
+  const { subscription, upcomingVisits, loading, error } = useSubscription();
 
   if (loading) {
     return (

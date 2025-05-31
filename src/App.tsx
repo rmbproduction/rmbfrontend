@@ -1,6 +1,5 @@
 // React and Router imports
-import { BrowserRouter } from 'react-router-dom';
-import { Routes, Route } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 
 // Third-party imports
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -9,6 +8,7 @@ import 'react-toastify/dist/ReactToastify.css';
 
 // Components
 import { AuthProvider } from './contexts/AuthContext';
+import { SubscriptionProvider } from './contexts/SubscriptionContext';
 import AppRoutes from './routes';
 import SubscriptionRoutes from './routes/subscriptionRoutes';
 import LoginSignupPage from './pages/LoginSignupPage';
@@ -30,28 +30,47 @@ const queryClient = new QueryClient({
   },
 });
 
+// Create router
+const router = createBrowserRouter([
+  {
+    path: "/login",
+    element: <LoginSignupPage />
+  },
+  {
+    path: "/verify-email/:token",
+    element: <VerifyEmail />
+  },
+  {
+    path: "/resend-verification",
+    element: <ResendVerification />
+  },
+  {
+    path: "/reset-password/:token",
+    element: <ResetPassword />
+  },
+  {
+    path: "/password-reset-confirmation",
+    element: <PasswordResetConfirmation />
+  },
+  {
+    path: "/subscription/*",
+    element: <SubscriptionRoutes />
+  },
+  {
+    path: "/*",
+    element: <AppRoutes />
+  }
+]);
+
 const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
-            {/* Auth Routes */}
-            <Route path="/login" element={<LoginSignupPage />} />
-            <Route path="/verify-email/:token" element={<VerifyEmail />} />
-            <Route path="/resend-verification" element={<ResendVerification />} />
-            <Route path="/reset-password/:token" element={<ResetPassword />} />
-            <Route path="/password-reset-confirmation" element={<PasswordResetConfirmation />} />
-            
-            {/* Subscription Routes */}
-            <Route path="/subscription/*" element={<SubscriptionRoutes />} />
-            
-            {/* Main App Routes */}
-            <Route path="/*" element={<AppRoutes />} />
-          </Routes>
+      <AuthProvider>
+        <SubscriptionProvider>
+          <RouterProvider router={router} />
           <ToastContainer position="top-right" />
-        </AuthProvider>
-      </BrowserRouter>
+        </SubscriptionProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 };

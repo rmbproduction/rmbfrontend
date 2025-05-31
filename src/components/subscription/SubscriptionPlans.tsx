@@ -206,7 +206,10 @@ const SubscriptionPlans: React.FC = () => {
             <SubscriptionForm
               planVariantId={selectedVariantId}
               onClose={() => setShowSubscriptionForm(false)}
-              onError={handleSubscriptionError}
+              onError={(message: string) => {
+                setErrorMessage(message);
+                setShowErrorModal(true);
+              }}
             />
           </div>
         </div>
@@ -218,6 +221,8 @@ const SubscriptionPlans: React.FC = () => {
         onClose={() => setShowErrorModal(false)}
         message={errorMessage}
         supportPhone="+91 1800 123 4567"
+        className="max-w-lg mx-auto"
+        showCloseButton={true}
       />
     </>
   );

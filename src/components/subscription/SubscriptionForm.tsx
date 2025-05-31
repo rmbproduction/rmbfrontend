@@ -85,7 +85,6 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorModalMessage, setErrorModalMessage] = useState('');
-  const [showForm, setShowForm] = useState(true);
 
   // Fetch vehicle types
   const { data: vehicleTypes } = useQuery<VehicleType[]>({
@@ -197,6 +196,7 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
     e.preventDefault();
     setSubmitAttempted(true);
     setError(null);
+    setFieldErrors({});
 
     if (!validateForm()) {
       setError('Please correct the errors in the form');
@@ -252,16 +252,48 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
       
       // Handle different types of errors
       if (err.response?.status === 400) {
-        // Check for pending subscription error
-        if (Array.isArray(err.response.data) && err.response.data[0] === "You already have a pending subscription request.") {
-          onError("You already have a pending subscription request. Please wait for it to be processed or contact support for assistance.");
+        const errorMessage = Array.isArray(err.response.data) ? err.response.data[0] : err.response.data?.detail;
+        
+        // Handle active subscription case
+        if (errorMessage === "You already have an active subscription. Please cancel it before requesting a new one.") {
+          const activeMessage = 
+            `⚠️ Active Subscription Detected\n\n` +
+            `• You already have an active subscription plan\n` +
+            `• Only one active subscription is allowed at a time\n` +
+            `• Your current plan must expire before starting a new one\n\n` +
+            `What can you do?\n` +
+            `• Call us to discuss upgrade options\n` +
+            `• Continue with your current plan\n` +
+            `• Check your subscription status in dashboard`;
+
+          // First trigger parent's error handler
+          onError(activeMessage);
+          
+          // Then close form modal after a small delay
+          setTimeout(() => {
+            onClose();
+          }, 100);
+          
+          return;
+        }
+        
+        // Handle pending subscription case
+        if (errorMessage === "You already have a pending subscription request.") {
+          const pendingMessage = 
+            `⏳ Subscription Request In Progress\n\n` +
+            `We're currently processing your subscription request. Our team is reviewing the details to ensure everything is in order.\n\n` +
+            `What you can do now:\n` +
+            `• Check your email for updates about your request\n` +
+            `• View your request status in the "Subscription Requests" tab\n` +
+            `• Contact our support team if you need immediate assistance\n\n` +
+            `Your request is important to us, and we'll process it as quickly as possible.`;
+
+          setErrorModalMessage(pendingMessage);
           setShowErrorModal(true);
-          setShowForm(false);
-          onClose();
           return;
         }
 
-        // Handle other validation errors
+        // Handle validation errors
         const backendErrors = err.response.data;
         if (typeof backendErrors === 'object') {
           const newFieldErrors: Record<string, string> = {};
@@ -274,12 +306,30 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
           setError(err.response.data.detail || 'Validation failed. Please check your input.');
         }
       } else if (err.response?.status === 401) {
-        setError('Your session has expired. Please log in again.');
+        const sessionMessage = 
+          `🔑 Session Expired\n\n` +
+          `Your login session has expired. For your security, please log in again to continue.\n\n` +
+          `Don't worry:\n` +
+          `• Your subscription information is safely stored\n` +
+          `• You can continue right where you left off after logging in\n` +
+          `• All your subscription details will be available after login`;
+
+        setErrorModalMessage(sessionMessage);
+        setShowErrorModal(true);
         navigate('/login', { state: { from: window.location.pathname } });
-      } else if (err.response?.status === 429) {
-        onError('Too many requests. Please try again later.');
       } else {
-        onError('An unexpected error occurred. Please try again later.');
+        const unexpectedMessage = 
+          `❌ Unexpected Error\n\n` +
+          `We encountered an unexpected error while processing your request.\n\n` +
+          `Troubleshooting steps:\n` +
+          `• Check your internet connection\n` +
+          `• Refresh the page and try again\n` +
+          `• Clear your browser cache\n` +
+          `• Contact our support team if the problem persists\n\n` +
+          `Error Reference: ${err.response?.status || 'Unknown'}`;
+
+        setErrorModalMessage(unexpectedMessage);
+        setShowErrorModal(true);
       }
     } finally {
       setLoading(false);
@@ -295,247 +345,254 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
 
   return (
     <>
-      {showForm && (
-        <div className="bg-gray-50 p-8 rounded-lg">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-bold text-gray-900">Subscribe to Plan</h2>
-              {error && (
-                <div className="bg-red-50 text-red-600 p-3 rounded-md mb-4">
-                  {error}
-                </div>
-              )}
-            </div>
+      {/* Error Modal - Moved outside of showForm condition */}
+      <ErrorModal
+        isOpen={showErrorModal}
+        message={errorModalMessage}
+        supportPhone="+91 1800 123 4567"
+        className="max-w-lg mx-auto"
+        showCloseButton={false}
+      />
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Vehicle Information */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-xl p-6 shadow-sm"
-              >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
-                    <CheckCircle2 className="w-5 h-5 text-[#FF5733]" />
-                  </div>
-                  <h3 className="font-semibold">Vehicle Information</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <select
-                    name="vehicle_type"
-                    value={formData.vehicle_type}
-                    onChange={handleInputChange}
-                    className={`mt-1 block w-full rounded-md border ${
-                      fieldErrors.vehicle_type ? 'border-red-300' : 'border-gray-300'
-                    } px-3 py-2 focus:outline-none focus:ring-orange-500 focus:border-orange-500`}
-                    disabled={loading}
-                  >
-                    <option value={0}>Select Vehicle Type</option>
-                    {vehicleTypes?.map(type => (
-                      <option key={type.id} value={type.id}>
-                        {type.name}
-                      </option>
-                    ))}
-                  </select>
-                  {renderFieldError('vehicle_type')}
+      <div className="bg-gray-50 p-8 rounded-lg">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-2xl font-bold text-gray-900">Subscribe to Plan</h2>
+            {error && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-md mb-4">
+                {error}
+              </div>
+            )}
+          </div>
 
-                  <select
-                    name="manufacturer"
-                    value={formData.manufacturer}
-                    onChange={handleInputChange}
-                    required
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                      fieldErrors.manufacturer ? 'border-red-300' : ''
-                    }`}
-                    disabled={loading}
-                  >
-                    <option value="">Select Manufacturer</option>
-                    {manufacturers?.map(manufacturer => (
-                      <option key={manufacturer.id} value={manufacturer.id}>
-                        {manufacturer.name}
-                      </option>
-                    ))}
-                  </select>
-                  {renderFieldError('manufacturer')}
-
-                  <select
-                    name="vehicle_model"
-                    value={formData.vehicle_model}
-                    onChange={handleInputChange}
-                    className={`mt-1 block w-full rounded-md border ${
-                      fieldErrors.vehicle_model ? 'border-red-300' : 'border-gray-300'
-                    } px-3 py-2 focus:outline-none focus:ring-orange-500 focus:border-orange-500`}
-                    disabled={!formData.manufacturer || loading}
-                  >
-                    <option value={0}>Select Model</option>
-                    {vehicleModels?.map(model => (
-                      <option key={model.id} value={model.id}>
-                        {model.name}
-                      </option>
-                    ))}
-                  </select>
-                  {renderFieldError('vehicle_model')}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Vehicle Information */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white rounded-xl p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5 text-[#FF5733]" />
                 </div>
-              </motion.div>
-
-              {/* Customer Information */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="bg-white rounded-xl p-6 shadow-sm"
-              >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
-                    <User className="w-5 h-5 text-[#FF5733]" />
-                  </div>
-                  <h3 className="font-semibold">Customer Information</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <input
-                    type="text"
-                    name="customer_name"
-                    value={formData.customer_name}
-                    onChange={handleInputChange}
-                    placeholder="Full Name *"
-                    required
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                      fieldErrors.customer_name ? 'border-red-300' : ''
-                    }`}
-                    disabled={loading}
-                  />
-                  {renderFieldError('customer_name')}
-                  <input
-                    type="email"
-                    name="customer_email"
-                    value={formData.customer_email}
-                    onChange={handleInputChange}
-                    placeholder="Email Address *"
-                    required
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                      fieldErrors.customer_email ? 'border-red-300' : ''
-                    }`}
-                    disabled={loading}
-                  />
-                  {renderFieldError('customer_email')}
-                  <input
-                    type="tel"
-                    name="customer_phone"
-                    value={formData.customer_phone}
-                    onChange={handleInputChange}
-                    placeholder="Phone Number *"
-                    required
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                      fieldErrors.customer_phone ? 'border-red-300' : ''
-                    }`}
-                    disabled={loading}
-                  />
-                  {renderFieldError('customer_phone')}
-                </div>
-              </motion.div>
-
-              {/* Address Information */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="bg-white rounded-xl p-6 shadow-sm"
-              >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
-                    <MapPin className="w-5 h-5 text-[#FF5733]" />
-                  </div>
-                  <h3 className="font-semibold">Address Information</h3>
-                </div>
-                <div className="space-y-4">
-                  <input
-                    type="text"
-                    name="address"
-                    value={formData.address}
-                    onChange={handleInputChange}
-                    placeholder="Street Address *"
-                    required
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                      fieldErrors.address ? 'border-red-300' : ''
-                    }`}
-                    disabled={loading}
-                  />
-                  {renderFieldError('address')}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <input
-                      type="text"
-                      name="city"
-                      value={formData.city}
-                      onChange={handleInputChange}
-                      placeholder="City *"
-                      required
-                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                        fieldErrors.city ? 'border-red-300' : ''
-                      }`}
-                      disabled={loading}
-                    />
-                    {renderFieldError('city')}
-                    <input
-                      type="text"
-                      name="state"
-                      value={formData.state}
-                      onChange={handleInputChange}
-                      placeholder="State *"
-                      required
-                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                        fieldErrors.state ? 'border-red-300' : ''
-                      }`}
-                      disabled={loading}
-                    />
-                    {renderFieldError('state')}
-                    <input
-                      type="text"
-                      name="postal_code"
-                      value={formData.postal_code}
-                      onChange={handleInputChange}
-                      placeholder="Postal Code *"
-                      required
-                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                        fieldErrors.postal_code ? 'border-red-300' : ''
-                      }`}
-                      disabled={loading}
-                    />
-                    {renderFieldError('postal_code')}
-                  </div>
-                </div>
-              </motion.div>
-
-              {/* Submit Buttons */}
-              <div className="flex justify-end space-x-4 mt-6">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                <h3 className="font-semibold">Vehicle Information</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <select
+                  name="vehicle_type"
+                  value={formData.vehicle_type}
+                  onChange={handleInputChange}
+                  className={`mt-1 block w-full rounded-md border ${
+                    fieldErrors.vehicle_type ? 'border-red-300' : 'border-gray-300'
+                  } px-3 py-2 focus:outline-none focus:ring-orange-500 focus:border-orange-500`}
                   disabled={loading}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className={`px-6 py-2 bg-[#FF5733] text-white rounded-lg hover:bg-[#ff4019] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${
-                    loading ? 'opacity-50 cursor-not-allowed' : ''
+                  <option value={0}>Select Vehicle Type</option>
+                  {vehicleTypes?.map(type => (
+                    <option key={type.id} value={type.id}>
+                      {type.name}
+                    </option>
+                  ))}
+                </select>
+                {renderFieldError('vehicle_type')}
+
+                <select
+                  name="manufacturer"
+                  value={formData.manufacturer}
+                  onChange={handleInputChange}
+                  required
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                    fieldErrors.manufacturer ? 'border-red-300' : ''
                   }`}
                   disabled={loading}
                 >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    'Submit Request'
-                  )}
-                </button>
+                  <option value="">Select Manufacturer</option>
+                  {manufacturers?.map(manufacturer => (
+                    <option key={manufacturer.id} value={manufacturer.id}>
+                      {manufacturer.name}
+                    </option>
+                  ))}
+                </select>
+                {renderFieldError('manufacturer')}
+
+                <select
+                  name="vehicle_model"
+                  value={formData.vehicle_model}
+                  onChange={handleInputChange}
+                  className={`mt-1 block w-full rounded-md border ${
+                    fieldErrors.vehicle_model ? 'border-red-300' : 'border-gray-300'
+                  } px-3 py-2 focus:outline-none focus:ring-orange-500 focus:border-orange-500`}
+                  disabled={!formData.manufacturer || loading}
+                >
+                  <option value={0}>Select Model</option>
+                  {vehicleModels?.map(model => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+                {renderFieldError('vehicle_model')}
               </div>
-            </form>
-          </div>
+            </motion.div>
+
+            {/* Customer Information */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded-xl p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                  <User className="w-5 h-5 text-[#FF5733]" />
+                </div>
+                <h3 className="font-semibold">Customer Information</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input
+                  type="text"
+                  name="customer_name"
+                  value={formData.customer_name}
+                  onChange={handleInputChange}
+                  placeholder="Full Name *"
+                  required
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                    fieldErrors.customer_name ? 'border-red-300' : ''
+                  }`}
+                  disabled={loading}
+                />
+                {renderFieldError('customer_name')}
+                <input
+                  type="email"
+                  name="customer_email"
+                  value={formData.customer_email}
+                  onChange={handleInputChange}
+                  placeholder="Email Address *"
+                  required
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                    fieldErrors.customer_email ? 'border-red-300' : ''
+                  }`}
+                  disabled={loading}
+                />
+                {renderFieldError('customer_email')}
+                <input
+                  type="tel"
+                  name="customer_phone"
+                  value={formData.customer_phone}
+                  onChange={handleInputChange}
+                  placeholder="Phone Number *"
+                  required
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                    fieldErrors.customer_phone ? 'border-red-300' : ''
+                  }`}
+                  disabled={loading}
+                />
+                {renderFieldError('customer_phone')}
+              </div>
+            </motion.div>
+
+            {/* Address Information */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-white rounded-xl p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                  <MapPin className="w-5 h-5 text-[#FF5733]" />
+                </div>
+                <h3 className="font-semibold">Address Information</h3>
+              </div>
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  name="address"
+                  value={formData.address}
+                  onChange={handleInputChange}
+                  placeholder="Street Address *"
+                  required
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                    fieldErrors.address ? 'border-red-300' : ''
+                  }`}
+                  disabled={loading}
+                />
+                {renderFieldError('address')}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <input
+                    type="text"
+                    name="city"
+                    value={formData.city}
+                    onChange={handleInputChange}
+                    placeholder="City *"
+                    required
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                      fieldErrors.city ? 'border-red-300' : ''
+                    }`}
+                    disabled={loading}
+                  />
+                  {renderFieldError('city')}
+                  <input
+                    type="text"
+                    name="state"
+                    value={formData.state}
+                    onChange={handleInputChange}
+                    placeholder="State *"
+                    required
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                      fieldErrors.state ? 'border-red-300' : ''
+                    }`}
+                    disabled={loading}
+                  />
+                  {renderFieldError('state')}
+                  <input
+                    type="text"
+                    name="postal_code"
+                    value={formData.postal_code}
+                    onChange={handleInputChange}
+                    placeholder="Postal Code *"
+                    required
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                      fieldErrors.postal_code ? 'border-red-300' : ''
+                    }`}
+                    disabled={loading}
+                  />
+                  {renderFieldError('postal_code')}
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Submit Buttons */}
+            <div className="flex justify-end space-x-4 mt-6">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className={`px-6 py-2 bg-[#FF5733] text-white rounded-lg hover:bg-[#ff4019] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${
+                  loading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  'Submit Request'
+                )}
+              </button>
+            </div>
+          </form>
         </div>
-      )}
+      </div>
 
       {/* Success Modal */}
       <OrderSuccessModal
@@ -546,14 +603,6 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
         }}
         mode="cart"
         bookingReference={bookingReference}
-      />
-
-      {/* Error Modal - Keep it separate from form visibility */}
-      <ErrorModal
-        isOpen={showErrorModal}
-        onClose={() => setShowErrorModal(false)}
-        message={errorModalMessage}
-        supportPhone="+91 1800 123 4567"
       />
     </>
   );

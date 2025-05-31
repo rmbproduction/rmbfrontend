@@ -263,9 +263,12 @@ export const API_ENDPOINTS = {
     renewSubscription: (id: string) => `/subscription/subscriptions/${id}/renew/`,
 
     // Visit Management
-    visits: '/subscription/visits/',
-    upcomingVisits: '/subscription/visits/upcoming/',
-    visitsBySubscription: '/subscription/visits/by-subscription/',
+    visits: {
+      upcoming: '/subscription/visits/upcoming/',
+      schedule: '/subscription/visits/schedule_preferred_date/',
+      cancel: (id: number) => `/subscription/visits/${id}/cancel/`,
+      reschedule: (id: number) => `/subscription/visits/${id}/update_schedule/`
+    },
     visitHistory: '/subscription/visits/visit_history/',
     visitSummary: '/subscription/visits/subscription_visit_summary/',
     checkVisitAvailability: '/subscription/visits/check_availability/',
@@ -581,25 +584,15 @@ export const apiService = {
 
     // Visit Management
     getVisits: async () => {
-      const response = await axiosInstance.get(API_ENDPOINTS.subscription.visits);
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.visits.upcoming);
       return response.data;
     },
     getUpcomingVisits: async () => {
-      const response = await axiosInstance.get(API_ENDPOINTS.subscription.upcomingVisits);
-      return response.data;
-    },
-    getVisitsBySubscription: async (params?: any) => {
-      const response = await axiosInstance.get(API_ENDPOINTS.subscription.visitsBySubscription, { params });
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.visits.upcoming);
       return response.data;
     },
     checkVisitAvailability: async () => {
       const response = await axiosInstance.get(API_ENDPOINTS.subscription.checkVisitAvailability);
-      return response.data;
-    },
-    getAvailableSlots: async (date: string) => {
-      const response = await axiosInstance.get(API_ENDPOINTS.subscription.availableDates, {
-        params: { date }
-      });
       return response.data;
     },
     getVisitHistory: async () => {
@@ -614,8 +607,8 @@ export const apiService = {
       const response = await axiosInstance.post(API_ENDPOINTS.subscription.completeVisit(id), data);
       return response.data;
     },
-    cancelVisit: async (id: string, data?: any) => {
-      const response = await axiosInstance.post(API_ENDPOINTS.subscription.cancelVisit(id), data);
+    cancelVisit: async (id: number, data?: any) => {
+      const response = await axiosInstance.post(API_ENDPOINTS.subscription.visits.cancel(id), data);
       return response.data;
     },
     getSubscriptionStatus: async (id: string) => {

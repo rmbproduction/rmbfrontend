@@ -122,74 +122,203 @@ export interface VisitCancellationRequest {
 }
 
 const subscriptionService = {
-  // Get active subscription
+  // Get active subscription with better error handling
   getActiveSubscription: async () => {
-    return axiosInstance.get(API_ENDPOINTS.subscription.activeSubscription);
-  },
-
-  // Get upcoming visits
-  getUpcomingVisits: async () => {
-    return axiosInstance.get<ScheduledVisit[]>(API_ENDPOINTS.subscription.upcomingVisits);
-  },
-
-  // Get subscription status
-  getStatus: async (requestId: number) => {
-    console.log('Making getStatus request for ID:', requestId);
-    const endpoint = API_ENDPOINTS.subscription.requestStatus(requestId.toString());
-    console.log('Using endpoint:', endpoint);
-    console.log('Full URL:', `${API_CONFIG.baseURL}${endpoint}`);
-    
     try {
-      const response = await axiosInstance.get<SubscriptionStatusResponse>(endpoint);
-      console.log('Raw getStatus response:', response);
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.activeSubscription);
       return response;
     } catch (error: any) {
-      console.error('getStatus error:', error);
-      console.error('Error response data:', error.response?.data);
-      console.error('Error status:', error.response?.status);
-      console.error('Request config:', {
-        url: error.config?.url,
-        method: error.config?.method,
-        headers: error.config?.headers
+      if (error.response?.status === 404) {
+        return { data: null }; // Return null for no active subscription
+      }
+      console.error('Error fetching active subscription:', error);
+      throw error;
+    }
+  },
+
+  // Get upcoming visits with validation
+  getUpcomingVisits: async () => {
+    try {
+      const response = await axiosInstance.get<ScheduledVisit[]>(API_ENDPOINTS.subscription.upcomingVisits);
+      return response;
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return { data: [] }; // Return empty array if no visits
+      }
+      console.error('Error fetching upcoming visits:', error);
+      throw error;
+    }
+  },
+
+  // Get subscription status with detailed error logging
+  getStatus: async (requestId: number) => {
+    if (!requestId) {
+      throw new Error('Request ID is required');
+    }
+
+    try {
+      const endpoint = API_ENDPOINTS.subscription.requestStatus(requestId.toString());
+      console.log('Calling endpoint:', endpoint);
+      
+      const response = await axiosInstance.get(endpoint);
+      return response;
+    } catch (error: any) {
+      console.error('getStatus error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        requestId
       });
       throw error;
     }
   },
 
-  // Check visit availability and get available dates
-  checkVisitAvailability: async () => {
-    return axiosInstance.get<VisitAvailabilityResponse>(API_ENDPOINTS.subscription.checkVisitAvailability);
+  // Check visit availability with retry logic
+  checkVisitAvailability: async (retryCount = 3) => {
+    let lastError;
+    for (let i = 0; i < retryCount; i++) {
+      try {
+        return await axiosInstance.get<VisitAvailabilityResponse>(
+          API_ENDPOINTS.subscription.checkVisitAvailability
+        );
+      } catch (error: any) {
+        lastError = error;
+        if (error.response?.status !== 503) { // Don't retry if not a service error
+          throw error;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+      }
+    }
+    throw lastError;
   },
 
-  // Get available dates for the next 30 days
+  // Get available dates with validation
   getAvailableDates: async () => {
-    return axiosInstance.get<{ available_dates: AvailableDate[] }>(API_ENDPOINTS.subscription.availableDates);
+    try {
+      const response = await axiosInstance.get<{ available_dates: AvailableDate[] }>(
+        API_ENDPOINTS.subscription.availableDates
+      );
+      
+      // Validate dates are in the future
+      const now = new Date();
+      response.data.available_dates = response.data.available_dates.filter(date => 
+        new Date(date.date) > now
+      );
+      
+      return response;
+    } catch (error: any) {
+      console.error('Error fetching available dates:', error);
+      throw error;
+    }
   },
 
-  // Get available time slots for a specific date
-  getAvailableTimeSlots: async (date: string) => {
-    return axiosInstance.get<{ date: string; available_times: TimeSlot[] }>(
-      API_ENDPOINTS.subscription.availableTimes,
-      { params: { date } }
-    );
+  // Get available time slots with parameter validation
+  getAvailableTimeSlots: async (date: string, subscriptionId: number) => {
+    if (!date || !subscriptionId) {
+      throw new Error('Date and subscription ID are required');
+    }
+
+    // Validate date format
+    const dateObj = new Date(date);
+    if (isNaN(dateObj.getTime())) {
+      throw new Error('Invalid date format');
+    }
+
+    // Format date to ensure consistent format (YYYY-MM-DD)
+    const formattedDate = dateObj.toISOString().split('T')[0];
+    
+    try {
+      const response = await axiosInstance.get<{ date: string; available_times: TimeSlot[] }>(
+        API_ENDPOINTS.subscription.availableTimes,
+        { 
+          params: { 
+            date: formattedDate,
+            subscription: subscriptionId
+          } 
+        }
+      );
+
+      // Filter out past times if date is today
+      if (formattedDate === new Date().toISOString().split('T')[0]) {
+        const now = new Date();
+        response.data.available_times = response.data.available_times.filter(slot => {
+          const [hours, minutes] = slot.time.split(':');
+          const slotTime = new Date();
+          slotTime.setHours(parseInt(hours), parseInt(minutes));
+          return slotTime > now;
+        });
+      }
+
+      return response;
+    } catch (error: any) {
+      console.error('Error fetching time slots:', {
+        date: formattedDate,
+        subscriptionId,
+        error: error.message,
+        response: error.response?.data
+      });
+      throw error;
+    }
   },
 
-  // Schedule a visit
+  // Schedule visit with comprehensive validation
   scheduleVisit: async (data: VisitScheduleRequest) => {
-    return axiosInstance.post<ScheduledVisit>(API_ENDPOINTS.subscription.scheduleVisit, data);
+    // Validate required fields
+    if (!data.preferred_date || !data.preferred_time || !data.subscription) {
+      throw new Error('Date, time and subscription ID are required');
+    }
+
+    // Validate date is in the future
+    const visitDate = new Date(`${data.preferred_date}T${data.preferred_time}`);
+    if (visitDate <= new Date()) {
+      throw new Error('Visit must be scheduled for a future date and time');
+    }
+
+    try {
+      const response = await axiosInstance.post<ScheduledVisit>(
+        API_ENDPOINTS.subscription.scheduleVisit,
+        data
+      );
+      return response;
+    } catch (error: any) {
+      console.error('Error scheduling visit:', {
+        data,
+        error: error.message,
+        response: error.response?.data
+      });
+      throw error;
+    }
   },
 
-  // Get visit history
-  getVisitHistory: async (subscriptionId?: number) => {
-    return axiosInstance.get<{ count: number; results: ScheduledVisit[] }>(
-      API_ENDPOINTS.subscription.visitHistory,
-      { params: subscriptionId ? { subscription_id: subscriptionId } : undefined }
-    );
+  // Get visit history with pagination support
+  getVisitHistory: async (subscriptionId?: number, page = 1, limit = 10) => {
+    try {
+      const params: any = { page, limit };
+      if (subscriptionId) {
+        params.subscription_id = subscriptionId;
+      }
+
+      return await axiosInstance.get<{ count: number; results: ScheduledVisit[] }>(
+        API_ENDPOINTS.subscription.visitHistory,
+        { params }
+      );
+    } catch (error: any) {
+      console.error('Error fetching visit history:', error);
+      throw error;
+    }
   },
 
-  // Get visit summary
+  // Get visit summary with error handling
   getVisitSummary: async () => {
-    return axiosInstance.get<VisitSummary>(API_ENDPOINTS.subscription.visitSummary);
+    try {
+      return await axiosInstance.get<VisitSummary>(API_ENDPOINTS.subscription.visitSummary);
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return { data: null }; // Return null if no summary available
+      }
+      console.error('Error fetching visit summary:', error);
+      throw error;
+    }
   },
 
   // Create subscription request
@@ -197,9 +326,26 @@ const subscriptionService = {
     return axiosInstance.post(API_ENDPOINTS.subscription.requests, data);
   },
 
-  // Cancel a visit
+  // Cancel visit with validation
   cancelVisit: async (visitId: string, data: VisitCancellationRequest) => {
-    return axiosInstance.post<ScheduledVisit>(API_ENDPOINTS.subscription.cancelVisit(visitId), data);
+    if (!visitId) {
+      throw new Error('Visit ID is required');
+    }
+
+    try {
+      return await axiosInstance.post<ScheduledVisit>(
+        API_ENDPOINTS.subscription.cancelVisit(visitId),
+        data
+      );
+    } catch (error: any) {
+      console.error('Error cancelling visit:', {
+        visitId,
+        data,
+        error: error.message,
+        response: error.response?.data
+      });
+      throw error;
+    }
   }
 };
 
