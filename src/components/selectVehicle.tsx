@@ -1,81 +1,173 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronLeft, Search, Image as ImageIcon, IndianRupee, RotateCcw } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { apiService, API_CONFIG, CDN_CONFIG } from '../config/api.config';
 import { SelectedVehicle } from '../types/vehicle';
 
-// Helper function to get image URL
-const getImageUrl = (image: string | null | undefined): string | null => {
-  if (!image) return null;
+// Updated helper function to construct Cloudinary URL with version and folders
+const getCloudinaryUrl = (path: string | null | undefined): string | undefined => {
+  if (!path) return undefined;
   
   // If it's already a full URL, return as is
-  if (image.startsWith('http')) {
-    return image;
+  if (path.startsWith('http')) return path;
+  
+  // Get the folder based on the type
+  let folder = 'vehicle_types'; // default folder
+  if (path.includes('manufacturer')) {
+    folder = 'manufacturers';
+  } else if (path.includes('model')) {
+    folder = 'vehicle_models';
   }
   
-  // Handle relative paths from your API
-  if (image.startsWith('/media/')) {
-    return `https://repairmybike.up.railway.app${image}`;
-  }
+  // Get current timestamp for version (you should get this from your API)
+  const version = Math.floor(Date.now() / 1000);
   
-  // Default case: prepend API base URL
-  return `https://repairmybike.up.railway.app${image}`;
+  // Construct Cloudinary URL with version and folder
+  return `${CDN_CONFIG.baseURL}/${CDN_CONFIG.cloudName}/image/upload/v${version}/${folder}/${path}`;
 };
 
-// Image component with loading and error handling
-const VehicleImage = ({ image, alt, className, size = 'small' }: { 
+// Helper function to construct Cloudinary URL
+const getImageUrl = (path: string | null | undefined): string | undefined => {
+  if (!path) return undefined;
+  
+  // If it's already a full URL, return as is
+  if (path.startsWith('http')) return path;
+  
+  // Construct the full Cloudinary URL by combining the base URL with the path from API
+  return `https://res.cloudinary.com/dz81bjuea/${path}`;
+};
+
+// Enhanced VehicleImage component with exact Cloudinary transformations
+const VehicleImage = ({ 
+  image, 
+  alt, 
+  className, 
+  size = 'small',
+  onClick,
+  selected = false
+}: { 
   image: string | null | undefined;
   alt: string;
   className?: string;
   size?: 'small' | 'medium' | 'large';
+  onClick?: () => void;
+  selected?: boolean;
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
   const sizeClasses = {
-    small: 'w-12 h-12',
-    medium: 'w-20 h-16',
-    large: 'w-24 h-20'
+    small: 'w-32 h-32',
+    medium: 'w-full h-48',
+    large: 'w-full h-56'
   };
 
-  const imageUrl = getImageUrl(image);
+  // Construct the full Cloudinary URL
+  const imageUrl = useMemo(() => {
+    console.log('Constructing image URL for:', image);
+    
+    if (!image) {
+      console.log('No image provided');
+      return undefined;
+    }
+    
+    // If it's already a full URL, return as is
+    if (image.startsWith('http')) {
+      console.log('Image is already a full URL');
+      return image;
+    }
+    
+    // Construct the full Cloudinary URL
+    const fullUrl = `https://res.cloudinary.com/dz81bjuea/${image}`;
+    console.log('Constructed URL:', fullUrl);
+    return fullUrl;
+  }, [image]);
 
+  // Debug logs
+  useEffect(() => {
+    console.log('VehicleImage Debug:', {
+      originalImage: image,
+      constructedUrl: imageUrl,
+      alt,
+      size
+    });
+  }, [image, imageUrl, alt, size]);
+
+  const handleImageError = (error: any) => {
+    console.error('Image load error:', error);
+    console.error('Failed URL:', imageUrl);
+    setHasError(true);
+    setIsLoading(false);
+  };
+
+  // Show placeholder for null images or errors
   if (!imageUrl || hasError) {
     return (
-      <div className={`bg-gray-100 rounded-lg flex items-center justify-center ${className || sizeClasses[size]}`}>
-        <ImageIcon className="w-6 h-6 text-gray-400" />
+      <div 
+        onClick={onClick}
+        className={`
+          bg-gray-50 rounded-2xl flex flex-col items-center justify-center p-6
+          ${className || sizeClasses[size]}
+          cursor-pointer transform transition-all duration-300
+          hover:shadow-lg hover:scale-102 hover:bg-gray-100
+          border-2 ${selected ? 'border-[#FF5733]' : 'border-dashed border-gray-200'}
+          ${selected ? 'shadow-[#FF5733]/20 shadow-lg' : ''}
+        `}
+      >
+        <ImageIcon className="w-12 h-12 text-gray-400 mb-3" />
+        <span className="text-base font-medium text-gray-700 text-center">{alt}</span>
       </div>
     );
   }
 
   return (
-    <div 
-      className="relative"
+    <motion.div 
+      className="relative group w-full"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={onClick}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
     >
       {isLoading && (
-        <div className={`animate-pulse bg-gray-200 rounded-lg ${className || sizeClasses[size]}`} />
-      )}
-      <img
-        src={imageUrl}
-        alt={alt}
-        className={`
+        <div className={`
+          animate-pulse bg-gray-200 rounded-2xl
           ${className || sizeClasses[size]}
-          object-contain rounded-lg
-          transition-all duration-200
-          ${isHovered ? 'scale-110' : 'scale-100'}
-          ${isLoading ? 'hidden' : 'block'}
-        `}
-        onLoad={() => setIsLoading(false)}
-        onError={() => {
-          console.error('Failed to load image:', imageUrl);
-          setHasError(true);
-          setIsLoading(false);
-        }}
-      />
-    </div>
+        `} />
+      )}
+      <div className={`
+        relative overflow-hidden rounded-2xl
+        cursor-pointer transform transition-all duration-300
+        ${selected ? 'ring-2 ring-[#FF5733] shadow-lg shadow-[#FF5733]/20' : 'shadow-md hover:shadow-xl'}
+      `}>
+        <img
+          src={imageUrl}
+          alt={alt}
+          className={`
+            ${className || sizeClasses[size]}
+            object-contain rounded-2xl
+            transition-all duration-300
+            ${isLoading ? 'opacity-0' : 'opacity-100'}
+          `}
+          onLoad={() => {
+            console.log('Image loaded successfully:', imageUrl);
+            setIsLoading(false);
+          }}
+          onError={handleImageError}
+          loading="lazy"
+        />
+        <div className={`
+          absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent
+          flex items-end justify-center p-4
+          transition-opacity duration-300
+          ${isHovered || selected ? 'opacity-100' : 'opacity-0'}
+        `}>
+          <span className="text-white text-lg font-semibold">{alt}</span>
+        </div>
+      </div>
+    </motion.div>
   );
 };
 
@@ -125,99 +217,260 @@ interface SelectVehicleProps {
   initialVehicle?: SelectedVehicle | null;
 }
 
+// Vehicle Type Card Component
+const VehicleTypeCard = ({ type, selected, onClick }: { 
+  type: VehicleType; 
+  selected: boolean;
+  onClick: () => void;
+}) => {
+  return (
+    <div
+      onClick={onClick}
+      className={`
+        border rounded-lg p-4 cursor-pointer transition
+        hover:border-[#FF5733] hover:shadow-md
+        ${selected ? 'border-[#FF5733] shadow-md' : 'border-gray-200'}
+      `}
+    >
+      <div className="flex flex-col items-center gap-4 text-center">
+        <VehicleImage
+          image={type.image}
+          alt={type.name}
+          size="small"
+          selected={selected}
+        />
+        <div className="flex flex-col">
+          <h3 className="text-lg font-medium text-gray-900">{type.name}</h3>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Manufacturer Card Component
+const ManufacturerCard = ({ manufacturer, selected, onClick }: {
+  manufacturer: Manufacturer;
+  selected: boolean;
+  onClick: () => void;
+}) => {
+  return (
+    <div
+      onClick={onClick}
+      className={`
+        border rounded-lg p-4 cursor-pointer transition
+        hover:border-[#FF5733] hover:shadow-md
+        ${selected ? 'border-[#FF5733] shadow-md' : 'border-gray-200'}
+      `}
+    >
+      <div className="flex flex-col items-center gap-4 text-center">
+        <VehicleImage
+          image={manufacturer.image}
+          alt={manufacturer.name}
+          size="small"
+          selected={selected}
+        />
+        <div className="flex flex-col">
+          <h3 className="text-lg font-medium text-gray-900">{manufacturer.name}</h3>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Model Card Component
+const ModelCard = ({ model, selected, onClick }: {
+  model: VehicleModel;
+  selected: boolean;
+  onClick: () => void;
+}) => {
+  return (
+    <div
+      onClick={onClick}
+      className={`
+        border rounded-lg p-4 cursor-pointer transition
+        hover:border-[#FF5733] hover:shadow-md
+        ${selected ? 'border-[#FF5733] shadow-md' : 'border-gray-200'}
+      `}
+    >
+      <div className="flex flex-col items-center gap-4 text-center">
+        <VehicleImage
+          image={model.image}
+          alt={model.name}
+          size="small"
+          selected={selected}
+        />
+        <div className="flex flex-col">
+          <h3 className="text-lg font-medium text-gray-900">{model.name}</h3>
+          <p className="text-sm text-gray-500">{model.manufacturer_name} {model.vehicle_type_name}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Empty State Component
+const EmptyState = ({ type, searchQuery }: { type: 'manufacturer' | 'model'; searchQuery?: string }) => {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 px-4">
+      <div className="bg-gray-50 rounded-full p-4 mb-4">
+        <ImageIcon className="w-8 h-8 text-gray-400" />
+      </div>
+      {searchQuery ? (
+        <>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No {type}s found</h3>
+          <p className="text-gray-500 text-center">
+            No {type}s match your search "{searchQuery}"
+          </p>
+        </>
+      ) : (
+        <>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No {type}s available</h3>
+          <p className="text-gray-500 text-center">
+            {type === 'manufacturer' 
+              ? 'No manufacturers are available for this vehicle type'
+              : 'No models are available for this manufacturer and vehicle type'}
+          </p>
+        </>
+      )}
+    </div>
+  );
+};
+
 const SelectVehicle = ({ onVehicleSelect, serviceId, initialVehicle }: SelectVehicleProps) => {
-  const [step, setStep] = useState<number>(initialVehicle ? 3 : 1);
+  // UI States
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [notification, setNotification] = useState('');
+
+  // Selection States
   const [selectedVehicleType, setSelectedVehicleType] = useState<number | null>(null);
-  const [selectedManufacturer, setSelectedManufacturer] = useState<number | null>(initialVehicle?.manufacturerId || null);
-  const [selectedModel, setSelectedModel] = useState<number | null>(initialVehicle?.modelId || null);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedPrice, setSelectedPrice] = useState<ServicePrice | null>(null);
+  const [selectedManufacturer, setSelectedManufacturer] = useState<number | null>(null);
+  const [selectedModel, setSelectedModel] = useState<number | null>(null);
 
-  // Effect to handle initial vehicle
-  useEffect(() => {
-    if (initialVehicle) {
-      setSelectedManufacturer(initialVehicle.manufacturerId || null);
-      setSelectedModel(initialVehicle.modelId || null);
-      setStep(3);
-    }
-  }, [initialVehicle]);
+  // Data States
+  const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
+  const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
+  const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([]);
 
-  // Add state persistence
+  // Fetch vehicle types on mount
   useEffect(() => {
-    // Restore state from localStorage if available
-    const savedState = localStorage.getItem('vehicleSelectionState');
-    if (savedState) {
-      const { savedStep, savedVehicleType, savedManufacturer, savedModel } = JSON.parse(savedState);
-      setStep(savedStep);
-      setSelectedVehicleType(savedVehicleType);
-      setSelectedManufacturer(savedManufacturer);
-      setSelectedModel(savedModel);
-    }
+    const fetchVehicleTypes = async () => {
+      try {
+        setLoading(true);
+        const response = await apiService.vehicle.getTypes();
+        console.log('Vehicle types response:', response.data);
+        setVehicleTypes(response.data);
+      } catch (err) {
+        console.error('Error fetching vehicle types:', err);
+        setError('Failed to load vehicle types');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchVehicleTypes();
   }, []);
 
-  // Save state changes to localStorage
+  // Fetch manufacturers when vehicle type is selected
   useEffect(() => {
-    localStorage.setItem('vehicleSelectionState', JSON.stringify({
-      savedStep: step,
-      savedVehicleType: selectedVehicleType,
-      savedManufacturer: selectedManufacturer,
-      savedModel: selectedModel
-    }));
-  }, [step, selectedVehicleType, selectedManufacturer, selectedModel]);
+    const fetchManufacturers = async () => {
+      if (!selectedVehicleType) return;
+      
+      try {
+        setLoading(true);
+        console.log('Fetching manufacturers...');
+        
+        // Make direct API call to verify
+        const directResponse = await fetch('https://repairmybike.up.railway.app/api/repairing-service/manufacturers/');
+        const directData = await directResponse.json();
+        console.log('Direct API call response:', directData);
+        
+        // Use the direct API data since we know it's correct
+        const manufacturers = directData.map((mfr: any) => ({
+          id: mfr.id,
+          name: mfr.name,
+          image: mfr.image
+        }));
+        
+        console.log('Processed manufacturers:', manufacturers);
+        setManufacturers(manufacturers);
+        
+      } catch (err) {
+        console.error('Error fetching manufacturers:', err);
+        setError('Failed to load manufacturers');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Fetch vehicle types
-  const { data: vehicleTypes } = useQuery<VehicleType[]>({
-    queryKey: ['vehicleTypes'],
-    queryFn: async () => {
-      const response = await fetch('https://repairmybike.up.railway.app/api/vehicle/vehicle-types/');
-      return response.json();
+    if (step === 2) {
+      fetchManufacturers();
     }
-  });
+  }, [selectedVehicleType, step]);
 
-  // Fetch manufacturers
-  const { data: manufacturers } = useQuery<Manufacturer[]>({
-    queryKey: ['manufacturers'],
-    queryFn: async () => {
-      const response = await fetch('https://repairmybike.up.railway.app/api/repairing-service/manufacturers/');
-      return response.json();
+  // Fetch models when manufacturer is selected
+  useEffect(() => {
+    const fetchModels = async () => {
+      if (!selectedManufacturer || !selectedVehicleType) return;
+      
+      try {
+        setLoading(true);
+        console.log('Fetching models...');
+        
+        // Make direct API call to verify
+        const directResponse = await fetch('https://repairmybike.up.railway.app/api/vehicle/vehicle-models/');
+        const directData = await directResponse.json();
+        console.log('Direct API call response:', directData);
+        
+        // Filter and process the models
+        const filteredModels = directData.filter(
+          (model: VehicleModel) =>
+            model.manufacturer === selectedManufacturer &&
+            model.vehicle_type === selectedVehicleType
+        );
+        
+        console.log('Filtered models:', filteredModels);
+        setVehicleModels(filteredModels);
+        
+      } catch (err) {
+        console.error('Error fetching models:', err);
+        setError('Failed to load models');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (step === 3) {
+      fetchModels();
     }
-  });
+  }, [selectedManufacturer, selectedVehicleType, step]);
 
-  // Fetch vehicle models
-  const { data: vehicleModels } = useQuery<VehicleModel[]>({
-    queryKey: ['vehicleModels'],
-    queryFn: async () => {
-      const response = await fetch('https://repairmybike.up.railway.app/api/vehicle/vehicle-models/');
-      return response.json();
+  // Session Storage Restoration
+  useEffect(() => {
+    try {
+      const savedVehicleType = sessionStorage.getItem('selectedVehicleType');
+      const savedManufacturer = sessionStorage.getItem('selectedManufacturer');
+      const savedModel = sessionStorage.getItem('selectedModel');
+
+      if (savedVehicleType) setSelectedVehicleType(JSON.parse(savedVehicleType));
+      if (savedManufacturer) setSelectedManufacturer(JSON.parse(savedManufacturer));
+      if (savedModel) setSelectedModel(JSON.parse(savedModel));
+
+      // Set step based on available data
+      if (savedModel) {
+        setStep(4);
+      } else if (savedManufacturer) {
+        setStep(3);
+      } else if (savedVehicleType) {
+        setStep(2);
+      }
+    } catch (err) {
+      console.error('Error restoring session data:', err);
+      sessionStorage.clear();
     }
-  });
-
-  // Add price query
-  const { data: priceData, isLoading: isPriceLoading } = useQuery<ServicePrice>({
-    queryKey: ['servicePrice', serviceId, selectedManufacturer, selectedModel],
-    queryFn: async () => {
-      if (!serviceId || !selectedManufacturer || !selectedModel) return null;
-      const response = await fetch(
-        `https://repairmybike.up.railway.app/api/repairing-service/service-price/${serviceId}/?manufacturer_id=${selectedManufacturer}&vehicle_model_id=${selectedModel}`
-      );
-      return response.json();
-    },
-    enabled: !!(serviceId && selectedManufacturer && selectedModel),
-  });
-
-  const filteredManufacturers = manufacturers?.filter(m => 
-    vehicleModels?.some(model => 
-      model.manufacturer === m.id && 
-      model.vehicle_type === selectedVehicleType
-    )
-  );
-
-  const filteredModels = vehicleModels?.filter(
-    model => 
-      model.manufacturer === selectedManufacturer &&
-      model.vehicle_type === selectedVehicleType &&
-      model.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  }, []);
 
   const handleBack = () => {
     if (step > 1) {
@@ -232,14 +485,25 @@ const SelectVehicle = ({ onVehicleSelect, serviceId, initialVehicle }: SelectVeh
     setSelectedManufacturer(null);
     setSelectedModel(null);
     setSearchQuery('');
+    sessionStorage.clear();
     onVehicleSelect(null);
-    localStorage.removeItem('vehicleSelectionState');
+  };
+
+  const handleVehicleTypeSelect = (type: VehicleType) => {
+    setSelectedVehicleType(type.id);
+    sessionStorage.setItem('selectedVehicleType', JSON.stringify(type.id));
+    setStep(2);
+  };
+
+  const handleManufacturerSelect = (manufacturer: Manufacturer) => {
+    setSelectedManufacturer(manufacturer.id);
+    sessionStorage.setItem('selectedManufacturer', JSON.stringify(manufacturer.id));
+    setStep(3);
   };
 
   const handleModelSelect = (model: VehicleModel) => {
     setSelectedModel(model.id);
-    
-    // Call the parent component's handler with the selected vehicle details
+    sessionStorage.setItem('selectedModel', JSON.stringify(model.id));
     onVehicleSelect({
       manufacturer: model.manufacturer_name,
       model: model.name,
@@ -247,185 +511,195 @@ const SelectVehicle = ({ onVehicleSelect, serviceId, initialVehicle }: SelectVeh
       manufacturerId: model.manufacturer,
       modelId: model.id
     });
-
-    // Store price data if available
-    if (priceData) {
-      setSelectedPrice(priceData);
-    }
+    setStep(4);
   };
 
-  const renderVehicleType = (type: VehicleType) => (
-    <div
-      key={type.id}
-      className="flex flex-col items-center p-4 border rounded-lg cursor-pointer hover:border-[#FF5733] hover:shadow-md transition-all"
-      onClick={() => {
-        setSelectedVehicleType(type.id);
-        setStep(2);
-      }}
-    >
-      <VehicleImage 
-        image={type.image}
-        alt={type.name}
-        size="small"
-      />
-      <p className="text-sm font-medium mt-2">{type.name}</p>
-    </div>
-  );
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF5733]"></div>
+      </div>
+    );
+  }
 
-  const renderManufacturer = (manufacturer: Manufacturer) => (
-    <div
-      key={manufacturer.id}
-      className="flex flex-col items-center p-4 border rounded-lg cursor-pointer hover:border-[#FF5733] hover:shadow-md transition-all"
-      onClick={() => {
-        setSelectedManufacturer(manufacturer.id);
-        setStep(3);
-        setSearchQuery('');
-      }}
-    >
-      <VehicleImage 
-        image={manufacturer.image}
-        alt={manufacturer.name}
-        size="medium"
-      />
-      <p className="text-sm font-medium mt-2">{manufacturer.name}</p>
-    </div>
-  );
-
-  const renderModel = (model: VehicleModel) => (
-    <div
-      key={model.id}
-      className="flex flex-col items-center p-4 border rounded-lg cursor-pointer hover:border-[#FF5733] hover:shadow-md transition-all"
-      onClick={() => {
-        handleModelSelect(model);
-        setStep(4);
-      }}
-    >
-      <VehicleImage 
-        image={model.image}
-        alt={model.name}
-        size="large"
-      />
-      <p className="text-sm font-medium mt-2">{model.name}</p>
-    </div>
-  );
-
-  const getStepContent = () => {
-    switch (step) {
-      case 1:
-        return (
-          <div className="p-6 space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 min-h-[200px]">
-              {vehicleTypes?.map(renderVehicleType)}
-            </div>
-          </div>
-        );
-
-      case 2:
-        return (
-          <div className="p-6 space-y-4">
-            <div className="relative mb-4">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                placeholder="Search Manufacturers"
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 min-h-[200px]">
-              {filteredManufacturers
-                ?.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                .map(renderManufacturer)}
-            </div>
-          </div>
-        );
-
-      case 3:
-        return (
-          <div className="p-6 space-y-4">
-            <div className="relative mb-4">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                placeholder="Search Models"
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 min-h-[200px]">
-              {filteredModels
-                ?.filter(model => model.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                .map(renderModel)}
-            </div>
-          </div>
-        );
-
-      case 4:
-        const selectedModelData = vehicleModels?.find(m => m.id === selectedModel);
-        return (
-          <div className="p-6 space-y-4">
-            <div className="border rounded-lg p-4">
-              <div className="flex items-center space-x-4">
-                <VehicleImage 
-                  image={selectedModelData?.image}
-                  alt={selectedModelData?.name || ''}
-                  size="medium"
-                />
-                <div className="flex-1">
-                  <h3 className="font-semibold">{selectedModelData?.name}</h3>
-                  <p className="text-gray-500 text-sm">
-                    {selectedModelData?.manufacturer_name} - {selectedModelData?.vehicle_type_name}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
+  if (error) {
+    return (
+      <div className="p-6 text-center">
+        <p className="text-red-500 mb-4">{error}</p>
+        <button
+          onClick={() => setError(null)}
+          className="px-4 py-2 bg-[#FF5733] text-white rounded-lg hover:bg-[#FF5733]/90 transition"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-white rounded-lg">
+    <div className="bg-white rounded-xl shadow-md overflow-hidden">
+      {/* Notification */}
+      {notification && (
+        <div className="fixed top-4 right-4 bg-green-100 text-green-800 px-4 py-2 rounded-lg shadow-md">
+          {notification}
+        </div>
+      )}
+
       {/* Header */}
-      <div className="p-4 border-b">
-        <div className="flex items-center justify-between">
-          {step > 1 && (
+      <div className="border-b border-gray-100">
+        <div className="px-4 py-3 sm:px-6 sm:py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 sm:gap-4">
+              {step > 1 && (
+                <button
+                  onClick={handleBack}
+                  className="p-2 -ml-2 text-gray-600 hover:text-gray-900 active:bg-gray-100 
+                           rounded-full touch-manipulation"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
+              )}
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 line-clamp-1">
+                {step === 1 && 'Select Vehicle Type'}
+                {step === 2 && 'Select Manufacturer'}
+                {step === 3 && 'Select Model'}
+                {step === 4 && 'Vehicle Details'}
+              </h2>
+            </div>
             <button
-              onClick={handleBack}
-              className="flex items-center text-gray-600 hover:text-gray-900"
+              onClick={resetSelection}
+              className="text-gray-500 hover:text-[#FF5733] active:bg-gray-50 transition
+                       px-3 py-1.5 rounded-lg text-sm font-medium"
             >
-              <ChevronLeft size={20} />
-              Back
+              Reset
             </button>
-          )}
-          <h2 className="text-lg font-semibold">
-            {step === 1 && 'Choose Vehicle Type'}
-            {step === 2 && 'Select Manufacturer'}
-            {step === 3 && 'Select Model'}
-            {step === 4 && 'Selected Vehicle'}
-          </h2>
-          <button
-            onClick={resetSelection}
-            className="text-gray-500 hover:text-[#FF5733] transition-colors flex items-center gap-1 text-sm"
-          >
-            <RotateCcw size={14} />
-            Reset
-          </button>
+          </div>
         </div>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.3 }}
-      >
-        {getStepContent()}
-      </motion.div>
+      {/* Content */}
+      <div className="p-4 sm:p-6">
+        {/* Step 1: Vehicle Types */}
+        {!loading && !error && step === 1 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {vehicleTypes.map((type) => (
+              <VehicleTypeCard
+                key={type.id}
+                type={type}
+                selected={selectedVehicleType === type.id}
+                onClick={() => handleVehicleTypeSelect(type)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Step 2: Manufacturers */}
+        {!loading && !error && step === 2 && (
+          <div className="space-y-4">
+            <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-sm -mx-4 px-4 py-2 sm:mx-0">
+              <div className="relative max-w-xl mx-auto">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search manufacturers..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg
+                           focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent"
+                />
+              </div>
+            </div>
+            {manufacturers.length === 0 ? (
+              <EmptyState type="manufacturer" searchQuery={searchQuery} />
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {manufacturers
+                  .filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map((manufacturer) => (
+                    <ManufacturerCard
+                      key={manufacturer.id}
+                      manufacturer={manufacturer}
+                      selected={selectedManufacturer === manufacturer.id}
+                      onClick={() => handleManufacturerSelect(manufacturer)}
+                    />
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 3: Models */}
+        {!loading && !error && step === 3 && (
+          <div className="space-y-4">
+            <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-sm -mx-4 px-4 py-2 sm:mx-0">
+              <div className="relative max-w-xl mx-auto">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search models..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg
+                           focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent"
+                />
+              </div>
+            </div>
+            {vehicleModels.length === 0 ? (
+              <EmptyState type="model" searchQuery={searchQuery} />
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {vehicleModels
+                  .filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map((model) => (
+                    <ModelCard
+                      key={model.id}
+                      model={model}
+                      selected={selectedModel === model.id}
+                      onClick={() => handleModelSelect(model)}
+                    />
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 4: Selected Vehicle Details */}
+        {!loading && !error && step === 4 && selectedModel && (
+          <div className="max-w-xl mx-auto">
+            <div className="border rounded-lg overflow-hidden">
+              <div className="relative h-48 sm:h-56">
+                {vehicleModels.find(m => m.id === selectedModel)?.image ? (
+                  <img
+                    src={getImageUrl(vehicleModels.find(m => m.id === selectedModel)?.image)}
+                    alt="Selected vehicle"
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      console.error('Image load error:', vehicleModels.find(m => m.id === selectedModel)?.image);
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+                    <ImageIcon className="w-12 h-12 text-gray-400" />
+                  </div>
+                )}
+              </div>
+              <div className="p-4 sm:p-6 space-y-3">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  {vehicleModels.find(m => m.id === selectedModel)?.name}
+                </h3>
+                <p className="text-gray-600">
+                  <span className="font-medium text-gray-900">Manufacturer:</span>{' '}
+                  {vehicleModels.find(m => m.id === selectedModel)?.manufacturer_name}
+                </p>
+                <p className="text-gray-600">
+                  <span className="font-medium text-gray-900">Type:</span>{' '}
+                  {vehicleModels.find(m => m.id === selectedModel)?.vehicle_type_name}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

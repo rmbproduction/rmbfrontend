@@ -68,25 +68,12 @@ export const useCreateServiceBooking = () => {
           API_ENDPOINTS.services.createBooking : 
           API_ENDPOINTS.services.serviceNow;
         
+        // Store cart_id for use in onSuccess
+        const cartId = data.cart_id;
+        
         // Validate required fields based on endpoint
-        if (endpoint === API_ENDPOINTS.services.serviceNow) {
-          // Buy now flow requires service_id
-          if (!data.service_id) {
-            throw new Error('service_id is required for buy now flow');
-          }
-          // Convert service_id to number if it's a string
-          if (typeof data.service_id === 'string') {
-            data.service_id = parseInt(data.service_id);
-          }
-        } else {
-          // Cart checkout flow requires cart_id
-          if (!data.cart_id) {
-            throw new Error('cart_id is required for cart checkout');
-          }
-          // Convert cart_id to number if it's a string
-          if (typeof data.cart_id === 'string') {
-            data.cart_id = parseInt(data.cart_id);
-          }
+        if (!data.cart_id && !data.service_id) {
+          throw new Error('Either cart_id or service_id is required');
         }
 
         // Handle vehicle type conversion
@@ -103,7 +90,7 @@ export const useCreateServiceBooking = () => {
             }
           }
 
-          // Convert manufacturer and model to numbers
+          // Convert manufacturer and model to strings
           vehicleData.manufacturer = String(vehicleData.manufacturer);
           vehicleData.model = String(vehicleData.model);
 
@@ -113,6 +100,9 @@ export const useCreateServiceBooking = () => {
             vehicle: vehicleData
           };
         }
+        
+        console.log('Sending request to:', endpoint);
+        console.log('With data:', JSON.stringify(data, null, 2));
         
         const response = await axiosInstance.post(endpoint, data);
         console.log('Service booking response:', response.data);
@@ -151,7 +141,8 @@ export const useCreateServiceBooking = () => {
           }
         }));
         
-        return response.data;
+        // Return both response data and cartId
+        return { ...response.data, cartId };
       } catch (error: any) {
         console.error('Service booking error:', {
           status: error?.response?.status,
@@ -161,8 +152,31 @@ export const useCreateServiceBooking = () => {
         throw error;
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['myRepairs'] });
+    onSuccess: async (data, variables, context) => {
+      // If this was a cart booking, clear the cart immediately
+      if (data.cartId) {
+        // Immediately clear local cart state
+        queryClient.setQueryData(['cart'], null);
+        queryClient.setQueryData(['cart', 'active'], null);
+        
+        // Clear cart-related localStorage items immediately
+        localStorage.removeItem('activeCartId');
+        localStorage.removeItem('cartItems');
+        localStorage.removeItem('checkoutMode');
+        localStorage.removeItem('checkoutTotal');
+
+        // Then handle the API cleanup in the background
+        Promise.all([
+          axiosInstance.delete(API_ENDPOINTS.services.clearCart(data.cartId))
+            .catch(error => console.error('Failed to clear cart from API:', error)),
+          queryClient.invalidateQueries({ queryKey: ['cart'] }),
+          queryClient.invalidateQueries({ queryKey: ['myRepairs'] })
+        ]);
+      } else {
+        // For non-cart bookings, just invalidate repairs
+        queryClient.invalidateQueries({ queryKey: ['myRepairs'] });
+      }
+
       toast.success('Service booked successfully!');
     },
     onError: (error: any) => {

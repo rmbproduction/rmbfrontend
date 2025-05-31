@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { Search, Clock, Shield, CheckCircle2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Search, Clock, Shield, CheckCircle2, Car, RotateCcw, ImageIcon } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import SelectVehicle from '../components/selectVehicle';
 import PackageActions from '../components/PackageActions';
@@ -10,7 +10,6 @@ import { SelectedVehicle } from '../types/vehicle';
 import { useServicePrices, ServicePrice } from '../hooks/useServicePrice';
 import { Spin } from 'antd';
 import { useVehicleSelection } from '../hooks/vehicle/useVehicleSelection';
-
 
 interface ServiceFeature {
   id: number;
@@ -43,10 +42,104 @@ interface ServiceCategory {
   services: ServiceDetail[];
 }
 
+// Vehicle Select Button/Card Component
+const VehicleSelectButton = ({ 
+  selectedVehicle, 
+  onOpenModal,
+  onReset
+}: { 
+  selectedVehicle: SelectedVehicle | null;
+  onOpenModal: () => void;
+  onReset: () => void;
+}) => {
+  if (!selectedVehicle) {
+    return (
+      <button
+        onClick={onOpenModal}
+        className="px-4 py-2 bg-[#FF5733] text-white rounded-lg hover:bg-[#FF5733]/90 transition-colors ml-2"
+      >
+        Select Vehicle
+      </button>
+    );
+  }
+
+  return (
+    <div className="inline-flex items-center gap-2">
+      <div 
+        onClick={onOpenModal}
+        className="inline-flex items-center gap-3 px-3 py-2 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-[#FF5733] transition-colors"
+      >
+        <div className="w-8 h-8 bg-gray-100 rounded-md flex items-center justify-center">
+          <Car className="w-5 h-5 text-gray-600" />
+        </div>
+        <div className="flex flex-col">
+          <span className="text-sm font-medium text-gray-900">{selectedVehicle.model}</span>
+          <span className="text-xs text-gray-500">{selectedVehicle.manufacturer}</span>
+        </div>
+      </div>
+      <button
+        onClick={onReset}
+        className="p-2 text-gray-400 hover:text-[#FF5733] hover:bg-gray-50 rounded-full transition-colors"
+        title="Reset vehicle selection"
+      >
+        <RotateCcw className="w-4 h-4" />
+      </button>
+    </div>
+  );
+};
+
+// Vehicle Select Modal Component
+const VehicleSelectModal = ({
+  isOpen,
+  onClose,
+  onVehicleSelect,
+  serviceId,
+  initialVehicle
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onVehicleSelect: (vehicle: SelectedVehicle | null) => void;
+  serviceId: string;
+  initialVehicle: SelectedVehicle | null;
+}) => {
+  if (!isOpen) return null;
+
+  const handleVehicleSelect = (vehicle: SelectedVehicle | null) => {
+    if (vehicle) {
+      onVehicleSelect(vehicle);
+    } else {
+      onVehicleSelect(null);
+    }
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4">
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative bg-white rounded-2xl shadow-xl max-w-2xl w-full mx-auto">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+          >
+            ×
+          </button>
+          <SelectVehicle
+            onVehicleSelect={handleVehicleSelect}
+            serviceId={serviceId}
+            initialVehicle={initialVehicle}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ServiceDetails = () => {
   const { serviceId } = useParams<{ serviceId: string }>();
   const [searchQuery, setSearchQuery] = useState('');
   const { selectedVehicle, setSelectedVehicle } = useVehicleSelection();
+  const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
 
   // Fetch service category data
   const { data: serviceCategory, isLoading, error } = useQuery<ServiceCategory>({
@@ -102,12 +195,18 @@ const ServiceDetails = () => {
         manufacturer: vehicle.manufacturer,
         model: vehicle.model,
         vehicleType: vehicle.vehicleType,
-        manufacturerId: vehicle.manufacturerId || 0,
-        modelId: vehicle.modelId || 0,
+        manufacturerId: vehicle.manufacturerId ?? 0,
+        modelId: vehicle.modelId ?? 0,
       });
     } else {
       setSelectedVehicle(null);
     }
+  };
+
+  // Add reset handler
+  const handleResetVehicle = () => {
+    setSelectedVehicle(null);
+    setIsVehicleModalOpen(false);
   };
 
   if (isLoading) {
@@ -155,117 +254,57 @@ const ServiceDetails = () => {
           </div>
         </div>
 
-        <div className="flex gap-8">
-          {/* Left Side - Service Details */}
-          <div className="flex-1">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white rounded-2xl shadow-lg overflow-hidden"
-            >
-              <div className="p-8">
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="w-16 h-16 bg-[#FFF5F2] rounded-xl flex items-center justify-center">
-                    <IconComponent className="w-8 h-8 text-[#FF5733]" />
-                  </div>
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{serviceCategory.name}</h1>
-                    <p className="text-gray-600 mt-1">{serviceCategory.description}</p>
-                  </div>
-                </div>
+        {/* Main Content - Now Full Width */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl shadow-lg overflow-hidden"
+        >
+          <div className="p-8">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-16 h-16 bg-[#FFF5F2] rounded-xl flex items-center justify-center">
+                {IconComponent && <IconComponent className="w-8 h-8 text-[#FF5733]" />}
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">{serviceCategory.name}</h1>
+                <p className="text-gray-600 mt-1">{serviceCategory.description}</p>
+              </div>
+            </div>
 
-                {/* Service Packages */}
-                {filteredServices.length > 0 ? (
-                  <div className="grid gap-8 mt-8">
-                    {filteredServices.map((service, index) => {
-                      const priceQuery = servicePriceQueries[index];
-                      const priceData = priceQuery.data as ServicePrice | null;
-                      const isPriceLoading = priceQuery.isLoading;
+            {/* Service Packages */}
+            {filteredServices.length > 0 ? (
+              <div className="grid gap-8 mt-8">
+                {filteredServices.map((service, index) => {
+                  const priceQuery = servicePriceQueries[index];
+                  const priceData = priceQuery.data as ServicePrice | null;
+                  const isPriceLoading = priceQuery.isLoading;
 
-                      console.log(`Service ${service.id} Price Data:`, priceData);
-                      console.log(`Service ${service.id} Loading:`, isPriceLoading);
-
-                      return (
-                        <motion.div
-                          key={service.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.2 }}
-                          className="border border-gray-200 rounded-xl p-6"
-                        >
-                          <div className="flex justify-between items-start mb-6">
-                            <div>
-                              <h3 className="text-xl font-semibold text-gray-900">{service.name}</h3>
-                              <div className="flex items-center gap-4 mt-2">
-                                <div className="flex items-center text-gray-600">
-                                  <Clock className="w-4 h-4 mr-1" />
-                                  {service.duration}
-                                </div>
-                                <div className="flex items-center text-gray-600">
-                                  <Shield className="w-4 h-4 mr-1" />
-                                  {service.warranty}
-                                </div>
-                              </div>
-                              <p className="text-sm text-gray-500 mt-1">
-                                Recommended: {service.recommended}
-                              </p>
+                  return (
+                    <motion.div
+                      key={service.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.2 }}
+                      className="border border-gray-200 rounded-xl p-6"
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="text-xl font-semibold text-gray-900">{service.name}</h3>
+                          <div className="flex items-center gap-4 mt-2">
+                            <div className="flex items-center text-gray-600">
+                              <Clock className="w-4 h-4 mr-1" />
+                              {service.duration}
+                            </div>
+                            <div className="flex items-center text-gray-600">
+                              <Shield className="w-4 h-4 mr-1" />
+                              {service.warranty}
                             </div>
                           </div>
+                          <p className="text-sm text-gray-500 mt-1 mb-4">
+                            Recommended: {service.recommended}
+                          </p>
 
-                          {/* Price display logic */}
-                          <div className="mt-6">
-                            <div className="text-right">
-                              <div className="flex flex-col items-end">
-                                {!selectedVehicle ? (
-                                  <div className="text-sm text-[#FF5733] font-medium">
-                                    Select vehicle to view pricing
-                                  </div>
-                                ) : (
-                                  <div className="flex justify-end items-center">
-                                    {isPriceLoading ? (
-                                      <div className="flex items-center">
-                                        <Spin size="small" className="mr-2" />
-                                        <span className="text-sm text-gray-500">Loading price...</span>
-                                      </div>
-                                    ) : (
-                                      <div className="flex flex-col items-end">
-                                        <div className="flex items-center text-lg font-semibold text-gray-900">
-                                          {priceData ? (
-                                            <>
-                                              <span>₹{parseFloat(priceData.price).toLocaleString('en-IN')}</span>
-                                              {priceData.is_custom_price ? (
-                                                <span className="ml-2 text-xs text-[#FF5733] font-normal">
-                                                  Special price for {selectedVehicle.manufacturer} {selectedVehicle.model}
-                                                </span>
-                                              ) : (
-                                                <span className="ml-2 text-xs text-gray-500 font-normal">
-                                                  Standard price for {selectedVehicle.manufacturer} {selectedVehicle.model}
-                                                </span>
-                                              )}
-                                            </>
-                                          ) : (
-                                            <>
-                                              <span>₹{parseFloat(service.base_price).toLocaleString('en-IN')}</span>
-                                              <span className="ml-2 text-xs text-gray-500 font-normal">
-                                                Standard price for {selectedVehicle.manufacturer} {selectedVehicle.model}
-                                              </span>
-                                            </>
-                                          )}
-                                        </div>
-                                        {priceData?.is_custom_price && (
-                                          <div className="text-xs text-gray-500 mt-1">
-                                            Regular price: ₹{parseFloat(service.base_price).toLocaleString('en-IN')}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="grid gap-3">
+                          <div className="grid gap-2">
                             {service.features.map((feature) => (
                               <div key={feature.id} className="flex items-center text-gray-700">
                                 <CheckCircle2 className="w-5 h-5 text-green-500 mr-2" />
@@ -273,56 +312,120 @@ const ServiceDetails = () => {
                               </div>
                             ))}
                           </div>
-                          
-                          {/* PackageActions with proper price passing */}
-                          <div className="mt-8">
+                        </div>
+
+                        <div className="text-right">
+                          <div className="flex flex-col items-end">
                             {!selectedVehicle ? (
-                              <div className="bg-gray-50 rounded-lg p-4 text-center">
-                                <p className="text-gray-600 font-medium">👆 Please select your vehicle from the panel on the right to proceed</p>
+                              <div className="text-sm text-[#FF5733] font-medium">
+                                <div className="w-64 h-64 rounded-2xl overflow-hidden bg-white mb-2 border-2 border-gray-100 shadow-sm hover:border-[#FF5733]/20 transition-colors">
+                                  <img 
+                                    src={service.image_url || 'https://res.cloudinary.com/dz81bjuea/image/upload/v1748293273/service_images/w9lk6pnvvhnsp4dxhgop.png'} 
+                                    alt="Service illustration"
+                                    className="w-full h-full object-contain p-2"
+                                  />
+                                </div>
+                                Select vehicle to view pricing
                               </div>
                             ) : (
-                              <PackageActions
-                                serviceId={service.id.toString()}
-                                packageId={undefined}
-                                serviceName={service.name}
-                                vehicleManufacturerId={selectedVehicle.manufacturerId}
-                                vehicleModelId={selectedVehicle.modelId}
-                                vehicleManufacturer={selectedVehicle.manufacturer}
-                                vehicleModel={selectedVehicle.model}
-                                vehicleType={selectedVehicle.vehicleType}
-                                price={priceData ? priceData.price : service.base_price}
-                                features={service.features.map(f => f.name)}
-                              />
+                              <div className="flex justify-end items-center">
+                                {isPriceLoading ? (
+                                  <div className="flex items-center">
+                                    <Spin size="small" className="mr-2" />
+                                    <span className="text-sm text-gray-500">Loading price...</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col items-end">
+                                    <div className="flex items-center text-lg font-semibold text-gray-900">
+                                      {priceData ? (
+                                        <>
+                                          <span>₹{parseFloat(priceData.price).toLocaleString('en-IN')}</span>
+                                          {priceData.is_custom_price ? (
+                                            <span className="ml-2 text-xs text-[#FF5733] font-normal">
+                                              Special price for {selectedVehicle.manufacturer} {selectedVehicle.model}
+                                            </span>
+                                          ) : (
+                                            <span className="ml-2 text-xs text-gray-500 font-normal">
+                                              Standard price for {selectedVehicle.manufacturer} {selectedVehicle.model}
+                                            </span>
+                                          )}
+                                        </>
+                                      ) : (
+                                        <>
+                                          <span>₹{parseFloat(service.base_price).toLocaleString('en-IN')}</span>
+                                          <span className="ml-2 text-xs text-gray-500 font-normal">
+                                            Standard price for {selectedVehicle.manufacturer} {selectedVehicle.model}
+                                          </span>
+                                        </>
+                                      )}
+                                    </div>
+                                    {priceData?.is_custom_price && (
+                                      <div className="text-xs text-gray-500 mt-1">
+                                        Regular price: ₹{parseFloat(service.base_price).toLocaleString('en-IN')}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
-                        </motion.div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="mt-8 text-center text-gray-500">
-                    {searchQuery ? 'No services found matching your search.' : 'No services available at the moment.'}
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </div>
+                        </div>
+                      </div>
 
-          {/* Right Side - Vehicle Selection */}
-          <div className="w-[400px] sticky top-8">
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="bg-white rounded-2xl shadow-lg overflow-hidden"
-            >
-              <SelectVehicle
-                onVehicleSelect={handleVehicleSelect}
-                serviceId={serviceId || ''}
-                initialVehicle={selectedVehicle}
-              />
-            </motion.div>
+                      <div className="mt-8">
+                        {!selectedVehicle ? (
+                          <div className="bg-gray-50 rounded-lg p-4 text-center flex items-center justify-center">
+                            <p className="text-gray-600 font-medium">👆 Please select your vehicle to proceed</p>
+                            <VehicleSelectButton 
+                              selectedVehicle={null} 
+                              onOpenModal={() => setIsVehicleModalOpen(true)}
+                              onReset={handleResetVehicle}
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between bg-gray-50 rounded-lg p-4">
+                            <VehicleSelectButton 
+                              selectedVehicle={selectedVehicle} 
+                              onOpenModal={() => setIsVehicleModalOpen(true)}
+                              onReset={handleResetVehicle}
+                            />
+                            <PackageActions
+                              serviceId={service.id.toString()}
+                              packageId={undefined}
+                              serviceName={service.name}
+                              vehicleManufacturerId={selectedVehicle.manufacturerId}
+                              vehicleModelId={selectedVehicle.modelId}
+                              vehicleManufacturer={selectedVehicle.manufacturer}
+                              vehicleModel={selectedVehicle.model}
+                              vehicleType={selectedVehicle.vehicleType}
+                              price={priceData ? priceData.price : service.base_price}
+                              features={service.features.map(f => f.name)}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="mt-8 text-center text-gray-500">
+                {searchQuery ? 'No services found matching your search.' : 'No services available at the moment.'}
+              </div>
+            )}
           </div>
-        </div>
+        </motion.div>
+
+        {/* Vehicle Select Modal */}
+        <AnimatePresence>
+          <VehicleSelectModal
+            isOpen={isVehicleModalOpen}
+            onClose={() => setIsVehicleModalOpen(false)}
+            onVehicleSelect={handleVehicleSelect}
+            serviceId={serviceId || ''}
+            initialVehicle={selectedVehicle || null}
+          />
+        </AnimatePresence>
       </div>
     </div>
   );

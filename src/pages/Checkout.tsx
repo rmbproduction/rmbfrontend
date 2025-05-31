@@ -3,13 +3,16 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronLeft, CheckCircle2, User, MapPin, Calendar, Loader2 } from 'lucide-react';
 import { notification } from 'antd';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import OrderSuccessModal from '../components/OrderSuccessModal';
 import { useCreateServiceBooking } from '../hooks/services/useServiceBooking';
 import { useAuth } from '../contexts/AuthContext';
 import { useVehicleSelection } from '../hooks/vehicle/useVehicleSelection';
 import { useActiveCart, useClearCartMutation } from '../hooks/cart/useCartQueries';
 import { useQueryClient } from '@tanstack/react-query';
-import { useVehicleTypes } from '../hooks/vehicle/useVehicleTypes';
+import { useVehicleTypes, getVehicleTypeId } from '../hooks/vehicle/useVehicleTypes';
 
 interface ServiceItem {
   serviceId: string;
@@ -27,18 +30,37 @@ interface ServiceItem {
   features: string[];
 }
 
-interface CheckoutFormData {
-  name: string;
-  email: string;
-  phone: string;
-  address: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-  };
-  serviceDate: string;
-  serviceTime: string;
+// Form validation schema
+const checkoutFormSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Invalid email address'),
+  phone: z.string()
+    .min(10, 'Phone number must be at least 10 digits')
+    .max(15, 'Phone number must not exceed 15 digits')
+    .regex(/^[0-9]+$/, 'Phone number must contain only digits'),
+  address: z.object({
+    street: z.string().min(1, 'Street address is required'),
+    city: z.string().min(1, 'City is required'),
+    state: z.string().min(1, 'State is required'),
+    zipCode: z.string()
+      .min(6, 'Postal code must be at least 6 digits')
+      .max(6, 'Postal code must not exceed 6 digits')
+      .regex(/^[0-9]+$/, 'Postal code must contain only digits')
+  }),
+  serviceDate: z.string().min(1, 'Service date is required'),
+  serviceTime: z.string().min(1, 'Service time is required')
+});
+
+type CheckoutFormData = z.infer<typeof checkoutFormSchema>;
+
+interface CartItemType {
+  service_id: number;
+  package_id?: number;
+  service_name: string;
+  package_name?: string;
+  service_price: string;
+  quantity: number;
+  features?: string[];
 }
 
 const Checkout = () => {
@@ -54,28 +76,58 @@ const Checkout = () => {
   const { selectedVehicle } = useVehicleSelection();
   const { data: vehicleTypes } = useVehicleTypes();
   
-  const [formData, setFormData] = useState<CheckoutFormData>({
-    name: user?.name || '',
-    email: user?.email || '',
-    phone: '',
-    address: {
-      street: '',
-      city: '',
-      state: '',
-      zipCode: '',
-    },
-    serviceDate: '',
-    serviceTime: '',
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+    setValue,
+    watch
+  } = useForm<CheckoutFormData>({
+    resolver: zodResolver(checkoutFormSchema),
+    defaultValues: {
+      name: user?.name || '',
+      email: user?.email || '',
+      phone: '',
+      address: {
+        street: '',
+        city: '',
+        state: '',
+        zipCode: ''
+      },
+      serviceDate: '',
+      serviceTime: ''
+    }
   });
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingReference, setBookingReference] = useState<string | null>(null);
+  const [totalAmount, setTotalAmount] = useState<string>('0');
 
   const { activeCart } = useActiveCart();
 
-    useEffect(() => {
-    // Set checkout mode in localStorage
-    localStorage.setItem('checkoutMode', mode);
+  // Add a state to track if component is mounted
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Handle cleanup on unmount only
+  useEffect(() => {
+    setIsMounted(true);
+    return () => {
+      setIsMounted(false);
+      localStorage.removeItem('checkoutMode');
+      localStorage.removeItem('cartItems');
+      localStorage.removeItem('checkoutTotal');
+    };
+  }, []);
+
+  // Handle data loading
+  useEffect(() => {
+    if (!isMounted) return;
+
+    console.log('Checkout Mode:', mode);
+    console.log('LocalStorage Data:', {
+      checkoutMode: localStorage.getItem('checkoutMode'),
+      checkoutTotal: localStorage.getItem('checkoutTotal'),
+      cartItems: localStorage.getItem('cartItems')
+    });
 
     // Load services based on mode
     if (mode === 'cart' && activeCart?.items) {
@@ -100,31 +152,24 @@ const Checkout = () => {
         }
       }));
       setServices(cartServices);
-      
-      // Update total in localStorage for persistence
-      const total = activeCart.items.reduce((sum, item) => 
-        sum + (parseFloat(item.service_price) * (item.quantity || 1)), 0);
-      localStorage.setItem('checkoutTotal', total.toString());
+      setTotalAmount(activeCart.total_amount || '0');
     } else if (mode === 'buy-now') {
       const checkoutItem = JSON.parse(localStorage.getItem('checkoutItem') || 'null');
       if (checkoutItem) {
         setServices([checkoutItem]);
+        setTotalAmount(checkoutItem.price);
       }
     }
+  }, [mode, activeCart, selectedVehicle, isMounted]);
 
-    // Cleanup function to remove checkout mode when component unmounts
-    return () => {
-      localStorage.removeItem('checkoutMode');
-    };
-  }, [mode, activeCart]);
+  // Add a useEffect to log total amount changes
+  useEffect(() => {
+    if (!isMounted) return;
+    console.log('Total Amount Updated:', totalAmount);
+  }, [totalAmount, isMounted]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    setIsSubmitting(true);
-
+  const onSubmit = async (formData: CheckoutFormData) => {
     try {
-      // Create the booking data object with all required fields
       if (!selectedVehicle) {
         notification.error({
           message: 'Vehicle Required',
@@ -133,13 +178,28 @@ const Checkout = () => {
         return;
       }
 
+      if (mode === 'cart' && !activeCart?.id) {
+        notification.error({
+          message: 'Cart Error',
+          description: 'Invalid cart. Please try refreshing the page.',
+        });
+        return;
+      }
+
+      // Get vehicle type ID
+      const vehicleTypeId = await getVehicleTypeId(selectedVehicle.vehicleType);
+
+      // Create the booking data object with all required fields
       const bookingData = {
-        // For buy now flow, use service_id; for cart flow, use cart_id
         ...(mode === 'buy-now' 
-          ? { service_id: parseInt(services[0]?.serviceId) }
-          : { cart_id: parseInt(activeCart?.id.toString() || '') }
+          ? { 
+              service_id: parseInt(services[0]?.serviceId),
+              package_id: services[0]?.packageId 
+            }
+          : { 
+              cart_id: activeCart?.id
+            }
         ),
-        package_id: mode === 'buy-now' ? services[0]?.packageId : undefined,
         profile: {
           name: formData.name,
           email: formData.email,
@@ -150,7 +210,7 @@ const Checkout = () => {
           postalCode: formData.address.zipCode
         },
         vehicle: {
-          vehicle_type: selectedVehicle.vehicleType,
+          vehicle_type: vehicleTypeId,
           manufacturer: selectedVehicle.manufacturerId.toString(),
           model: selectedVehicle.modelId.toString()
         },
@@ -158,66 +218,68 @@ const Checkout = () => {
         scheduleTime: formData.serviceTime
       };
 
+      console.log('Submitting booking with data:', bookingData);
+
+      // If it's a cart booking, immediately clear the cart UI
+      if (mode === 'cart') {
+        queryClient.setQueryData(['cart'], null);
+        queryClient.setQueryData(['cart', 'active'], null);
+      }
+
       // Make the API call with complete data
       const response = await createServiceBooking.mutateAsync(bookingData);
 
       console.log('Booking response:', response);
 
-      // Clear cart if this was a cart checkout
-      if (mode === 'cart' && activeCart?.id) {
-        await clearCart.mutateAsync(activeCart.id);
-        queryClient.invalidateQueries({ queryKey: ['cart'] });
-      }
-
-      // Clear checkout data
-      localStorage.removeItem('checkoutCartId');
-      localStorage.removeItem('checkoutMode');
-      localStorage.removeItem('cartItems');
-      
-      // Show success modal with booking reference
       if (response && response.reference) {
         setBookingReference(response.reference);
         setShowSuccessModal(true);
+
+        // Clear form data
+        setValue('name', '');
+        setValue('email', '');
+        setValue('phone', '');
+        setValue('address.street', '');
+        setValue('address.city', '');
+        setValue('address.state', '');
+        setValue('address.zipCode', '');
+        setValue('serviceDate', '');
+        setValue('serviceTime', '');
+
+        // Navigate to repairs page after a short delay
+        setTimeout(() => {
+          navigate('/profile/repairs');
+        }, 2000);
       }
 
     } catch (error: any) {
-      if (error.name === 'GeolocationPositionError') {
-        notification.error({
-          message: 'Location Required',
-          description: 'Please enable location services to proceed with the booking.',
-        });
-      } else {
-        console.error('Error submitting form:', error);
-        console.error('Response data:', error?.response?.data);
-        
-        let errorMessage = 'Unable to complete booking. Please try again.';
-        
-        if (error.message === 'Invalid vehicle type') {
-          errorMessage = 'Please select a valid vehicle type.';
-        } else {
-          errorMessage = error?.response?.data?.error || 
-                        error?.response?.data?.message || 
-                        error?.response?.data?.detail ||
-                        errorMessage;
-        }
-                           
-        notification.error({
-          message: 'Booking Failed',
-          description: errorMessage,
-        });
+      // If there was an error and we cleared the cart UI, restore it
+      if (mode === 'cart') {
+        queryClient.invalidateQueries({ queryKey: ['cart'] });
       }
-    } finally {
-      setIsSubmitting(false);
+
+      console.error('Error submitting form:', error);
+      console.error('Response data:', error?.response?.data);
+      
+      let errorMessage = 'Unable to complete booking. Please try again.';
+      
+      if (error.message === 'Invalid vehicle type') {
+        errorMessage = 'Please select a valid vehicle type.';
+      } else if (error.message === 'service_id is required for buy now flow') {
+        errorMessage = 'Invalid checkout mode. Please try again from the services page.';
+      } else {
+        errorMessage = error?.response?.data?.error || 
+                      error?.response?.data?.message || 
+                      error?.response?.data?.detail ||
+                      errorMessage;
+      }
+                         
+      notification.error({
+        message: 'Booking Failed',
+        description: errorMessage,
+      });
     }
   };
-
-  // Add useEffect to handle modal state cleanup
-  useEffect(() => {
-    return () => {
-      setShowSuccessModal(false);
-      setBookingReference(null);
-    };
-  }, []);
 
   return (
     <>
@@ -236,14 +298,15 @@ const Checkout = () => {
             </div>
             <div className="text-right">
               <p className="text-sm text-gray-600">Total Amount</p>
-              <p className="font-semibold text-xl text-[#FF5733]">₹{mode === 'cart' && activeCart?.total_amount ? activeCart.total_amount : services.reduce((total, service) => total + parseFloat(service.price), 0).toFixed(2)}</p>
+              <p className="font-semibold text-xl text-[#FF5733]">
+                ₹{totalAmount || '0.00'}
+              </p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left Side - Booking Form */}
             <div className="lg:col-span-2 space-y-6">
-              <form onSubmit={handleSubmit}>
+              <form onSubmit={handleSubmit(onSubmit)}>
                 {/* Vehicle Selection Summary */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -291,31 +354,46 @@ const Checkout = () => {
                   </div>
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <input
-                        type="text"
-                        placeholder="Full Name *"
-                        required
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733]"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      />
-                      <input
-                        type="email"
-                        placeholder="Email Address"
-                        required
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733]"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      />
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="Full Name *"
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                            errors.name ? 'border-red-500' : ''
+                          }`}
+                          {...register('name')}
+                        />
+                        {errors.name && (
+                          <p className="mt-1 text-sm text-red-500">{errors.name.message}</p>
+                        )}
+                      </div>
+                      <div>
+                        <input
+                          type="email"
+                          placeholder="Email Address *"
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                            errors.email ? 'border-red-500' : ''
+                          }`}
+                          {...register('email')}
+                        />
+                        {errors.email && (
+                          <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
+                        )}
+                      </div>
                     </div>
-                    <input
-                      type="tel"
-                      placeholder="Phone Number *"
-                      required
-                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733]"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    />
+                    <div>
+                      <input
+                        type="tel"
+                        placeholder="Phone Number *"
+                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                          errors.phone ? 'border-red-500' : ''
+                        }`}
+                        {...register('phone')}
+                      />
+                      {errors.phone && (
+                        <p className="mt-1 text-sm text-red-500">{errors.phone.message}</p>
+                      )}
+                    </div>
                   </div>
                 </motion.div>
 
@@ -333,51 +411,59 @@ const Checkout = () => {
                     <h3 className="font-semibold">Service Address</h3>
                   </div>
                   <div className="space-y-4">
-                    <textarea
-                      placeholder="Street Address *"
-                      required
-                      rows={3}
-                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733]"
-                      value={formData.address.street}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        address: { ...formData.address, street: e.target.value }
-                      })}
-                    />
+                    <div>
+                      <textarea
+                        placeholder="Street Address *"
+                        rows={3}
+                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                          errors.address?.street ? 'border-red-500' : ''
+                        }`}
+                        {...register('address.street')}
+                      />
+                      {errors.address?.street && (
+                        <p className="mt-1 text-sm text-red-500">{errors.address.street.message}</p>
+                      )}
+                    </div>
                     <div className="grid grid-cols-3 gap-4">
-                      <input
-                        type="text"
-                        placeholder="City"
-                        required
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733]"
-                        value={formData.address.city}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          address: { ...formData.address, city: e.target.value }
-                        })}
-                      />
-                      <input
-                        type="text"
-                        placeholder="State"
-                        required
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733]"
-                        value={formData.address.state}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          address: { ...formData.address, state: e.target.value }
-                        })}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Postal Code"
-                        required
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733]"
-                        value={formData.address.zipCode}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          address: { ...formData.address, zipCode: e.target.value }
-                        })}
-                      />
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="City *"
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                            errors.address?.city ? 'border-red-500' : ''
+                          }`}
+                          {...register('address.city')}
+                        />
+                        {errors.address?.city && (
+                          <p className="mt-1 text-sm text-red-500">{errors.address.city.message}</p>
+                        )}
+                      </div>
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="State *"
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                            errors.address?.state ? 'border-red-500' : ''
+                          }`}
+                          {...register('address.state')}
+                        />
+                        {errors.address?.state && (
+                          <p className="mt-1 text-sm text-red-500">{errors.address.state.message}</p>
+                        )}
+                      </div>
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="Postal Code *"
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                            errors.address?.zipCode ? 'border-red-500' : ''
+                          }`}
+                          {...register('address.zipCode')}
+                        />
+                        {errors.address?.zipCode && (
+                          <p className="mt-1 text-sm text-red-500">{errors.address.zipCode.message}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </motion.div>
@@ -396,36 +482,41 @@ const Checkout = () => {
                     <h3 className="font-semibold">Schedule Service</h3>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input
-                      type="date"
-                      required
-                      min={new Date().toISOString().split('T')[0]} // Set minimum date to today
-                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733]"
-                      value={formData.serviceDate}
-                      onChange={(e) => {
-                        // Format the date to YYYY-MM-DD
-                        const selectedDate = new Date(e.target.value);
-                        const formattedDate = selectedDate.toISOString().split('T')[0];
-                        setFormData({ ...formData, serviceDate: formattedDate });
-                      }}
-                    />
-                    <select
-                      required
-                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733]"
-                      value={formData.serviceTime}
-                      onChange={(e) => setFormData({ ...formData, serviceTime: e.target.value })}
-                    >
-                      <option value="">Select a time slot</option>
-                      <option value="09:00">9:00 AM</option>
-                      <option value="10:00">10:00 AM</option>
-                      <option value="11:00">11:00 AM</option>
-                      <option value="12:00">12:00 PM</option>
-                      <option value="13:00">1:00 PM</option>
-                      <option value="14:00">2:00 PM</option>
-                      <option value="15:00">3:00 PM</option>
-                      <option value="16:00">4:00 PM</option>
-                      <option value="17:00">5:00 PM</option>
-                    </select>
+                    <div>
+                      <input
+                        type="date"
+                        min={new Date().toISOString().split('T')[0]}
+                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                          errors.serviceDate ? 'border-red-500' : ''
+                        }`}
+                        {...register('serviceDate')}
+                      />
+                      {errors.serviceDate && (
+                        <p className="mt-1 text-sm text-red-500">{errors.serviceDate.message}</p>
+                      )}
+                    </div>
+                    <div>
+                      <select
+                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                          errors.serviceTime ? 'border-red-500' : ''
+                        }`}
+                        {...register('serviceTime')}
+                      >
+                        <option value="">Select a time slot</option>
+                        <option value="09:00">9:00 AM</option>
+                        <option value="10:00">10:00 AM</option>
+                        <option value="11:00">11:00 AM</option>
+                        <option value="12:00">12:00 PM</option>
+                        <option value="13:00">1:00 PM</option>
+                        <option value="14:00">2:00 PM</option>
+                        <option value="15:00">3:00 PM</option>
+                        <option value="16:00">4:00 PM</option>
+                        <option value="17:00">5:00 PM</option>
+                      </select>
+                      {errors.serviceTime && (
+                        <p className="mt-1 text-sm text-red-500">{errors.serviceTime.message}</p>
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm text-gray-500 mt-2">
                     Our service technicians are available from 9AM to 5PM daily. Please choose a convenient time slot.
@@ -489,7 +580,7 @@ const Checkout = () => {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">Subtotal</span>
-                      <span className="font-medium">₹{mode === 'cart' && activeCart?.total_amount ? activeCart.total_amount : services.reduce((total, service) => total + parseFloat(service.price), 0).toFixed(2)}</span>
+                      <span className="font-medium">₹{totalAmount}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">Service Tax</span>
@@ -497,14 +588,14 @@ const Checkout = () => {
                     </div>
                     <div className="flex justify-between items-center pt-3 border-t border-gray-100">
                       <span className="font-semibold">Total</span>
-                      <span className="font-semibold text-lg">₹{services.reduce((total, service) => total + parseFloat(service.price), 0).toFixed(2)}</span>
+                      <span className="font-semibold text-lg">₹{totalAmount}</span>
                     </div>
                   </div>
 
                   <button
-                    onClick={handleSubmit}
+                    onClick={handleSubmit(onSubmit)}
                     disabled={isSubmitting}
-                    className="w-full bg-[#FF5733] text-white py-3 rounded-lg hover:bg-[#ff4019] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-[#FF5733] text-white py-3 rounded-lg hover:bg-[#ff4019] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed mt-6"
                   >
                     {isSubmitting ? (
                       <>
@@ -532,10 +623,8 @@ const Checkout = () => {
         isOpen={showSuccessModal}
         onClose={() => {
           setShowSuccessModal(false);
-          // Clear localStorage data
           localStorage.removeItem('customerInfo');
           localStorage.removeItem('checkoutItem');
-          // Navigate to repairs page after modal closes
           navigate('/profile/repairs');
         }}
         mode={mode || 'buy-now'}

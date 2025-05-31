@@ -82,23 +82,8 @@ const Cart: React.FC = () => {
     }
 
     try {
-      // Store only the cart ID for checkout
-      const cartId = activeCart.id;
-      
-      if (!cartId) {
-        notification.error({
-          message: 'Cart Error',
-          description: 'Invalid cart. Please try refreshing the page.',
-        });
-        return;
-      }
-
-      // Store cart ID as a number to avoid type issues
-      localStorage.setItem('checkoutCartId', cartId.toString());
-      localStorage.setItem('checkoutMode', 'cart');
-
-      // Navigate to checkout
-      navigate('/checkout');
+      // Navigate to checkout with explicit mode
+      navigate('/checkout?mode=cart');
     } catch (error) {
       console.error('Checkout error:', error);
       notification.error({
