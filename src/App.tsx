@@ -8,7 +8,6 @@ import AppRoutes from './routes';
 import Pricing from './pages/pricing';
 import LoginSignupPage from './pages/LoginSignupPage';
 import EmailVerification from './pages/EmailVerification';
-import EmailConfirmation from './pages/EmailConfirmation';
 import ResetPassword from './pages/ResetPassword';
 import PasswordResetConfirmation from './pages/PasswordResetConfirmation';
 import NotFound from './pages/NotFound';
@@ -27,8 +26,13 @@ const queryClient = new QueryClient({
   },
 });
 
-// Create router
+// Create router with explicit handling of verification route
 const router = createBrowserRouter([
+  {
+    path: "/verify-email/:token",
+    element: <VerifyEmail />,
+    errorElement: <NotFound />
+  },
   {
     path: "/login-signup",
     element: <LoginSignupPage />
@@ -36,10 +40,6 @@ const router = createBrowserRouter([
   {
     path: "/verify-email",
     element: <EmailVerification />
-  },
-  {
-    path: "/verify-email/:token",
-    element: <VerifyEmail />
   },
   {
     path: "/reset-password/:token",

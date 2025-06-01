@@ -1,45 +1,13 @@
 {
-  "routes": [
-    {
-      "src": "/verify-email/(.*)",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/login-signup",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/reset-password/(.*)",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/password-reset-confirmation",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/subscription",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/resend-verification",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/static/(.*)",
-      "dest": "/static/$1"
-    },
-    {
-      "src": "/assets/(.*)",
-      "dest": "/assets/$1"
-    },
-    {
-      "src": "/favicon.ico",
-      "dest": "/favicon.ico"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
+  "rewrites": [
+    { "source": "/verify-email/:token", "destination": "/index.html" },
+    { "source": "/verify-email/*", "destination": "/index.html" },
+    { "source": "/login-signup", "destination": "/index.html" },
+    { "source": "/reset-password/:token", "destination": "/index.html" },
+    { "source": "/password-reset-confirmation", "destination": "/index.html" },
+    { "source": "/subscription", "destination": "/index.html" },
+    { "source": "/resend-verification", "destination": "/index.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -63,5 +31,8 @@
         }
       ]
     }
-  ]
+  ],
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "public": true
 }
