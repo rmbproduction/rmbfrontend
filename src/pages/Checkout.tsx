@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronLeft, CheckCircle2, User, MapPin, Calendar, Loader2 } from 'lucide-react';
@@ -6,12 +6,14 @@ import { notification } from 'antd';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
+
+// Local imports
 import OrderSuccessModal from '../components/OrderSuccessModal';
 import { useCreateServiceBooking } from '../hooks/services/useServiceBooking';
 import { useAuth } from '../contexts/AuthContext';
 import { useVehicleSelection } from '../hooks/vehicle/useVehicleSelection';
-import { useActiveCart, useClearCartMutation, CartItem as CartItemType } from '../hooks/cart/useCartQueries';
-import { useQueryClient } from '@tanstack/react-query';
+import { useActiveCart, CartItem as CartItemType } from '../hooks/cart/useCartQueries';
 import { useUserProfile } from '../hooks/useUserProfile';
 
 interface ServiceItem {
@@ -100,7 +102,6 @@ const Checkout = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const clearCart = useClearCartMutation();
   const createServiceBooking = useCreateServiceBooking();
   const { selectedVehicle } = useVehicleSelection();
   const { activeCart, isLoading: isCartLoading } = useActiveCart();
@@ -112,8 +113,7 @@ const Checkout = () => {
     formState: { errors, isSubmitting },
     setValue,
     watch,
-    reset,
-    control
+    reset
   } = useForm<CheckoutFormData>({
     resolver: zodResolver(checkoutFormSchema),
     mode: 'onChange',
