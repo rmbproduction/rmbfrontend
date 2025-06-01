@@ -8,7 +8,6 @@ import Footer from './components/Footer';
 import Hero from './components/Hero';
 import Services from './components/Services';
 import HowItWorks from './components/HowItWorks';
-import Testimonials from './components/Testimonials';
 import ServiceDetails from './pages/ServiceDetails';
 import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
@@ -22,7 +21,7 @@ import ResendVerification from './pages/ResendVerification';
 import ResetPassword from './pages/ResetPassword';
 import PasswordResetConfirmation from './pages/PasswordResetConfirmation';
 import SellVehicle from './pages/SellVehicle';
-import Pricing from './pages/pricing';
+import AboutPage from './pages/AboutPage';
 
 // Layout wrapper for consistent layout
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -46,13 +45,12 @@ const AppRoutes: React.FC = () => {
           <Hero />
           <Services />
           <HowItWorks />
-          <Testimonials />
         </MainLayout>
       } />
 
-      <Route path="/pricing" element={
+      <Route path="/about-us" element={
         <MainLayout>
-          <Pricing />
+          <AboutPage />
         </MainLayout>
       } />
 
@@ -82,7 +80,6 @@ const AppRoutes: React.FC = () => {
       } />
 
       <Route path="/verify-email/:token" element={<VerifyEmail />} />
-      <Route path="/resend-verification" element={<ResendVerification />} />
       <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route path="/password-reset-confirmation" element={<PasswordResetConfirmation />} />
 

@@ -64,8 +64,15 @@ export interface User {
     name: string;
     phone: string;
     address: string;
-    profile_photo?: string;
+    profile_photo?: string | null;
     preferred_location?: string;
+    city: string;
+    state: string;
+    country: string;
+    postal_code: string;
+    vehicle_name: number | null;
+    vehicle_type: number | null;
+    manufacturer: number | null;
   };
 }
 
@@ -100,6 +107,9 @@ export interface ProfileUpdateData {
   address?: string;
   preferred_location?: string;
   avatar?: File;
+  vehicle_name?: number | null;
+  vehicle_type?: number | null;
+  manufacturer?: number | null;
 }
 
 // Profile Update Schema

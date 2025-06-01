@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
+import { useUserProfile } from '../hooks/useUserProfile';
 
 interface BookVehicleModalProps {
   isOpen: boolean;
@@ -20,6 +21,26 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
   onInputChange,
   isLoading = false
 }) => {
+  const { profile, updateProfile } = useUserProfile();
+
+  // Pre-fill contact number from cache if empty
+  useEffect(() => {
+    if (isOpen && !contactNumber && profile?.phone) {
+      // Simulate an input change event to update the parent's state
+      onInputChange({
+        target: { name: 'contactNumber', value: profile.phone }
+      } as React.ChangeEvent<HTMLInputElement>);
+    }
+  }, [isOpen, contactNumber, profile?.phone, onInputChange]);
+
+  // Wrap the onInputChange to also update the cache
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    onInputChange(e);
+    if (e.target.name === 'contactNumber') {
+      updateProfile({ phone: e.target.value });
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -41,7 +62,7 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
                 id="contact"
                 name="contactNumber"
                 value={contactNumber}
-                onChange={onInputChange}
+                onChange={handleInputChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent"
                 placeholder="Enter your contact number"
                 required
@@ -57,7 +78,7 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
                 id="notes"
                 name="notes"
                 value={notes}
-                onChange={onInputChange}
+                onChange={handleInputChange}
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent"
                 placeholder="Any specific details or questions about the vehicle..."

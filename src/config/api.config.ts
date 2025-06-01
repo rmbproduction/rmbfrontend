@@ -480,33 +480,16 @@ export const apiService = {
   profile: {
     getDetails: async () => {
       try {
-        console.log('Getting profile - checking token...');
+        console.log('Getting profile details...');
         const token = TokenManager.getAccessToken();
         if (!token) {
           console.log('No access token found');
           return { data: null };
         }
 
-        console.log('Making profile request...');
         const response = await axiosInstance.get(API_ENDPOINTS.profile.details);
-        console.log('Profile response:', response);
-
-        if (!response.data) {
-          console.error('No data in profile response');
-          return { data: null };
-        }
-
-        // Ensure the response data is properly structured
-        const profileData = {
-          data: {
-            user: {
-              ...response.data,
-              profile: response.data.profile || {}
-            }
-          }
-        };
-
-        return profileData;
+        console.log('Profile details response:', response.data);
+        return { data: response.data };
       } catch (error: any) {
         console.error('Profile fetch error:', {
           message: error.message,
@@ -517,11 +500,39 @@ export const apiService = {
         if (error.response?.status === 401) {
           TokenManager.clearTokens();
         }
-        return { data: null };
+        throw error;
       }
     },
-    update: (data: any) => 
-      axiosInstance.patch(API_ENDPOINTS.profile.update, data),
+    create: async (data: any) => {
+      try {
+        console.log('Creating new profile with data:', data);
+        const response = await axiosInstance.post(API_ENDPOINTS.profile.details, data);
+        console.log('Profile creation response:', response.data);
+        return response;
+      } catch (error: any) {
+        console.error('Profile creation error:', {
+          message: error.message,
+          status: error.response?.status,
+          data: error.response?.data
+        });
+        throw error;
+      }
+    },
+    update: async (data: any) => {
+      try {
+        console.log('Updating profile with data:', data);
+        const response = await axiosInstance.patch(API_ENDPOINTS.profile.details, data);
+        console.log('Profile update response:', response.data);
+        return response;
+      } catch (error: any) {
+        console.error('Profile update error:', {
+          message: error.message,
+          status: error.response?.status,
+          data: error.response?.data
+        });
+        throw error;
+      }
+    },
     changePassword: (data: { currentPassword: string; newPassword: string }) =>
       axiosInstance.post(API_ENDPOINTS.profile.changePassword, data),
   },

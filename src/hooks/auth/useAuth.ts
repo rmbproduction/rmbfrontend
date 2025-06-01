@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../../config/api.config';
 import TokenManager from '../../services/tokenManager';
 import { User } from '../../schemas/auth';
+import { useState, useEffect } from 'react';
 
 interface LoginData {
   email: string;
@@ -48,10 +49,18 @@ export const useLogout = () => {
 
 export const useProfile = () => {
   const hasToken = !!TokenManager.getAccessToken();
-  
-  return useQuery<User | null>({
-    queryKey: ['profile'],
-    queryFn: async () => {
+  const [profile, setProfile] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!hasToken) {
+        setProfile(null);
+        setIsLoading(false);
+        return;
+      }
+
       try {
         console.log('Fetching profile data...');
         const response = await apiService.auth.getProfile();
@@ -60,7 +69,8 @@ export const useProfile = () => {
         if (!response.data) {
           console.log('No profile data received');
           TokenManager.clearTokens();
-          return null;
+          setProfile(null);
+          return;
         }
         
         // Check if the response has the user data in the correct format
@@ -68,24 +78,26 @@ export const useProfile = () => {
         if (!userData || !userData.email) {
           console.error('Invalid profile data format:', userData);
           TokenManager.clearTokens();
-          return null;
+          setProfile(null);
+          return;
         }
         
-        return userData;
+        setProfile(userData);
       } catch (error: any) {
         console.error('Profile fetch error:', error);
         if (error.response?.status === 401) {
           TokenManager.clearTokens();
         }
-        throw error;
+        setError(error);
+      } finally {
+        setIsLoading(false);
       }
-    },
-    enabled: hasToken,
-    retry: 1,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    refetchOnMount: true,
-    refetchOnWindowFocus: true
-  });
+    };
+
+    fetchProfile();
+  }, [hasToken]);
+
+  return { data: profile, isLoading, error };
 };
 
 export const useUpdateProfile = () => {

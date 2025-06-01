@@ -123,6 +123,7 @@ export default function SellVehicle() {
         model: name === 'model' ? value : selectedVehicle?.model || '',
         manufacturerId: selectedVehicle?.manufacturerId || 0,
         modelId: selectedVehicle?.modelId || 0,
+        vehicleType: selectedVehicle?.vehicleType || formData.vehicle_type || 'bike'  // Provide a default value
       };
       setSelectedVehicle(updatedVehicle);
     }
@@ -263,7 +264,7 @@ export default function SellVehicle() {
 
       console.log('Sell Request Response:', sellRequestResponse);
       alert('Vehicle sell request submitted successfully!');
-      navigate('/profile');
+      navigate('/profile?tab=vehicles');
     } catch (error: any) {
       console.error('Submission error:', error);
       console.error('Error response:', error.response);

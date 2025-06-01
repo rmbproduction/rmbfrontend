@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Search, Clock, Shield, CheckCircle2, Car, RotateCcw, ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -140,6 +140,14 @@ const ServiceDetails = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const { selectedVehicle, setSelectedVehicle } = useVehicleSelection();
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
+
+  // Add effect to scroll to top when component mounts or serviceId changes
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'instant' // Use instant instead of smooth for immediate scroll
+    });
+  }, [serviceId]); // Re-run when serviceId changes
 
   // Fetch service category data
   const { data: serviceCategory, isLoading, error } = useQuery<ServiceCategory>({

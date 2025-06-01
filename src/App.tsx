@@ -10,10 +10,9 @@ import 'react-toastify/dist/ReactToastify.css';
 import { AuthProvider } from './contexts/AuthContext';
 import { SubscriptionProvider } from './contexts/SubscriptionContext';
 import AppRoutes from './routes';
-import SubscriptionRoutes from './routes/subscriptionRoutes';
+import Pricing from './pages/pricing';
 import LoginSignupPage from './pages/LoginSignupPage';
 import VerifyEmail from './pages/VerifyEmail';
-import ResendVerification from './pages/ResendVerification';
 import ResetPassword from './pages/ResetPassword';
 import PasswordResetConfirmation from './pages/PasswordResetConfirmation';
 
@@ -41,10 +40,6 @@ const router = createBrowserRouter([
     element: <VerifyEmail />
   },
   {
-    path: "/resend-verification",
-    element: <ResendVerification />
-  },
-  {
     path: "/reset-password/:token",
     element: <ResetPassword />
   },
@@ -53,8 +48,8 @@ const router = createBrowserRouter([
     element: <PasswordResetConfirmation />
   },
   {
-    path: "/subscription/*",
-    element: <SubscriptionRoutes />
+    path: "/subscription",
+    element: <Pricing />
   },
   {
     path: "/*",

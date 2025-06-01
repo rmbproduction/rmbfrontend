@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import LocationInput from '../../../components/LocationInput';
 import { VehicleFormData, FormErrors, vehicleTypes, popularBrands, colorOptions, vehicleConditions, fuelTypes } from '../types';
+import { useUserProfile } from '../../../hooks/useUserProfile';
 
 interface VehicleFormProps {
   formData: VehicleFormData;
@@ -31,6 +32,46 @@ const VehicleForm: React.FC<VehicleFormProps> = ({
   // Track new feature and highlight
   const [newFeature, setNewFeature] = React.useState('');
   const [newHighlight, setNewHighlight] = React.useState('');
+  const { profile, prefillFormData, updateProfile, parseAddress } = useUserProfile();
+
+  // Pre-fill contact info from cache when component mounts
+  React.useEffect(() => {
+    if (profile) {
+      console.log('Pre-filling vehicle form with profile data');
+      const prefilledData = prefillFormData(formData, 'vehicle');
+      setFormData(prev => ({
+        ...prev,
+        ...prefilledData
+      }));
+    }
+  }, [profile, setFormData, prefillFormData]);
+
+  // Wrap handleInputChange to update cache
+  const handleInputWithCache = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    handleInputChange(e);
+    
+    const { name, value } = e.target;
+    if (name === 'contactNumber') {
+      updateProfile({ phone: value });
+    }
+  };
+
+  // Handle address change with cache update
+  const handleAddressChange = (value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      pickupAddress: value
+    }));
+
+    // Try to parse address components and update cache
+    const { address, city, state, postal_code } = parseAddress(value);
+    updateProfile({
+      address,
+      city,
+      state,
+      postal_code
+    });
+  };
 
   // Handle feature submission
   const handleFeatureSubmit = (e: React.FormEvent) => {
@@ -302,7 +343,7 @@ const VehicleForm: React.FC<VehicleFormProps> = ({
                 required
                 className={`block w-full rounded-lg border ${formErrors.contactNumber ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-[#FF5733] focus:ring-[#FF5733] py-3`}
                 value={formData.contactNumber}
-                onChange={handleInputChange}
+                onChange={handleInputWithCache}
                 placeholder="e.g. +919876543210"
               />
             </div>
@@ -317,7 +358,7 @@ const VehicleForm: React.FC<VehicleFormProps> = ({
             </label>
             <LocationInput
               value={formData.pickupAddress}
-              onChange={(value) => setFormData(prev => ({ ...prev, pickupAddress: value }))}
+              onChange={handleAddressChange}
               placeholder="Enter your pickup address"
               required
             />

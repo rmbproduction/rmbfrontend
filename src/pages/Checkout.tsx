@@ -13,6 +13,8 @@ import { useVehicleSelection } from '../hooks/vehicle/useVehicleSelection';
 import { useActiveCart, useClearCartMutation } from '../hooks/cart/useCartQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import { useVehicleTypes, getVehicleTypeId } from '../hooks/vehicle/useVehicleTypes';
+import userProfileDataService from '../services/userProfileDataService';
+import { useUserProfile } from '../hooks/useUserProfile';
 
 interface ServiceItem {
   serviceId: string;
@@ -75,18 +77,27 @@ const Checkout = () => {
   const createServiceBooking = useCreateServiceBooking();
   const { selectedVehicle } = useVehicleSelection();
   const { data: vehicleTypes } = useVehicleTypes();
+  const { profile, isLoading: isProfileLoading, prefillFormData } = useUserProfile();
   
+  // Show loading state while profile data is being fetched
+  useEffect(() => {
+    if (isProfileLoading) {
+      console.log('Loading profile data...');
+    }
+  }, [isProfileLoading]);
+
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
     setValue,
-    watch
+    watch,
+    reset
   } = useForm<CheckoutFormData>({
     resolver: zodResolver(checkoutFormSchema),
     defaultValues: {
-      name: user?.name || '',
-      email: user?.email || '',
+      name: '',
+      email: '',
       phone: '',
       address: {
         street: '',
@@ -98,6 +109,28 @@ const Checkout = () => {
       serviceTime: ''
     }
   });
+
+  // Update form when profile data loads
+  useEffect(() => {
+    if (profile) {
+      console.log('Pre-filling checkout form with profile data');
+      const prefilledData = prefillFormData({
+        name: '',
+        email: '',
+        phone: '',
+        address: {
+          street: '',
+          city: '',
+          state: '',
+          zipCode: ''
+        },
+        serviceDate: '',
+        serviceTime: ''
+      }, 'checkout');
+
+      reset(prefilledData);
+    }
+  }, [profile, reset, prefillFormData]);
 
   const [bookingReference, setBookingReference] = useState<string | null>(null);
   const [totalAmount, setTotalAmount] = useState<string>('0');
@@ -189,6 +222,17 @@ const Checkout = () => {
       // Get vehicle type ID
       const vehicleTypeId = await getVehicleTypeId(selectedVehicle.vehicleType);
 
+      // Save the profile data to cache
+      prefillFormData({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        address: formData.address.street,
+        city: formData.address.city,
+        state: formData.address.state,
+        zipCode: formData.address.zipCode
+      }, 'checkout');
+
       // Create the booking data object with all required fields
       const bookingData = {
         ...(mode === 'buy-now' 
@@ -248,7 +292,7 @@ const Checkout = () => {
 
         // Navigate to repairs page after a short delay
         setTimeout(() => {
-          navigate('/profile/repairs');
+          navigate('/profile/?tab=repairs');
         }, 2000);
       }
 
@@ -280,6 +324,151 @@ const Checkout = () => {
       });
     }
   };
+
+  // Update the Personal Information section in the render
+  const renderPersonalInformation = () => (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1 }}
+      className="bg-white rounded-xl p-6 shadow-sm"
+    >
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+          <User className="w-5 h-5 text-[#FF5733]" />
+        </div>
+        <h3 className="font-semibold">Personal Information</h3>
+      </div>
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <input
+              type="text"
+              placeholder="Full Name *"
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                errors.name ? 'border-red-500' : 'border-gray-300'
+              }`}
+              {...register('name')}
+            />
+            {errors.name && (
+              <p className="mt-1 text-sm text-red-500">{errors.name.message}</p>
+            )}
+          </div>
+          <div>
+            <input
+              type="email"
+              placeholder="Email Address *"
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                errors.email ? 'border-red-500' : 'border-gray-300'
+              }`}
+              {...register('email')}
+            />
+            {errors.email && (
+              <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
+            )}
+          </div>
+        </div>
+        <div>
+          <input
+            type="tel"
+            placeholder="Phone Number *"
+            className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+              errors.phone ? 'border-red-500' : 'border-gray-300'
+            }`}
+            {...register('phone')}
+          />
+          {errors.phone && (
+            <p className="mt-1 text-sm text-red-500">{errors.phone.message}</p>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  // Update the Service Address section
+  const renderServiceAddress = () => (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2 }}
+      className="bg-white rounded-xl p-6 shadow-sm"
+    >
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+          <MapPin className="w-5 h-5 text-[#FF5733]" />
+        </div>
+        <h3 className="font-semibold">Service Address</h3>
+      </div>
+      <div className="space-y-4">
+        <div>
+          <textarea
+            placeholder="Street Address *"
+            rows={3}
+            className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+              errors.address?.street ? 'border-red-500' : 'border-gray-300'
+            }`}
+            {...register('address.street')}
+          />
+          {errors.address?.street && (
+            <p className="mt-1 text-sm text-red-500">{errors.address.street.message}</p>
+          )}
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <input
+              type="text"
+              placeholder="City *"
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                errors.address?.city ? 'border-red-500' : 'border-gray-300'
+              }`}
+              {...register('address.city')}
+            />
+            {errors.address?.city && (
+              <p className="mt-1 text-sm text-red-500">{errors.address.city.message}</p>
+            )}
+          </div>
+          <div>
+            <input
+              type="text"
+              placeholder="State *"
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                errors.address?.state ? 'border-red-500' : 'border-gray-300'
+              }`}
+              {...register('address.state')}
+            />
+            {errors.address?.state && (
+              <p className="mt-1 text-sm text-red-500">{errors.address.state.message}</p>
+            )}
+          </div>
+          <div>
+            <input
+              type="text"
+              placeholder="Postal Code *"
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                errors.address?.zipCode ? 'border-red-500' : 'border-gray-300'
+              }`}
+              {...register('address.zipCode')}
+            />
+            {errors.address?.zipCode && (
+              <p className="mt-1 text-sm text-red-500">{errors.address.zipCode.message}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  // Show loading state while profile data is being fetched
+  if (isProfileLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-[#FF5733] mx-auto" />
+          <p className="mt-2 text-gray-600">Loading your information...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -340,133 +529,10 @@ const Checkout = () => {
                 </motion.div>
 
                 {/* Personal Information */}
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
-                  className="bg-white rounded-xl p-6 shadow-sm"
-                >
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
-                      <User className="w-5 h-5 text-[#FF5733]" />
-                    </div>
-                    <h3 className="font-semibold">Personal Information</h3>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <input
-                          type="text"
-                          placeholder="Full Name *"
-                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                            errors.name ? 'border-red-500' : ''
-                          }`}
-                          {...register('name')}
-                        />
-                        {errors.name && (
-                          <p className="mt-1 text-sm text-red-500">{errors.name.message}</p>
-                        )}
-                      </div>
-                      <div>
-                        <input
-                          type="email"
-                          placeholder="Email Address *"
-                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                            errors.email ? 'border-red-500' : ''
-                          }`}
-                          {...register('email')}
-                        />
-                        {errors.email && (
-                          <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <input
-                        type="tel"
-                        placeholder="Phone Number *"
-                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                          errors.phone ? 'border-red-500' : ''
-                        }`}
-                        {...register('phone')}
-                      />
-                      {errors.phone && (
-                        <p className="mt-1 text-sm text-red-500">{errors.phone.message}</p>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
+                {renderPersonalInformation()}
 
                 {/* Service Address */}
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                  className="bg-white rounded-xl p-6 shadow-sm"
-                >
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
-                      <MapPin className="w-5 h-5 text-[#FF5733]" />
-                    </div>
-                    <h3 className="font-semibold">Service Address</h3>
-                  </div>
-                  <div className="space-y-4">
-                    <div>
-                      <textarea
-                        placeholder="Street Address *"
-                        rows={3}
-                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                          errors.address?.street ? 'border-red-500' : ''
-                        }`}
-                        {...register('address.street')}
-                      />
-                      {errors.address?.street && (
-                        <p className="mt-1 text-sm text-red-500">{errors.address.street.message}</p>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <input
-                          type="text"
-                          placeholder="City *"
-                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                            errors.address?.city ? 'border-red-500' : ''
-                          }`}
-                          {...register('address.city')}
-                        />
-                        {errors.address?.city && (
-                          <p className="mt-1 text-sm text-red-500">{errors.address.city.message}</p>
-                        )}
-                      </div>
-                      <div>
-                        <input
-                          type="text"
-                          placeholder="State *"
-                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                            errors.address?.state ? 'border-red-500' : ''
-                          }`}
-                          {...register('address.state')}
-                        />
-                        {errors.address?.state && (
-                          <p className="mt-1 text-sm text-red-500">{errors.address.state.message}</p>
-                        )}
-                      </div>
-                      <div>
-                        <input
-                          type="text"
-                          placeholder="Postal Code *"
-                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                            errors.address?.zipCode ? 'border-red-500' : ''
-                          }`}
-                          {...register('address.zipCode')}
-                        />
-                        {errors.address?.zipCode && (
-                          <p className="mt-1 text-sm text-red-500">{errors.address.zipCode.message}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
+                {renderServiceAddress()}
 
                 {/* Schedule Service */}
                 <motion.div
@@ -625,7 +691,7 @@ const Checkout = () => {
           setShowSuccessModal(false);
           localStorage.removeItem('customerInfo');
           localStorage.removeItem('checkoutItem');
-          navigate('/profile/repairs');
+          navigate('/profile/?tab=repairs');
         }}
         mode={mode || 'buy-now'}
         bookingReference={bookingReference}

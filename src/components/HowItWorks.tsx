@@ -1,26 +1,31 @@
-import { MapPin, Calendar, Activity, Award } from 'lucide-react';
+import { CalendarCheck, Wrench, Truck, CreditCard, CheckCircle2 } from 'lucide-react';
 
 const steps = [
   {
-    icon: MapPin,
-    title: 'Select Your Location',
-    description: 'Choose your preferred service location',
+    icon: CalendarCheck,
+    title: "Book Your Service",
+    description: "Choose your service type and schedule a convenient time slot for pickup or home service."
   },
   {
-    icon: Calendar,
-    title: 'Book a Mechanic',
-    description: 'Schedule a convenient time for service',
+    icon: Truck,
+    title: "Free Pickup",
+    description: "Our team will pick up your bike from your location at no additional cost."
   },
   {
-    icon: Activity,
-    title: 'Live Tracking',
-    description: 'Track your mechanic in real-time',
+    icon: Wrench,
+    title: "Expert Repair",
+    description: "Our experienced mechanics will diagnose and repair your bike with genuine parts."
   },
   {
-    icon: Award,
-    title: 'Service Warranty',
-    description: 'Get warranty on all repairs',
+    icon: CreditCard,
+    title: "Easy Payment",
+    description: "Pay conveniently through UPI or cash after service completion."
   },
+  {
+    icon: CheckCircle2,
+    title: "Free Delivery",
+    description: "We'll deliver your bike back to your doorstep, fully serviced and ready to ride."
+  }
 ];
 
 const HowItWorks = () => {
@@ -28,7 +33,7 @@ const HowItWorks = () => {
     <section id="how-it-works" className="py-20 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center">
-          <h2 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">How It Works</h2>
+          <h2 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">How Our Service Works</h2>
           <p className="mt-4 text-xl text-gray-500">Simple steps to get your bike serviced</p>
         </div>
 
@@ -45,8 +50,8 @@ const HowItWorks = () => {
                 return (
                   <div key={index} className="text-center flex-1">
                     <div className="relative flex items-center justify-center">
-                      <div className="h-16 w-16 rounded-full bg-[#FF5733] flex items-center justify-center">
-                        <IconComponent className="h-8 w-8 text-white" />
+                      <div className="h-16 w-16 rounded-full bg-[#FFF5F2] flex items-center justify-center">
+                        <IconComponent className="h-8 w-8 text-[#FF5733]" />
                       </div>
                     </div>
                     <div className="mt-6">

@@ -1,7 +1,28 @@
-import { MapPin } from 'lucide-react';
+
+
+// export default Hero;
+
+
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 
 const Hero = () => {
+  const navigate = useNavigate();
+
+  const handleBookNow = () => {
+    // Find the services section by ID and scroll to it
+    const servicesSection = document.getElementById('services');
+    if (servicesSection) {
+      servicesSection.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'start'
+      });
+    } else {
+      // Fallback if element not found
+      navigate('/login-signup');
+    }
+  };
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-white to-gray-50">
       <div className="absolute inset-0 hero-gradient"></div>
@@ -45,13 +66,18 @@ const Hero = () => {
                   transition={{ delay: 0.9, duration: 0.8 }}
                   className="mt-10 flex flex-col sm:flex-row gap-4 lg:justify-start justify-center"
                 >
-                  <button className="transform hover:scale-105 transition-transform px-8 py-4 bg-[#FF5733] text-white rounded-xl shadow-lg hover:shadow-xl font-semibold text-lg">
-                    Book  Now
+                  <button 
+                    onClick={handleBookNow}
+                    className="transform hover:scale-105 transition-transform px-8 py-4 bg-[#FF5733] text-white rounded-xl shadow-lg hover:shadow-xl font-semibold text-lg"
+                  >
+                    Book Now
                   </button>
+                  {/* Commented out Track Your Mechanic button
                   <button className="transform hover:scale-105 transition-transform flex items-center justify-center px-8 py-4 border-2 border-[#FF5733] text-[#FF5733] rounded-xl font-semibold text-lg">
                     <MapPin className="w-5 h-5 mr-2" />
                     Track Your Mechanic
                   </button>
+                  */}
                 </motion.div>
               </motion.div>
               
@@ -64,12 +90,13 @@ const Hero = () => {
                 <div className="floating relative w-full h-[500px] rounded-2xl overflow-hidden shadow-2xl transform perspective-1000">
                   <img
                     className="w-full h-full object-cover"
-                    src="src/components/bikeExpert.jpeg"
+                    src="https://res.cloudinary.com/dz81bjuea/image/upload/v1747031052/bikeExpert_qt2sfa.jpg"
                     alt="Bike mechanic working"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent"></div>
                 </div>
                 
+                {/* Commented out "Available Now" notification
                 <motion.div
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -86,6 +113,7 @@ const Hero = () => {
                     </div>
                   </div>
                 </motion.div>
+                */}
               </motion.div>
             </div>
           </motion.div>

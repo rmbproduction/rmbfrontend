@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Settings, LogOut, Key, Bike, Bell, 
@@ -12,14 +12,25 @@ import ForSaleVehicles from '../components/ForSaleVehicles';
 import BookedVehicles from '../components/BookedVehicles';
 import MyRepairs from './MyRepairs';
 import MySubscription from '../components/subscription/MySubscription';
+import { apiService, API_ENDPOINTS } from '../config/api.config';
+import { ProfileUpdateData } from '../schemas/auth';
+import axios from 'axios';
+import { useUserProfile } from '../hooks/useUserProfile';
 
 interface UserProfile {
-  username: string;
   email: string;
-  created_at: string;
-  name?: string;
-  phone?: string;
-  address?: string;
+  username: string;
+  name: string;
+  phone: string;
+  address: string;
+  profile_photo: string | null;
+  vehicle_name: number | null;
+  vehicle_type: number | null;
+  manufacturer: number | null;
+  city: string;
+  state: string;
+  country: string;
+  postal_code: string;
   preferred_location?: string;
 }
 
@@ -27,22 +38,67 @@ interface SidebarProps {
   className?: string;
 }
 
-type TabType = 'profile' | 'vehicles' | 'bookings' | 'repairs' | 'subscriptions';
+type TabType = 'profile' | 'vehicles' | 'bookings' | 'repairs' | 'subscriptions' | 'change-password';
+
+interface VehicleType {
+  id: number;
+  name: string;
+}
+
+interface Manufacturer {
+  id: number;
+  name: string;
+}
+
+interface VehicleModel {
+  id: number;
+  name: string;
+  manufacturer: number;
+  manufacturer_name: string;
+  vehicle_type: number;
+  vehicle_type_name: string;
+  image: string | null;
+}
+
+const defaultProfile: UserProfile = {
+  email: '',
+  username: '',
+  name: '',
+  phone: '',
+  address: '',
+  profile_photo: null,
+  vehicle_name: null,
+  vehicle_type: null,
+  manufacturer: null,
+  city: '',
+  state: '',
+  country: '',
+  postal_code: '',
+  preferred_location: ''
+};
 
 const Profile = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout, isAuthenticated, isLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabType>('profile');
+  const { updateProfile } = useUserProfile();
   const [isEditing, setIsEditing] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [formData, setFormData] = useState<Partial<UserProfile>>({
-    username: '',
-    email: '',
-    name: '',
-    phone: '',
-    address: ''
-  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [profileData, setProfileData] = useState<UserProfile | null>(null);
+  const [formData, setFormData] = useState<UserProfile>(defaultProfile);
+  const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
+  const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
+  const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([]);
+  const [isLoadingVehicleData, setIsLoadingVehicleData] = useState(false);
+  const [isNewProfile, setIsNewProfile] = useState(true);
+  const [vehicleDataLoaded, setVehicleDataLoaded] = useState(false);
+
+  // Get active tab from URL query parameter
+  const queryParams = new URLSearchParams(location.search);
+  const tabFromUrl = queryParams.get('tab') as TabType | null;
+  const [activeTab, setActiveTab] = useState<TabType>(tabFromUrl || 'profile');
 
   // Add debug logs
   console.log('Profile Component State:', {
@@ -71,10 +127,158 @@ const Profile = () => {
         email: user.email || '',
         name: user.profile?.name || user.name || '',
         phone: user.profile?.phone || user.phone || '',
-        address: user.profile?.address || user.address || ''
+        address: user.profile?.address || user.address || '',
+        city: user.profile?.city || '',
+        state: user.profile?.state || '',
+        country: user.profile?.country || '',
+        postal_code: user.profile?.postal_code || '',
+        vehicle_name: user.profile?.vehicle_name || null,
+        vehicle_type: user.profile?.vehicle_type || null,
+        manufacturer: user.profile?.manufacturer || null,
+        profile_photo: user.profile?.profile_photo || null
       });
     }
   }, [user]);
+
+  // Update active tab when URL changes
+  useEffect(() => {
+    const tab = queryParams.get('tab') as TabType | null;
+    if (tab && tab !== activeTab) {
+      setActiveTab(tab);
+    }
+  }, [location.search]);
+
+  // Fetch profile data
+  const fetchProfileData = async () => {
+    try {
+      console.log('Fetching profile data...');
+      const response = await apiService.profile.getDetails();
+      console.log('Fetched profile data:', response.data);
+
+      if (response.data) {
+        const profileData = response.data;
+        setProfileData(profileData);
+        setIsNewProfile(false);
+        
+        // Update form data with received profile data
+        setFormData({
+          username: profileData.username || '',
+          email: profileData.email || '',
+          name: profileData.name || '',
+          phone: profileData.phone || '',
+          address: profileData.address || '',
+          city: profileData.city || '',
+          state: profileData.state || '',
+          country: profileData.country || '',
+          postal_code: profileData.postal_code || '',
+          vehicle_name: profileData.vehicle_name || null,
+          vehicle_type: profileData.vehicle_type || null,
+          manufacturer: profileData.manufacturer || null,
+          profile_photo: profileData.profile_photo || null
+        });
+
+        console.log('Updated form data:', {
+          before: formData,
+          after: profileData
+        });
+      } else {
+        setIsNewProfile(true);
+        console.log('No profile data found, using default form data');
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      toast.error('Failed to load profile data');
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        navigate('/login');
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchProfileData();
+    }
+  }, [isAuthenticated]);
+
+  // Fetch vehicle data
+  const fetchVehicleData = async () => {
+    try {
+      setIsLoadingVehicleData(true);
+      console.log('Fetching vehicle data...');
+
+      const [typesRes, manufacturersRes, modelsRes] = await Promise.all([
+        apiService.vehicle.getTypes(),
+        apiService.vehicle.getManufacturers(),
+        apiService.vehicle.getModels()
+      ]);
+
+      console.log('Vehicle Data Loaded:', {
+        types: typesRes.data,
+        manufacturers: manufacturersRes.data,
+        models: modelsRes.data
+      });
+
+      setVehicleTypes(typesRes.data);
+      setManufacturers(manufacturersRes.data);
+      setVehicleModels(modelsRes.data);
+      setVehicleDataLoaded(true);
+    } catch (error) {
+      console.error('Error fetching vehicle data:', error);
+      toast.error('Failed to load vehicle information');
+    } finally {
+      setIsLoadingVehicleData(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchVehicleData();
+    }
+  }, [isAuthenticated]);
+
+  // Handle vehicle type change
+  const handleVehicleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const typeId = e.target.value ? Number(e.target.value) : null;
+    console.log('Vehicle Type Changed:', { typeId });
+    
+    setFormData(prev => ({
+      ...prev,
+      vehicle_type: typeId,
+      manufacturer: null, // Reset dependent fields
+      vehicle_name: null
+    }));
+  };
+
+  // Handle manufacturer change
+  const handleManufacturerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const manufacturerId = e.target.value ? Number(e.target.value) : null;
+    console.log('Manufacturer Changed:', { manufacturerId });
+    
+    setFormData(prev => ({
+      ...prev,
+      manufacturer: manufacturerId,
+      vehicle_name: null // Reset dependent field
+    }));
+  };
+
+  // Handle vehicle model change
+  const handleVehicleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const modelId = e.target.value ? Number(e.target.value) : null;
+    console.log('Vehicle Model Changed:', { modelId });
+    
+    setFormData(prev => ({
+      ...prev,
+      vehicle_name: modelId
+    }));
+  };
+
+  // Filter models based on selected manufacturer and type
+  const getFilteredModels = () => {
+    return vehicleModels.filter(model => 
+      (!formData.manufacturer || model.manufacturer === formData.manufacturer) &&
+      (!formData.vehicle_type || model.vehicle_type === formData.vehicle_type)
+    );
+  };
 
   // Show loading state
   if (isLoading) {
@@ -125,14 +329,140 @@ const Profile = () => {
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
     setIsDrawerOpen(false);
+    navigate(`/profile${tab === 'profile' ? '' : `?tab=${tab}`}`, { replace: true });
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target;
+    // Convert vehicle-related fields to numbers
+    if (['vehicle_name', 'vehicle_type', 'manufacturer'].includes(name)) {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value ? Number(value) : null
+      }));
+    } else {
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      
+      // Log the current form data
+      console.log('Current Form Data:', formData);
+
+      // Basic validation
+      if (!formData.name?.trim()) {
+        toast.error('Please enter your name');
+        return;
+      }
+      if (!formData.phone?.trim()) {
+        toast.error('Please enter your phone number');
+        return;
+      }
+      if (!formData.address?.trim()) {
+        toast.error('Please enter your address');
+        return;
+      }
+      if (!formData.city?.trim()) {
+        toast.error('Please enter your city');
+        return;
+      }
+      if (!formData.state?.trim()) {
+        toast.error('Please enter your state');
+        return;
+      }
+      if (!formData.postal_code?.trim()) {
+        toast.error('Please enter your postal code');
+        return;
+      }
+      if (!formData.country?.trim()) {
+        toast.error('Please enter your country');
+        return;
+      }
+
+      // Prepare data for API
+      const profileData = {
+        email: formData.email,
+        username: formData.username,
+        name: formData.name,
+        address: formData.address,
+        profile_photo: formData.profile_photo,
+        vehicle_name: formData.vehicle_name,
+        vehicle_type: formData.vehicle_type,
+        manufacturer: formData.manufacturer,
+        city: formData.city,
+        state: formData.state,
+        country: formData.country,
+        postal_code: formData.postal_code,
+        phone: formData.phone
+      };
+
+      // Log the data being sent to API
+      console.log('Sending Profile Data:', {
+        method: isNewProfile ? 'POST' : 'PATCH',
+        data: profileData
+      });
+
+      let response;
+      if (isNewProfile) {
+        response = await apiService.profile.create(profileData);
+        console.log('Profile Created:', response.data);
+        setIsNewProfile(false);
+      } else {
+        response = await apiService.profile.update(profileData);
+        console.log('Profile Updated:', response.data);
+      }
+
+      // Update the form data with the response data
+      setFormData(prev => ({
+        ...prev,
+        ...response.data
+      }));
+
+      // Update the profile cache
+      updateProfile(response.data);
+
+      console.log('Form data after save:', {
+        before: formData,
+        after: response.data
+      });
+
+      toast.success(`Profile ${isNewProfile ? 'created' : 'updated'} successfully!`);
+      setIsEditing(false);
+      
+      // Refresh profile data
+      await fetchProfileData();
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      if (axios.isAxiosError(error)) {
+        console.error('API Error Response:', error.response?.data);
+        if (error.response?.status === 401) {
+          toast.error('Session expired. Please login again.');
+          navigate('/login');
+        } else {
+          const errorMessage = error.response?.data?.message || 
+            Object.values(error.response?.data || {}).flat().join(', ') ||
+            'Failed to update profile. Please try again.';
+          toast.error(errorMessage);
+        }
+      } else {
+        toast.error('Failed to update profile. Please try again.');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+    setFormData(profileData || defaultProfile);
   };
 
   const upcomingServices = [
@@ -188,63 +518,173 @@ const Profile = () => {
               {/* Username and Email inline */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Username
+                    <span className="text-gray-400 ml-1">(read-only)</span>
+                  </label>
                   <input
                     type="text"
                     name="username"
                     value={formData.username}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
+                    disabled={true}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email
+                    <span className="text-gray-400 ml-1">(read-only)</span>
+                  </label>
                   <input
                     type="email"
                     name="email"
                     value={formData.email}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
+                    disabled={true}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
                   />
                 </div>
               </div>
 
-              {/* Additional fields when editing */}
-              {isEditing && (
-                <>
+              {/* Name and Phone */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Full Name {isEditing && <span className="text-red-500">*</span>}
+                  </label>
                     <input
                       type="text"
                       name="name"
                       value={formData.name}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
+                    disabled={!isEditing}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+                    placeholder={isEditing ? "Enter your full name" : ""}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Phone Number {isEditing && <span className="text-red-500">*</span>}
+                  </label>
                     <input
                       type="tel"
                       name="phone"
                       value={formData.phone}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
+                    disabled={!isEditing}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+                    placeholder={isEditing ? "Enter phone number with country code" : ""}
                     />
                   </div>
+              </div>
+
+              {/* Address */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Street Address {isEditing && <span className="text-red-500">*</span>}
+                </label>
                     <input
                       type="text"
                       name="address"
                       value={formData.address}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733]"
-                    />
-                  </div>
-                </>
+                  disabled={!isEditing}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+                  placeholder={isEditing ? "Enter your street address" : ""}
+                />
+              </div>
+
+              {/* City, State, and Postal Code */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    City {isEditing && <span className="text-red-500">*</span>}
+                  </label>
+                  <input
+                    type="text"
+                    name="city"
+                    value={formData.city}
+                    onChange={handleInputChange}
+                    disabled={!isEditing}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+                    placeholder={isEditing ? "Enter your city" : ""}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    State {isEditing && <span className="text-red-500">*</span>}
+                  </label>
+                  <input
+                    type="text"
+                    name="state"
+                    value={formData.state}
+                    onChange={handleInputChange}
+                    disabled={!isEditing}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+                    placeholder={isEditing ? "Enter your state" : ""}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Postal Code {isEditing && <span className="text-red-500">*</span>}
+                  </label>
+                  <input
+                    type="text"
+                    name="postal_code"
+                    value={formData.postal_code}
+                    onChange={handleInputChange}
+                    disabled={!isEditing}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+                    placeholder={isEditing ? "Enter postal code" : ""}
+                  />
+                </div>
+              </div>
+
+              {/* Country */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Country {isEditing && <span className="text-red-500">*</span>}
+                </label>
+                <input
+                  type="text"
+                  name="country"
+                  value={formData.country}
+                  onChange={handleInputChange}
+                  disabled={!isEditing}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+                  placeholder={isEditing ? "Enter your country" : ""}
+                />
+              </div>
+
+              {/* Vehicle Information */}
+              {renderVehicleDropdowns()}
+
+              {/* Save Button */}
+              {isEditing && (
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                    disabled={isSaving}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="px-6 py-2 bg-[#FF5733] text-white rounded-md hover:bg-[#ff4019] transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FF5733] disabled:opacity-50"
+                  >
+                    {isSaving ? (
+                      <div className="flex items-center">
+                        <Loader className="w-4 h-4 mr-2 animate-spin" />
+                        {isNewProfile ? 'Creating...' : 'Saving...'}
+                      </div>
+                    ) : (
+                      isNewProfile ? 'Create Profile' : 'Update Profile'
+                    )}
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -257,32 +697,20 @@ const Profile = () => {
         return <MyRepairs />;
       case 'subscriptions':
         return <MySubscription />;
+      case 'change-password':
+        return <div>Change Password</div>;
       default:
         return null;
     }
   };
 
   const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => (
-    <div className={`bg-white rounded-2xl shadow-lg p-6 space-y-6 ${className}`}>
-      <div className="text-center">
-        <div className="h-24 w-24 rounded-full bg-[#FFF5F2] flex items-center justify-center mx-auto">
-          <User className="h-12 w-12 text-[#FF5733]" />
-        </div>
-        <h2 className="mt-4 text-xl font-semibold text-gray-900">
-          {user.username}
-        </h2>
-        <p className="text-sm text-gray-500">
-          {user.email}
-        </p>
-      </div>
-
-      <nav className="space-y-2">
+    <div className={`bg-white rounded-2xl shadow-lg p-6 ${className}`}>
+      <div className="space-y-1">
         <button
           onClick={() => handleTabChange('profile')}
           className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
-            activeTab === 'profile'
-              ? 'bg-[#FFF5F2] text-[#FF5733]'
-              : 'text-gray-600 hover:bg-gray-50'
+            activeTab === 'profile' ? 'text-[#FF5733] bg-[#FFF5F2]' : 'text-gray-700 hover:bg-gray-50'
           }`}
         >
           <User className="h-5 w-5 mr-3" />
@@ -291,64 +719,121 @@ const Profile = () => {
         <button
           onClick={() => handleTabChange('vehicles')}
           className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
-            activeTab === 'vehicles'
-              ? 'bg-[#FFF5F2] text-[#FF5733]'
-              : 'text-gray-600 hover:bg-gray-50'
+            activeTab === 'vehicles' ? 'text-[#FF5733] bg-[#FFF5F2]' : 'text-gray-700 hover:bg-gray-50'
           }`}
         >
           <Bike className="h-5 w-5 mr-3" />
           Vehicles for Sale
         </button>
         <button
-          onClick={() => handleTabChange('bookings')}
-          className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
-            activeTab === 'bookings'
-              ? 'bg-[#FFF5F2] text-[#FF5733]'
-              : 'text-gray-600 hover:bg-gray-50'
-          }`}
-        >
-          <Clock className="h-5 w-5 mr-3" />
-          My Bookings
-        </button>
-        <button
           onClick={() => handleTabChange('repairs')}
           className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
-            activeTab === 'repairs'
-              ? 'bg-[#FFF5F2] text-[#FF5733]'
-              : 'text-gray-600 hover:bg-gray-50'
+            activeTab === 'repairs' ? 'text-[#FF5733] bg-[#FFF5F2]' : 'text-gray-700 hover:bg-gray-50'
           }`}
         >
           <Wrench className="h-5 w-5 mr-3" />
           My Repairs
         </button>
         <button
+          onClick={() => handleTabChange('bookings')}
+          className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
+            activeTab === 'bookings' ? 'text-[#FF5733] bg-[#FFF5F2]' : 'text-gray-700 hover:bg-gray-50'
+          }`}
+        >
+          <Clock className="h-5 w-5 mr-3" />
+          My Bookings
+        </button>
+        <button
           onClick={() => handleTabChange('subscriptions')}
           className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
-            activeTab === 'subscriptions'
-              ? 'bg-[#FFF5F2] text-[#FF5733]'
-              : 'text-gray-600 hover:bg-gray-50'
+            activeTab === 'subscriptions' ? 'text-[#FF5733] bg-[#FFF5F2]' : 'text-gray-700 hover:bg-gray-50'
           }`}
         >
           <Subscription className="h-5 w-5 mr-3" />
           My Subscriptions
         </button>
-      </nav>
-
-      <div className="pt-6 border-t border-gray-200">
         <button
-          onClick={handlePasswordChange}
-          className="w-full flex items-center px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg"
+          onClick={() => handleTabChange('change-password')}
+          className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
+            activeTab === 'change-password' ? 'text-[#FF5733] bg-[#FFF5F2]' : 'text-gray-700 hover:bg-gray-50'
+          }`}
         >
-          <Key className="h-5 w-5 mr-3" />
+          <Settings className="h-5 w-5 mr-3" />
           Change Password
         </button>
         <button
           onClick={handleLogout}
-          className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg mt-2"
+          className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg mt-4"
         >
           <LogOut className="h-5 w-5 mr-3" />
           Logout
         </button>
+      </div>
+    </div>
+  );
+
+  // Update the vehicle dropdowns in the render section
+  const renderVehicleDropdowns = () => (
+    <div className="pt-6">
+      <h3 className="text-lg font-medium text-gray-900 mb-4">Vehicle Information</h3>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Vehicle Type
+          </label>
+          <select
+            name="vehicle_type"
+            value={formData.vehicle_type || ''}
+            onChange={handleVehicleTypeChange}
+            disabled={!isEditing}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+          >
+            <option value="">Select vehicle type</option>
+            {vehicleTypes.map((type) => (
+              <option key={type.id} value={type.id}>
+                {type.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Manufacturer
+          </label>
+          <select
+            name="manufacturer"
+            value={formData.manufacturer || ''}
+            onChange={handleManufacturerChange}
+            disabled={!isEditing || !formData.vehicle_type}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+          >
+            <option value="">Select manufacturer</option>
+            {manufacturers.map((mfr) => (
+              <option key={mfr.id} value={mfr.id}>
+                {mfr.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Vehicle Model
+          </label>
+          <select
+            name="vehicle_name"
+            value={formData.vehicle_name || ''}
+            onChange={handleVehicleModelChange}
+            disabled={!isEditing || !formData.manufacturer}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+          >
+            <option value="">Select model</option>
+            {getFilteredModels().map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
     </div>
   );

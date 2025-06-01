@@ -1,10 +1,9 @@
-import { useState, useEffect, ReactNode } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { VehicleFormData, VehiclePhotos, VehicleDocuments, FormErrors, PhotoURLs, DocumentURLs, FORM_STORAGE_KEY, PHOTOS_STORAGE_KEY, DOCUMENTS_STORAGE_KEY } from '../types';
 import { validateForm, validatePhotos, validateDocuments } from '../utils/validation';
 import marketplaceService from '../../../services/marketplaceService';
-import { formatDateForBackend } from '../utils/helpers';
 import { checkUserAuthentication } from '../../../utils/auth';
 import {
   cleanupBlobUrls,
@@ -13,27 +12,31 @@ import {
   safeStoreBase64Image
 } from '../../../services/imageUtils';
 import persistentStorageService from '../../../services/persistentStorageService';
-import userProfileDataService from '../../../services/userProfileDataService';
+import { useUserProfile } from '../../../hooks/useUserProfile';
 
 export const useVehicleForm = () => {
   const navigate = useNavigate();
+  const { profile, updateProfile } = useUserProfile();
 
   // Get saved form data from localStorage or use defaults
   const getSavedFormData = (): VehicleFormData => {
     const savedData = localStorage.getItem(FORM_STORAGE_KEY);
     if (savedData) {
       try {
-        return JSON.parse(savedData);
+        const parsedData = JSON.parse(savedData);
+        // If saved data exists but contact info is empty, use profile data
+        return {
+          ...parsedData,
+          contactNumber: parsedData.contactNumber || profile?.phone || '',
+          pickupAddress: parsedData.pickupAddress || (profile?.address ? 
+            `${profile.address}, ${profile.city}, ${profile.state} ${profile.zipCode}`.trim() : '')
+        };
       } catch (e) {
         console.error('Error parsing saved form data:', e);
       }
     }
     
-    // Get user contact info from our centralized service
-    const phone = userProfileDataService.getUserPhone();
-    const address = userProfileDataService.getUserAddress();
-    
-    // Return default values if no saved data exists
+    // Return default values with profile data
     return {
       type: '',
       brand: '',
@@ -50,8 +53,9 @@ export const useVehicleForm = () => {
       engineCapacity: '',
       lastServiceDate: '',
       insuranceValidTill: '',
-      contactNumber: phone || '',
-      pickupAddress: address || '',
+      contactNumber: profile?.phone || '',
+      pickupAddress: profile?.address ? 
+        `${profile.address}, ${profile.city}, ${profile.state} ${profile.zipCode}`.trim() : '',
       features: [],
       highlights: [],
       isPriceNegotiable: true,
@@ -226,6 +230,18 @@ export const useVehicleForm = () => {
     localStorage.removeItem(DOCUMENTS_STORAGE_KEY);
   };
 
+  // Update form data when profile changes
+  useEffect(() => {
+    if (profile) {
+      setFormData(prev => ({
+        ...prev,
+        contactNumber: prev.contactNumber || profile.phone || '',
+        pickupAddress: prev.pickupAddress || (profile.address ? 
+          `${profile.address}, ${profile.city}, ${profile.state} ${profile.zipCode}`.trim() : '')
+      }));
+    }
+  }, [profile]);
+
   // Input handlers
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -242,11 +258,29 @@ export const useVehicleForm = () => {
       }));
     }
     
-    // Save user contact information to our centralized service
+    // Save user contact information to cache
     if (name === 'contactNumber') {
-      userProfileDataService.saveProfileData({ phone: value });
+      updateProfile({ phone: value });
     } else if (name === 'pickupAddress') {
-      userProfileDataService.saveProfileData({ address: value });
+      // Try to parse address components
+      const addressParts = value.split(',').map(part => part.trim());
+      if (addressParts.length >= 3) {
+        const stateAndZip = addressParts.pop() || '';
+        const city = addressParts.pop() || '';
+        const street = addressParts.join(', ');
+        
+        // Split state and zip if present
+        const [state, zipCode] = stateAndZip.split(' ');
+        
+        updateProfile({
+          address: street,
+          city,
+          state,
+          zipCode: zipCode || ''
+        });
+      } else {
+        updateProfile({ address: value });
+      }
     }
   };
 
