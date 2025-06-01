@@ -3,10 +3,12 @@ import TokenManager from '../services/tokenManager';
 
 // Base configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://repairmybike.up.railway.app/api';
+const FRONTEND_URL = import.meta.env.VITE_FRONTEND_URL || 'https://repairmybike.in';
 
 // Export API configuration for components that need it
 export const API_CONFIG = {
   baseURL: API_BASE_URL,
+  frontendURL: FRONTEND_URL,
   withCredentials: true, // Enable sending cookies in cross-origin requests
   getApiUrl: (endpoint?: string) => {
     if (!endpoint) return API_BASE_URL;
@@ -53,8 +55,13 @@ axiosInstance.interceptors.request.use(
     // Ensure CORS headers for all requests
     config.withCredentials = true;
     
-    // Don't set Content-Type for verification requests
+    // Handle verification requests
     if (config.url?.includes('/verify-email/')) {
+      // If the URL is a frontend URL, convert it to API URL
+      if (config.url.startsWith(FRONTEND_URL)) {
+        const token = config.url.split('/verify-email/')[1];
+        config.url = `${API_BASE_URL}/accounts/verify-email/${token}/`;
+      }
       delete config.headers['Content-Type'];
     } else if (!config.headers['Content-Type'] && !config.url?.includes('/upload')) {
       config.headers['Content-Type'] = 'application/json';

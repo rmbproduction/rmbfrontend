@@ -1,0 +1,67 @@
+{
+  "routes": [
+    {
+      "src": "/verify-email/(.*)",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/login-signup",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/reset-password/(.*)",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/password-reset-confirmation",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/subscription",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/resend-verification",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/static/(.*)",
+      "dest": "/static/$1"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "/favicon.ico",
+      "dest": "/favicon.ico"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        }
+      ]
+    }
+  ]
+}

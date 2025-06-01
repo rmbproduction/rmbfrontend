@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Loader } from 'lucide-react';
-import { apiService } from '../config/api.config';
+import { apiService, API_CONFIG } from '../config/api.config';
 
 const VerifyEmail = () => {
   const { token } = useParams<{ token: string }>();
@@ -20,6 +20,10 @@ const VerifyEmail = () => {
 
       try {
         console.log('Attempting to verify email with token:', token);
+        // Construct the full verification URL
+        const verificationUrl = `${API_CONFIG.baseURL}/accounts/verify-email/${token}/`;
+        console.log('Making verification request to:', verificationUrl);
+        
         const response = await apiService.auth.verifyEmail(token);
         console.log('Verification response:', response);
 
@@ -33,6 +37,7 @@ const VerifyEmail = () => {
         }
       } catch (error: any) {
         console.error('Verification error:', error);
+        console.error('Error response:', error.response);
         
         // Handle different error cases
         if (error.response?.status === 404) {
