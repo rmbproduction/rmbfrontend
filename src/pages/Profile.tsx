@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  User, Settings, LogOut, Key, Bike, Bell, 
+  User, Settings, LogOut, Bike, 
   CreditCard, MapPin, Clock, Shield, Menu, X,
   Loader, Wrench, CreditCard as Subscription
 } from 'lucide-react';
@@ -530,8 +530,8 @@ const Profile = () => {
         return <MyRepairs />;
       case 'subscriptions':
         return <MySubscription />;
-      case 'change-password':
-        return <div>Change Password</div>;
+      // case 'change-password':
+      //   return <div>Change Password</div>;
       default:
         return null;
     }

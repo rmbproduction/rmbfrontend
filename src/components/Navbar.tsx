@@ -30,7 +30,7 @@ const USER_MENU_ITEMS = [
   { id: 'repairs', label: 'My Repairs', path: '/profile?tab=repairs', icon: Wrench },
   { id: 'bookings', label: 'My Bookings', path: '/profile?tab=bookings', icon: Clock },
   { id: 'subscriptions', label: 'My Subscriptions', path: '/profile?tab=subscriptions', icon: Wallet },
-  { id: 'change-password', label: 'Change Password', path: '/profile?tab=change-password', icon: Settings },
+  // { id: 'change-password', label: 'Change Password', path: '/profile?tab=change-password', icon: Settings },
   { id: 'logout', label: 'Logout', path: '/logout', icon: LogOut },
 ];
 
