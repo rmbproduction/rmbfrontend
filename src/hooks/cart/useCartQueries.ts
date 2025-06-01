@@ -8,10 +8,15 @@ export interface Cart {
   status: string;
   items: CartItem[];
   total: string;
+  total_amount: string;
 }
 
 export interface CartItem {
   id: number;
+  service_name: string;
+  service_price: string;
+  quantity: number;
+  package_name?: string;
   service: {
     id: string;
     name: string;
@@ -20,8 +25,6 @@ export interface CartItem {
     id: string;
     name: string;
   };
-  quantity: number;
-  price: string;
 }
 
 // Cart count store

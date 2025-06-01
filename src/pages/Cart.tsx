@@ -5,7 +5,7 @@ import { DeleteOutlined, ShoppingCartOutlined, ArrowLeftOutlined } from '@ant-de
 import { 
   useActiveCart,
   useUpdateCartItemMutation,
-  useRemoveCartItemMutation,
+  useRemoveFromCartMutation,
   useClearCartMutation,
   CartItem
 } from '../hooks/cart/useCartQueries';
@@ -16,7 +16,7 @@ const Cart: React.FC = () => {
   const navigate = useNavigate();
   const { activeCart, isLoading } = useActiveCart();
   const updateCartItem = useUpdateCartItemMutation();
-  const removeCartItem = useRemoveCartItemMutation();
+  const removeCartItem = useRemoveFromCartMutation();
   const clearCart = useClearCartMutation();
 
   const handleRemoveItem = async (itemId: number) => {
@@ -108,7 +108,7 @@ const Cart: React.FC = () => {
             <Button 
               type="primary" 
               size="large"
-              onClick={() => navigate('/services')}
+              onClick={() => navigate('/')}
               className="mt-6"
               icon={<ArrowLeftOutlined />}
             >
@@ -126,7 +126,7 @@ const Cart: React.FC = () => {
             <div className="flex items-center gap-4">
               <Button 
                 icon={<ArrowLeftOutlined />}
-                onClick={() => navigate('/services')}
+                onClick={() => navigate('/')}
                 className="flex items-center"
               >
                 Continue Shopping
@@ -149,7 +149,7 @@ const Cart: React.FC = () => {
               <div className="bg-white rounded-xl shadow-sm p-6 mb-4 transition-all hover:shadow-md">
                 <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                   <div className="flex-grow">
-                    <Title level={4} className="!mb-2">{item.service_name}</Title>
+                    <Title level={4} className="!mb-2">{item.service_name || item.service.name}</Title>
                     {item.package_name && (
                       <Text type="secondary" className="block mb-2">
                         Package: {item.package_name}
