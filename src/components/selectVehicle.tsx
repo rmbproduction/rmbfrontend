@@ -58,10 +58,11 @@ const VehicleImage = ({
   const [hasError, setHasError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
+  // Fixed dimensions for consistent sizing
   const sizeClasses = {
-    small: 'w-32 h-32',
-    medium: 'w-full h-48',
-    large: 'w-full h-56'
+    small: 'w-[120px] h-[120px]',
+    medium: 'w-[180px] h-[180px]',
+    large: 'w-[240px] h-[240px]'
   };
 
   // Construct the full Cloudinary URL
@@ -108,23 +109,24 @@ const VehicleImage = ({
       <div 
         onClick={onClick}
         className={`
-          bg-gray-50 rounded-2xl flex flex-col items-center justify-center p-6
+          bg-gray-50 rounded-2xl flex flex-col items-center justify-center p-4
           ${className || sizeClasses[size]}
           cursor-pointer transform transition-all duration-300
           hover:shadow-lg hover:scale-102 hover:bg-gray-100
           border-2 ${selected ? 'border-[#FF5733]' : 'border-dashed border-gray-200'}
           ${selected ? 'shadow-[#FF5733]/20 shadow-lg' : ''}
+          aspect-square
         `}
       >
-        <ImageIcon className="w-12 h-12 text-gray-400 mb-3" />
-        <span className="text-base font-medium text-gray-700 text-center">{alt}</span>
+        <ImageIcon className="w-10 h-10 text-gray-400 mb-2" />
+        <span className="text-sm font-medium text-gray-700 text-center line-clamp-2">{alt}</span>
       </div>
     );
   }
 
   return (
     <motion.div 
-      className="relative group w-full"
+      className={`relative group ${className || sizeClasses[size]} aspect-square`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={onClick}
@@ -135,12 +137,14 @@ const VehicleImage = ({
         <div className={`
           animate-pulse bg-gray-200 rounded-2xl
           ${className || sizeClasses[size]}
+          aspect-square
         `} />
       )}
       <div className={`
         relative overflow-hidden rounded-2xl
         cursor-pointer transform transition-all duration-300
         ${selected ? 'ring-2 ring-[#FF5733] shadow-lg shadow-[#FF5733]/20' : 'shadow-md hover:shadow-xl'}
+        aspect-square
       `}>
         <img
           src={imageUrl}
@@ -150,6 +154,7 @@ const VehicleImage = ({
             object-contain rounded-2xl
             transition-all duration-300
             ${isLoading ? 'opacity-0' : 'opacity-100'}
+            aspect-square p-2
           `}
           onLoad={() => {
             console.log('Image loaded successfully:', imageUrl);
@@ -160,11 +165,11 @@ const VehicleImage = ({
         />
         <div className={`
           absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent
-          flex items-end justify-center p-4
+          flex items-end justify-center p-3
           transition-opacity duration-300
           ${isHovered || selected ? 'opacity-100' : 'opacity-0'}
         `}>
-          <span className="text-white text-lg font-semibold">{alt}</span>
+          <span className="text-white text-sm font-semibold line-clamp-2 text-center">{alt}</span>
         </div>
       </div>
     </motion.div>
@@ -227,21 +232,21 @@ const VehicleTypeCard = ({ type, selected, onClick }: {
     <div
       onClick={onClick}
       className={`
-        border rounded-lg p-4 cursor-pointer transition
+        border rounded-xl p-4 cursor-pointer transition
         hover:border-[#FF5733] hover:shadow-md
         ${selected ? 'border-[#FF5733] shadow-md' : 'border-gray-200'}
+        flex flex-col items-center justify-center
+        w-full aspect-[4/3]
       `}
     >
-      <div className="flex flex-col items-center gap-4 text-center">
+      <div className="flex flex-col items-center justify-center gap-3 w-full">
         <VehicleImage
           image={type.image}
           alt={type.name}
           size="small"
           selected={selected}
         />
-        <div className="flex flex-col">
-          <h3 className="text-lg font-medium text-gray-900">{type.name}</h3>
-        </div>
+        <h3 className="text-base font-medium text-gray-900 text-center line-clamp-2">{type.name}</h3>
       </div>
     </div>
   );
@@ -257,21 +262,21 @@ const ManufacturerCard = ({ manufacturer, selected, onClick }: {
     <div
       onClick={onClick}
       className={`
-        border rounded-lg p-4 cursor-pointer transition
+        border rounded-xl p-4 cursor-pointer transition
         hover:border-[#FF5733] hover:shadow-md
         ${selected ? 'border-[#FF5733] shadow-md' : 'border-gray-200'}
+        flex flex-col items-center justify-center
+        w-full aspect-[4/3]
       `}
     >
-      <div className="flex flex-col items-center gap-4 text-center">
+      <div className="flex flex-col items-center justify-center gap-3 w-full">
         <VehicleImage
           image={manufacturer.image}
           alt={manufacturer.name}
           size="small"
           selected={selected}
         />
-        <div className="flex flex-col">
-          <h3 className="text-lg font-medium text-gray-900">{manufacturer.name}</h3>
-        </div>
+        <h3 className="text-base font-medium text-gray-900 text-center line-clamp-2">{manufacturer.name}</h3>
       </div>
     </div>
   );
@@ -287,21 +292,23 @@ const ModelCard = ({ model, selected, onClick }: {
     <div
       onClick={onClick}
       className={`
-        border rounded-lg p-4 cursor-pointer transition
+        border rounded-xl p-4 cursor-pointer transition
         hover:border-[#FF5733] hover:shadow-md
         ${selected ? 'border-[#FF5733] shadow-md' : 'border-gray-200'}
+        flex flex-col items-center justify-center
+        w-full aspect-[4/3]
       `}
     >
-      <div className="flex flex-col items-center gap-4 text-center">
+      <div className="flex flex-col items-center justify-center gap-3 w-full">
         <VehicleImage
           image={model.image}
           alt={model.name}
           size="small"
           selected={selected}
         />
-        <div className="flex flex-col">
-          <h3 className="text-lg font-medium text-gray-900">{model.name}</h3>
-          <p className="text-sm text-gray-500">{model.manufacturer_name} {model.vehicle_type_name}</p>
+        <div className="flex flex-col items-center">
+          <h3 className="text-base font-medium text-gray-900 text-center line-clamp-2">{model.name}</h3>
+          <p className="text-xs text-gray-500 text-center line-clamp-1">{model.manufacturer_name}</p>
         </div>
       </div>
     </div>
@@ -581,7 +588,7 @@ const SelectVehicle = ({ onVehicleSelect, serviceId, initialVehicle }: SelectVeh
       <div className="p-4 sm:p-6">
         {/* Step 1: Vehicle Types */}
         {!loading && !error && step === 1 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {vehicleTypes.map((type) => (
               <VehicleTypeCard
                 key={type.id}
@@ -612,7 +619,7 @@ const SelectVehicle = ({ onVehicleSelect, serviceId, initialVehicle }: SelectVeh
             {manufacturers.length === 0 ? (
               <EmptyState type="manufacturer" searchQuery={searchQuery} />
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {manufacturers
                   .filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()))
                   .map((manufacturer) => (
@@ -647,7 +654,7 @@ const SelectVehicle = ({ onVehicleSelect, serviceId, initialVehicle }: SelectVeh
             {vehicleModels.length === 0 ? (
               <EmptyState type="model" searchQuery={searchQuery} />
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {vehicleModels
                   .filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()))
                   .map((model) => (
