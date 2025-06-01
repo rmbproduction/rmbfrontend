@@ -78,6 +78,7 @@ const Checkout = () => {
     reset
   } = useForm<CheckoutFormData>({
     resolver: zodResolver(checkoutFormSchema),
+    mode: 'onChange',
     defaultValues: {
       name: '',
       email: '',
@@ -298,10 +299,11 @@ const Checkout = () => {
             <input
               type="text"
               placeholder="Full Name *"
+              {...register('name')}
+              onChange={(e) => setValue('name', e.target.value)}
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
                 errors.name ? 'border-red-500' : 'border-gray-300'
               }`}
-              {...register('name')}
             />
             {errors.name && (
               <p className="mt-1 text-sm text-red-500">{errors.name.message}</p>
@@ -311,10 +313,11 @@ const Checkout = () => {
             <input
               type="email"
               placeholder="Email Address *"
+              {...register('email')}
+              onChange={(e) => setValue('email', e.target.value)}
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
                 errors.email ? 'border-red-500' : 'border-gray-300'
               }`}
-              {...register('email')}
             />
             {errors.email && (
               <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
@@ -325,10 +328,11 @@ const Checkout = () => {
           <input
             type="tel"
             placeholder="Phone Number *"
+            {...register('phone')}
+            onChange={(e) => setValue('phone', e.target.value)}
             className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
               errors.phone ? 'border-red-500' : 'border-gray-300'
             }`}
-            {...register('phone')}
           />
           {errors.phone && (
             <p className="mt-1 text-sm text-red-500">{errors.phone.message}</p>
@@ -357,10 +361,11 @@ const Checkout = () => {
           <textarea
             placeholder="Street Address *"
             rows={3}
+            {...register('address.street')}
+            onChange={(e) => setValue('address.street', e.target.value)}
             className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
               errors.address?.street ? 'border-red-500' : 'border-gray-300'
             }`}
-            {...register('address.street')}
           />
           {errors.address?.street && (
             <p className="mt-1 text-sm text-red-500">{errors.address.street.message}</p>
@@ -371,10 +376,11 @@ const Checkout = () => {
             <input
               type="text"
               placeholder="City *"
+              {...register('address.city')}
+              onChange={(e) => setValue('address.city', e.target.value)}
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
                 errors.address?.city ? 'border-red-500' : 'border-gray-300'
               }`}
-              {...register('address.city')}
             />
             {errors.address?.city && (
               <p className="mt-1 text-sm text-red-500">{errors.address.city.message}</p>
@@ -384,10 +390,11 @@ const Checkout = () => {
             <input
               type="text"
               placeholder="State *"
+              {...register('address.state')}
+              onChange={(e) => setValue('address.state', e.target.value)}
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
                 errors.address?.state ? 'border-red-500' : 'border-gray-300'
               }`}
-              {...register('address.state')}
             />
             {errors.address?.state && (
               <p className="mt-1 text-sm text-red-500">{errors.address.state.message}</p>
@@ -397,10 +404,11 @@ const Checkout = () => {
             <input
               type="text"
               placeholder="Postal Code *"
+              {...register('address.zipCode')}
+              onChange={(e) => setValue('address.zipCode', e.target.value)}
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
                 errors.address?.zipCode ? 'border-red-500' : 'border-gray-300'
               }`}
-              {...register('address.zipCode')}
             />
             {errors.address?.zipCode && (
               <p className="mt-1 text-sm text-red-500">{errors.address.zipCode.message}</p>

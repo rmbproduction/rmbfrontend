@@ -28,33 +28,20 @@ export interface CartItem {
 }
 
 // Cart count store
-interface CartCountStore {
+type CartCountState = {
   count: number;
   setCount: (count: number) => void;
   incrementCartCount: () => void;
   decrementCartCount: () => void;
-}
+  resetCount: () => void;
+};
 
-export const useCartCountStore = create<CartCountStore>((set: any) => ({
-  count: parseInt(localStorage.getItem('cartCount') || '0'),
-  setCount: (count: number) => {
-    localStorage.setItem('cartCount', count.toString());
-    set({ count });
-  },
-  incrementCartCount: () => {
-    set((state: CartCountStore) => {
-      const newCount = state.count + 1;
-      localStorage.setItem('cartCount', newCount.toString());
-      return { count: newCount };
-    });
-  },
-  decrementCartCount: () => {
-    set((state: CartCountStore) => {
-      const newCount = Math.max(0, state.count - 1);
-      localStorage.setItem('cartCount', newCount.toString());
-      return { count: newCount };
-    });
-  },
+export const useCartCountStore = create<CartCountState>()((set) => ({
+  count: 0,
+  setCount: (count: number) => set(() => ({ count })),
+  incrementCartCount: () => set((state) => ({ count: state.count + 1 })),
+  decrementCartCount: () => set((state) => ({ count: Math.max(0, state.count - 1) })),
+  resetCount: () => set(() => ({ count: 0 }))
 }));
 
 // Active cart query
@@ -69,11 +56,14 @@ export const useActiveCart = () => {
         // Update cart count in store
         if (activeCart?.items) {
           useCartCountStore.getState().setCount(activeCart.items.length);
+        } else {
+          useCartCountStore.getState().resetCount();
         }
         
         return activeCart || null;
       } catch (error) {
         console.error('Error fetching active cart:', error);
+        useCartCountStore.getState().resetCount();
         return null;
       }
     },
