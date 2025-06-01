@@ -17,6 +17,17 @@ interface BookingFormData {
   notes: string;
 }
 
+const isVehicleBookable = (vehicle: Vehicle | null) => {
+  if (!vehicle) return false;
+  
+  // Check both bookable flags
+  if (!vehicle.bookable || !vehicle.is_bookable) return false;
+  
+  // Check vehicle status
+  const nonBookableStatuses = ['under_inspection', 'sold', 'unavailable', 'maintenance'];
+  return !nonBookableStatuses.includes(vehicle.status);
+};
+
 const VehicleDetail = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -162,14 +173,12 @@ const VehicleDetail = () => {
       // Clean and format the contact number
       const cleanedNumber = formData.contactNumber.replace(/[\s\-\(\)]/g, '');
       
-      // Create the booking request
-      const bookingRequest = {
+      // Create the booking request with only contact_number
+      const response = await createBooking.mutateAsync({
         vehicle_id: vehicle.id,
-        contact_number: cleanedNumber,
-        notes: formData.notes
-      };
+        contact_number: cleanedNumber
+      });
 
-      const response = await createBooking.mutateAsync(bookingRequest);
       setSuccessMessage(response.detail);
       setBookingSuccess(true);
     } catch (error: any) {
@@ -321,13 +330,20 @@ const VehicleDetail = () => {
 
               {/* Action Buttons */}
               <div className="space-y-3">
-                {vehicle.bookable && (
+                {isVehicleBookable(vehicle) ? (
                   <button 
                     onClick={() => setShowBookingModal(true)}
                     className="w-full bg-[#FF5733] text-white py-3 rounded-lg hover:bg-[#ff4019] transition-colors"
                   >
                     Book Test Ride
                   </button>
+                ) : (
+                  <div className="text-center py-2 text-gray-600 bg-gray-100 rounded-lg">
+                    {vehicle?.status === 'under_inspection' ? 'Vehicle is under inspection' :
+                     vehicle?.status === 'sold' ? 'Vehicle has been sold' :
+                     vehicle?.status === 'maintenance' ? 'Vehicle is under maintenance' :
+                     'Vehicle is not available for booking'}
+                  </div>
                 )}
                 <button 
                   onClick={() => window.location.href = "tel:+911234567890"}
