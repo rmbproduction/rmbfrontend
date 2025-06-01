@@ -11,6 +11,7 @@ interface AuthContextType {
   login: (email: string, password: string, rememberMe?: boolean) => Promise<LoginResponse>;
   logout: () => Promise<void>;
   isLoading: boolean;
+  refetchProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -81,10 +82,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           await refetchProfile();
           console.log('Profile fetched successfully');
-          } catch (error) {
+        } catch (error) {
           console.error('Profile fetch failed:', error);
           // Don't throw here - we still want to complete login even if profile fetch fails
-          }
+        }
       } else {
         console.log('No user data in response');
       }
@@ -98,7 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: error.response?.status,
         data: error.response?.data,
         headers: error.response?.headers
-  });
+      });
 
       // Clear any partially stored tokens
       TokenManager.clearTokens();
@@ -145,11 +146,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const value = useMemo(() => ({
     isAuthenticated: !!TokenManager.getAccessToken() && !TokenManager.isTokenExpired(),
-    user: user || null,
+    user,
     login,
     logout,
-    isLoading: profileLoading
-  }), [user, login, logout, profileLoading]);
+    isLoading: profileLoading,
+    refetchProfile
+  }), [user, login, logout, profileLoading, refetchProfile]);
 
   return (
     <AuthContext.Provider value={value}>

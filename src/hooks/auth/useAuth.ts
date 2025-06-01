@@ -1,8 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../../config/api.config';
 import TokenManager from '../../services/tokenManager';
 import { User } from '../../schemas/auth';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface LoginData {
   email: string;
@@ -53,51 +53,73 @@ export const useProfile = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  useEffect(() => {
-    const fetchProfile = async () => {
-      if (!hasToken) {
+  const fetchProfile = async () => {
+    if (!hasToken) {
+      setProfile(null);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      console.log('Fetching profile data...');
+      const response = await apiService.auth.getProfile();
+      console.log('Profile response:', response);
+      
+      if (!response || !response.data) {
+        console.error('No profile data received');
+        setError(new Error('No profile data received'));
         setProfile(null);
-        setIsLoading(false);
         return;
       }
-
-      try {
-        console.log('Fetching profile data...');
-        const response = await apiService.auth.getProfile();
-        console.log('Profile response:', response);
-        
-        if (!response.data) {
-          console.log('No profile data received');
-          TokenManager.clearTokens();
-          setProfile(null);
-          return;
+      
+      // Map the profile data to User type
+      const profileData = response.data;
+      const userData: User = {
+        id: profileData.user || profileData.id,
+        email: profileData.email,
+        username: profileData.username,
+        profile: {
+          name: profileData.name,
+          phone: profileData.phone,
+          address: profileData.address,
+          city: profileData.city,
+          state: profileData.state,
+          country: profileData.country,
+          postal_code: profileData.postal_code,
+          profile_photo: profileData.profile_photo,
+          vehicle_name: profileData.vehicle_name,
+          vehicle_type: profileData.vehicle_type,
+          manufacturer: profileData.manufacturer
         }
-        
-        // Check if the response has the user data in the correct format
-        const userData = response.data.user || response.data;
-        if (!userData || !userData.email) {
-          console.error('Invalid profile data format:', userData);
-          TokenManager.clearTokens();
-          setProfile(null);
-          return;
-        }
-        
-        setProfile(userData);
-      } catch (error: any) {
-        console.error('Profile fetch error:', error);
-        if (error.response?.status === 401) {
-          TokenManager.clearTokens();
-        }
-        setError(error);
-      } finally {
-        setIsLoading(false);
+      };
+      
+      setProfile(userData);
+      setError(null);
+    } catch (error: any) {
+      console.error('Profile fetch error:', error);
+      if (error.response?.status === 401) {
+        TokenManager.clearTokens();
       }
-    };
+      setError(error);
+      setProfile(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    fetchProfile();
+  useEffect(() => {
+    const loadProfile = async () => {
+      await fetchProfile();
+    };
+    loadProfile();
   }, [hasToken]);
 
-  return { data: profile, isLoading, error };
+  const refetch = useCallback(() => {
+    setIsLoading(true);
+    return fetchProfile();
+  }, []);
+
+  return { data: profile, isLoading, error, refetch };
 };
 
 export const useUpdateProfile = () => {

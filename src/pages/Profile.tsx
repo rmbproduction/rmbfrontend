@@ -121,21 +121,21 @@ const Profile = () => {
   // Update form data when user data changes
   useEffect(() => {
     console.log('User Data Effect:', { user });
-    if (user) {
+    if (user && user.profile) {
       setFormData({
         username: user.username || '',
         email: user.email || '',
-        name: user.profile?.name || user.name || '',
-        phone: user.profile?.phone || user.phone || '',
-        address: user.profile?.address || user.address || '',
-        city: user.profile?.city || '',
-        state: user.profile?.state || '',
-        country: user.profile?.country || '',
-        postal_code: user.profile?.postal_code || '',
-        vehicle_name: user.profile?.vehicle_name || null,
-        vehicle_type: user.profile?.vehicle_type || null,
-        manufacturer: user.profile?.manufacturer || null,
-        profile_photo: user.profile?.profile_photo || null
+        name: user.profile.name || '',
+        phone: user.profile.phone || '',
+        address: user.profile.address || '',
+        city: user.profile.city || '',
+        state: user.profile.state || '',
+        country: user.profile.country || '',
+        postal_code: user.profile.postal_code || '',
+        vehicle_name: user.profile.vehicle_name || null,
+        vehicle_type: user.profile.vehicle_type || null,
+        manufacturer: user.profile.manufacturer || null,
+        profile_photo: user.profile.profile_photo || null
       });
     }
   }, [user]);
@@ -176,6 +176,11 @@ const Profile = () => {
           manufacturer: profileData.manufacturer || null,
           profile_photo: profileData.profile_photo || null
         });
+
+        // Update the profile in AuthContext
+        if (updateProfile) {
+          await updateProfile(profileData);
+        }
 
         console.log('Updated form data:', {
           before: formData,
@@ -354,9 +359,6 @@ const Profile = () => {
     try {
       setIsSaving(true);
       
-      // Log the current form data
-      console.log('Current Form Data:', formData);
-
       // Basic validation
       if (!formData.name?.trim()) {
         toast.error('Please enter your name');
@@ -404,45 +406,25 @@ const Profile = () => {
         phone: formData.phone
       };
 
-      // Log the data being sent to API
-      console.log('Sending Profile Data:', {
-        method: isNewProfile ? 'POST' : 'PATCH',
-        data: profileData
-      });
-
       let response;
       if (isNewProfile) {
         response = await apiService.profile.create(profileData);
-        console.log('Profile Created:', response.data);
         setIsNewProfile(false);
       } else {
         response = await apiService.profile.update(profileData);
-        console.log('Profile Updated:', response.data);
       }
 
-      // Update the form data with the response data
-      setFormData(prev => ({
-        ...prev,
-        ...response.data
-      }));
-
-      // Update the profile cache
-      updateProfile(response.data);
-
-      console.log('Form data after save:', {
-        before: formData,
-        after: response.data
-      });
-
+      // Update both local state and profile cache in one go
+      const updatedData = response.data;
+      setFormData(updatedData);
+      await updateProfile(updatedData);
+      
       toast.success(`Profile ${isNewProfile ? 'created' : 'updated'} successfully!`);
       setIsEditing(false);
       
-      // Refresh profile data
-      await fetchProfileData();
     } catch (error) {
       console.error('Error saving profile:', error);
       if (axios.isAxiosError(error)) {
-        console.error('API Error Response:', error.response?.data);
         if (error.response?.status === 401) {
           toast.error('Session expired. Please login again.');
           navigate('/login');

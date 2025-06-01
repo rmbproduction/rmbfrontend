@@ -1,4 +1,4 @@
-import { Phone, Mail, MapPin, Facebook, Twitter, Instagram } from 'lucide-react';
+import { Phone, Mail, MapPin, Facebook, Twitter, Instagram, Youtube } from 'lucide-react';
 
 const Footer = () => {
   return (
@@ -38,13 +38,13 @@ const Footer = () => {
           <div>
             <h3 className="text-white text-lg font-semibold mb-4">Follow Us</h3>
             <div className="flex space-x-4">
-              <a href="#" className="text-gray-400 hover:text-white">
+              <a href="https://www.facebook.com/repairmybike" className="text-gray-400 hover:text-white">
                 <Facebook className="h-6 w-6" />
               </a>
-              <a href="#" className="text-gray-400 hover:text-white">
-                <Twitter className="h-6 w-6" />
+              <a href="https://www.youtube.com/@repairmybike" className="text-gray-400 hover:text-white">
+                <Youtube className="h-6 w-6" />
               </a>
-              <a href="#" className="text-gray-400 hover:text-white">
+              <a href="https://www.instagram.com/repair_my_bike/" className="text-gray-400 hover:text-white">
                 <Instagram className="h-6 w-6" />
               </a>
             </div>

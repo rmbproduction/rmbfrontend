@@ -3,6 +3,8 @@ import userProfileDataService from '../services/userProfileDataService';
 import { toast } from 'react-toastify';
 
 export interface UserProfileData {
+  id?: number;
+  user?: number;
   username?: string;
   email?: string;
   name?: string;
@@ -10,9 +12,8 @@ export interface UserProfileData {
   address?: string;
   city?: string;
   state?: string;
-  postal_code?: string;
-  zipCode?: string;
   country?: string;
+  postal_code?: string;
   profile_photo?: string | null;
   vehicle_name?: number | null;
   vehicle_type?: number | null;
@@ -60,11 +61,13 @@ export const useUserProfile = () => {
       setIsLoading(true);
       const data = await userProfileDataService.getProfileData();
       setProfile(data);
+      setError(null);
       return data;
     } catch (err) {
       console.error('Error fetching profile data:', err);
-      setError(err instanceof Error ? err : new Error('Failed to fetch profile data'));
-      throw err;
+      const error = err instanceof Error ? err : new Error('Failed to fetch profile data');
+      setError(error);
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -72,21 +75,34 @@ export const useUserProfile = () => {
 
   // Initial fetch
   useEffect(() => {
-    fetchProfile();
+    fetchProfile().catch(err => {
+      console.error('Error in initial profile fetch:', err);
+    });
   }, []);
 
   // Update profile
   const updateProfile = async (newData: Partial<UserProfileData>) => {
     try {
       setIsUpdating(true);
+      
+      // Validate the data before saving
+      if (!newData || typeof newData !== 'object') {
+        throw new Error('Invalid profile data: data must be an object');
+      }
+
+      // Save to service and update local state atomically
       await userProfileDataService.saveProfileData(newData);
-      const updatedData = await fetchProfile();
-      toast.success('Profile updated successfully');
-      return updatedData;
+      setProfile(prevProfile => ({
+        ...prevProfile,
+        ...newData
+      }));
+      setError(null);
+      
+      return newData;
     } catch (err) {
-      console.error('Profile update error:', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to update profile');
-      throw err;
+      const error = err instanceof Error ? err : new Error('Failed to update profile');
+      setError(error);
+      throw error;
     } finally {
       setIsUpdating(false);
     }
@@ -125,7 +141,7 @@ export const useUserProfile = () => {
       address: profile.address || '',
       city: profile.city || '',
       state: profile.state || '',
-      postalCode: profile.postal_code || profile.zipCode || '',
+      postalCode: profile.postal_code || '',
       country: profile.country || '',
       vehicleName: profile.vehicle_name || null,
       vehicleType: profile.vehicle_type || null,
@@ -134,7 +150,7 @@ export const useUserProfile = () => {
         address: profile.address,
         city: profile.city,
         state: profile.state,
-        postal_code: profile.postal_code || profile.zipCode
+        postal_code: profile.postal_code
       }),
       contactInfo: {
         name: profile.name || '',
@@ -146,92 +162,20 @@ export const useUserProfile = () => {
     return formattedData;
   };
 
-  // Parse address into components
-  const parseAddress = (fullAddress: string | undefined) => {
-    if (!fullAddress) return { address: '', city: '', state: '', postal_code: '' };
-
-    const parts = fullAddress.split(',').map(part => part.trim());
-    if (parts.length >= 3) {
-      const lastPart = parts[parts.length - 1].split(' ');
-      return {
-        address: parts[0],
-        city: parts[1],
-        state: lastPart[0],
-        postal_code: lastPart[1] || ''
-      };
-    }
-    return { address: fullAddress, city: '', state: '', postal_code: '' };
-  };
-
-  // Combine address components
-  const combineAddress = (components: {
+  // Helper function to combine address parts
+  const combineAddress = (parts: {
     address?: string;
     city?: string;
     state?: string;
     postal_code?: string;
-  }) => {
-    const { address, city, state, postal_code } = components;
-    if (!address || !city || !state) return '';
-    return `${address}, ${city}, ${state} ${postal_code || ''}`.trim();
-  };
-
-  // Pre-fill form data
-  const prefillFormData = <T extends object>(
-    currentFormData: T,
-    formType: 'checkout' | 'vehicle' | 'subscription' | 'booking'
-  ): T => {
-    if (!profile) return currentFormData;
-
-    const formatted = getFormattedProfile();
-    const updates: Partial<T> = {};
-
-    switch (formType) {
-      case 'checkout':
-        Object.assign(updates, {
-          name: formatted.name,
-          email: formatted.email,
-          phone: formatted.phone,
-          address: {
-            street: formatted.address,
-            city: formatted.city,
-            state: formatted.state,
-            zipCode: formatted.postalCode
-          }
-        });
-        break;
-
-      case 'vehicle':
-        Object.assign(updates, {
-          contactNumber: formatted.phone,
-          pickupAddress: formatted.fullAddress
-        });
-        break;
-
-      case 'subscription':
-        Object.assign(updates, {
-          customer_name: formatted.name,
-          customer_email: formatted.email,
-          customer_phone: formatted.phone,
-          address: formatted.address,
-          city: formatted.city,
-          state: formatted.state,
-          postal_code: formatted.postalCode,
-          vehicle_type: formatted.vehicleType,
-          manufacturer: formatted.manufacturer,
-          vehicle_model: formatted.vehicleName
-        });
-        break;
-
-      case 'booking':
-        Object.assign(updates, {
-          contact_number: formatted.phone,
-          customer_name: formatted.name,
-          customer_email: formatted.email
-        });
-        break;
-    }
-
-    return { ...currentFormData, ...updates };
+  }): string => {
+    const addressParts = [
+      parts.address,
+      parts.city,
+      parts.state,
+      parts.postal_code
+    ].filter(Boolean);
+    return addressParts.join(', ');
   };
 
   return {
@@ -241,23 +185,6 @@ export const useUserProfile = () => {
     isUpdating,
     error,
     updateProfile,
-    parseAddress,
-    combineAddress,
-    prefillFormData,
-    // Helper functions to get specific fields with type safety
-    getUsername: () => profile?.username || '',
-    getEmail: () => profile?.email || '',
-    getName: () => profile?.name || '',
-    getPhone: () => profile?.phone || '',
-    getAddress: () => profile?.address || '',
-    getCity: () => profile?.city || '',
-    getState: () => profile?.state || '',
-    getPostalCode: () => profile?.postal_code || '',
-    getCountry: () => profile?.country || '',
-    getVehicleInfo: () => ({
-      vehicle_name: profile?.vehicle_name || null,
-      vehicle_type: profile?.vehicle_type || null,
-      manufacturer: profile?.manufacturer || null
-    })
+    fetchProfile
   };
 }; 

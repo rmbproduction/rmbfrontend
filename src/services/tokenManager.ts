@@ -14,9 +14,12 @@ class TokenManager {
     const storage = rememberMe ? localStorage : sessionStorage;
     
     try {
-      // Store tokens without 'Bearer ' prefix
+      // Store both access and refresh tokens
       storage.setItem(this.ACCESS_TOKEN_KEY, tokens.access);
       storage.setItem(this.REFRESH_TOKEN_KEY, tokens.refresh);
+      
+      // Store storage type for future reference
+      localStorage.setItem(this.STORAGE_TYPE_KEY, rememberMe ? 'local' : 'session');
       
       // Set token expiry (24 hours from now)
       const expiry = new Date();
