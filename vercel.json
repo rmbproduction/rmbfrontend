@@ -1,67 +1,50 @@
 {
   "routes": [
+    {
+      "src": "/(.*)",
+      "headers": {
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff",
+        "X-XSS-Protection": "1; mode=block",
+        "Referrer-Policy": "strict-origin-when-cross-origin"
+      },
+      "continue": true
+    },
     { "handle": "filesystem" },
     {
       "src": "/profile\\?tab=(profile|vehicles|repairs|bookings|subscriptions)",
-      "dest": "/index.html",
-      "status": 200
+      "dest": "/index.html"
     },
     {
       "src": "/service/[^/]+",
-      "dest": "/index.html",
-      "status": 200
+      "dest": "/index.html"
     },
     {
       "src": "/vehicles/[^/]+",
-      "dest": "/index.html",
-      "status": 200
+      "dest": "/index.html"
     },
     {
       "src": "/verify-email/[^/]+",
-      "dest": "/index.html",
-      "status": 200
+      "dest": "/index.html"
     },
     {
       "src": "/reset-password/[^/]+",
-      "dest": "/index.html",
-      "status": 200
+      "dest": "/index.html"
     },
     {
       "src": "/(login|signup|about-us|how-it-works|subscription|vehicles|profile|cart|checkout|sell-vehicle|contact)",
-      "dest": "/index.html",
-      "status": 200
+      "dest": "/index.html"
     },
     {
       "src": "/assets/(.*)",
-      "headers": { "cache-control": "public, max-age=31536000, immutable" },
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable"
+      },
       "continue": true
     },
     {
       "src": "/(.*)",
       "dest": "/index.html"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "X-Frame-Options",
-          "value": "DENY"
-        },
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        },
-        {
-          "key": "X-XSS-Protection",
-          "value": "1; mode=block"
-        },
-        {
-          "key": "Referrer-Policy",
-          "value": "strict-origin-when-cross-origin"
-        }
-      ]
     }
   ],
   "buildCommand": "npm run build",
