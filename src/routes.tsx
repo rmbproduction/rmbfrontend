@@ -22,6 +22,8 @@ import ResetPassword from './pages/ResetPassword';
 import PasswordResetConfirmation from './pages/PasswordResetConfirmation';
 import SellVehicle from './pages/SellVehicle';
 import AboutPage from './pages/AboutPage';
+import NotFound from './pages/NotFound';
+import Pricing from './pages/pricing';
 
 // Layout wrapper for consistent layout
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -51,6 +53,18 @@ const AppRoutes: React.FC = () => {
       <Route path="/about-us" element={
         <MainLayout>
           <AboutPage />
+        </MainLayout>
+      } />
+
+      <Route path="/how-it-works" element={
+        <MainLayout>
+          <HowItWorks />
+        </MainLayout>
+      } />
+
+      <Route path="/subscription" element={
+        <MainLayout>
+          <Pricing />
         </MainLayout>
       } />
 
@@ -119,6 +133,13 @@ const AppRoutes: React.FC = () => {
       <Route path="/contact" element={
         <MainLayout>
           <Contact />
+        </MainLayout>
+      } />
+
+      {/* Catch-all route for 404 */}
+      <Route path="*" element={
+        <MainLayout>
+          <NotFound />
         </MainLayout>
       } />
     </Routes>

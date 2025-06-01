@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button, notification } from 'antd';
 import { ShoppingCartOutlined, CreditCardOutlined } from '@ant-design/icons';
 import { axiosInstance, API_ENDPOINTS, apiService } from '../config/api.config';
-import { useActiveCart, useAddToCartMutation, Cart } from '../hooks/cart/useCartQueries';
+import { useActiveCart, useAddToCartMutation, Cart, useCartCountStore } from '../hooks/cart/useCartQueries';
 import { useAuth } from '../contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { useVehicleSelection } from '../hooks/vehicle/useVehicleSelection';
@@ -47,6 +47,7 @@ const PackageActions: React.FC<PackageActionsProps> = ({
   const addToCart = useAddToCartMutation();
   const { isAuthenticated } = useAuth();
   const { setSelectedVehicle } = useVehicleSelection();
+  const { incrementCartCount } = useCartCountStore();
 
   // Query to get the service price
   const { isLoading: isPriceLoading } = useQuery({
@@ -71,32 +72,21 @@ const PackageActions: React.FC<PackageActionsProps> = ({
         return;
       }
 
-      // If no active cart, try to create one
+      let cartId: number;
+
+      // If no active cart, create one immediately
       if (!activeCart) {
-        try {
-          const createCartResponse = await apiService.services.createCart();
-          if (!createCartResponse?.data?.id) {
-            notification.error({
-              message: 'Cart Error',
-              description: 'Unable to create a new cart. Please try again.',
-            });
-            return;
-          }
-          // Wait for the cart query to update
-          await new Promise(resolve => setTimeout(resolve, 500));
-        } catch (error) {
-          console.error('Error creating cart:', error);
-          notification.error({
-            message: 'Cart Error',
-            description: 'Unable to create a new cart. Please try again.',
-          });
-          return;
+        const createCartResponse = await apiService.services.createCart();
+        if (!createCartResponse?.data?.id) {
+          throw new Error('Failed to create cart');
         }
+        cartId = createCartResponse.data.id;
+      } else {
+        cartId = activeCart.id;
       }
 
       // Store service details in cart items
-      const cartItems = JSON.parse(localStorage.getItem('cartItems') || '[]');
-      cartItems.push({
+      const cartItem = {
         serviceId,
         packageId,
         serviceName,
@@ -113,23 +103,17 @@ const PackageActions: React.FC<PackageActionsProps> = ({
         isSubscription,
         planId,
         duration,
-      });
+      };
+
+      // Optimistically update the cart count and localStorage
+      incrementCartCount();
+      const cartItems = JSON.parse(localStorage.getItem('cartItems') || '[]');
+      cartItems.push(cartItem);
       localStorage.setItem('cartItems', JSON.stringify(cartItems));
 
-      // Get the latest active cart
-      const currentCart = await apiService.services.getUserCarts();
-      const latestCart = currentCart.data?.find((cart: Cart) => cart.status === 'active');
-      
-      if (!latestCart?.id) {
-        notification.error({
-          message: 'Cart Error',
-          description: 'Unable to find active cart. Please try again.',
-        });
-        return;
-      }
-
+      // Add item to cart in the background
       await addToCart.mutateAsync({
-        cartId: latestCart.id,
+        cartId,
         item: {
           service_id: serviceId,
           package_id: packageId,
@@ -144,6 +128,11 @@ const PackageActions: React.FC<PackageActionsProps> = ({
         description: 'Service package has been added to your cart.',
       });
     } catch (error: any) {
+      // Revert optimistic updates on error
+      const cartItems = JSON.parse(localStorage.getItem('cartItems') || '[]');
+      cartItems.pop(); // Remove the last added item
+      localStorage.setItem('cartItems', JSON.stringify(cartItems));
+      
       if (error?.response?.status === 401) {
         notification.error({
           message: 'Session Expired',

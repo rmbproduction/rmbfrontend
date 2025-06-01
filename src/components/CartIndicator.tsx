@@ -2,11 +2,11 @@ import React from 'react';
 import { Badge } from 'antd';
 import { ShoppingCartOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { useActiveCart } from '../hooks/cart/useCartQueries';
+import { useCartCountStore } from '../hooks/cart/useCartQueries';
 
 const CartIndicator: React.FC = () => {
   const navigate = useNavigate();
-  const { cartCount } = useActiveCart();
+  const { count: cartCount } = useCartCountStore();
 
   return (
     <Badge count={cartCount} showZero>

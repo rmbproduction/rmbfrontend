@@ -11,6 +11,7 @@ import EmailVerification from './pages/EmailVerification';
 import EmailConfirmation from './pages/EmailConfirmation';
 import ResetPassword from './pages/ResetPassword';
 import PasswordResetConfirmation from './pages/PasswordResetConfirmation';
+import NotFound from './pages/NotFound';
 
 // Temporary: Log the API URL to verify environment variable
 console.log('API URL:', import.meta.env.VITE_API_BASE_URL);

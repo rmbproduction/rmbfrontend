@@ -1,4 +1,5 @@
 import { Phone, Mail, MapPin, Facebook, Twitter, Instagram, Youtube } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const Footer = () => {
   return (
@@ -12,11 +13,31 @@ const Footer = () => {
           <div>
             <h3 className="text-white text-lg font-semibold mb-4">Quick Links</h3>
             <ul className="space-y-2">
-              <li><a href="/services" className="text-gray-400 hover:text-white">Services</a></li>
-              <li><a href="/how-it-works" className="text-gray-400 hover:text-white">How It Works</a></li>
-              <li><a href="/subscription" className="text-gray-400 hover:text-white">Subscription</a></li>
-              <li><a href="/contact-us" className="text-gray-400 hover:text-white">Contact</a></li>
-              <li><a href="/about-us" className="text-gray-400 hover:text-white">About Us</a></li>
+              <li>
+                <Link to="/" className="text-gray-400 hover:text-white">
+                  Services
+                </Link>
+              </li>
+              <li>
+                <Link to="/how-it-works" className="text-gray-400 hover:text-white">
+                  How It Works
+                </Link>
+              </li>
+              <li>
+                <Link to="/subscription" className="text-gray-400 hover:text-white">
+                  Subscription
+                </Link>
+              </li>
+              <li>
+                <Link to="/contact" className="text-gray-400 hover:text-white">
+                  Contact
+                </Link>
+              </li>
+              <li>
+                <Link to="/about-us" className="text-gray-400 hover:text-white">
+                  About Us
+                </Link>
+              </li>
             </ul>
           </div>
           <div>
@@ -39,13 +60,28 @@ const Footer = () => {
           <div>
             <h3 className="text-white text-lg font-semibold mb-4">Follow Us</h3>
             <div className="flex space-x-4">
-              <a href="#" className="text-gray-400 hover:text-white">
+              <a 
+                href="https://www.facebook.com/repairmybike" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="text-gray-400 hover:text-white"
+              >
                 <Facebook className="h-6 w-6" />
               </a>
-              <a href="https://www.youtube.com/@repairmybike" className="text-gray-400 hover:text-white">
+              <a 
+                href="https://www.youtube.com/@repairmybike" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="text-gray-400 hover:text-white"
+              >
                 <Youtube className="h-6 w-6" />
               </a>
-              <a href="https://www.instagram.com/repair_my_bike" className="text-gray-400 hover:text-white">
+              <a 
+                href="https://www.instagram.com/repair_my_bike" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="text-gray-400 hover:text-white"
+              >
                 <Instagram className="h-6 w-6" />
               </a>
             </div>

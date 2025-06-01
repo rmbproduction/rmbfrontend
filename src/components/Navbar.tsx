@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
-import { useActiveCart } from '../hooks/cart/useCartQueries';
+import { useCartCountStore } from '../hooks/cart/useCartQueries';
 
 // Define menu items to avoid duplication
 const MENU_ITEMS = [
@@ -40,7 +40,7 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated, logout } = useAuth();
-  const { cartCount } = useActiveCart();
+  const { count: cartCount } = useCartCountStore();
 
   const handleNavigation = (path: string, section?: string) => {
     if (section && path === '/') {
