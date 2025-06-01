@@ -7,16 +7,6 @@
   ],
   "routes": [
     {
-      "src": "/profile",
-      "dest": "/index.html",
-      "status": 200
-    },
-    {
-      "src": "/profile\\?tab=.*",
-      "dest": "/index.html",
-      "status": 200
-    },
-    {
       "src": "/[^.]+",
       "dest": "/",
       "status": 200
