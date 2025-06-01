@@ -246,10 +246,10 @@ const ServiceDetails = () => {
   const IconComponent = getIconForCategory(serviceCategory.slug);
 
   return (
-    <div className="py-12 bg-gray-50">
+    <div className="py-6 sm:py-12 bg-gray-50">
       <div className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8">
         {/* Search Bar */}
-        <div className="mb-8">
+        <div className="mb-6 sm:mb-8">
           <div className="relative max-w-xl mx-auto">
             <input
               type="text"
@@ -262,26 +262,26 @@ const ServiceDetails = () => {
           </div>
         </div>
 
-        {/* Main Content - Now Full Width */}
+        {/* Main Content */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-2xl shadow-lg overflow-hidden"
         >
-          <div className="p-8">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-16 h-16 bg-[#FFF5F2] rounded-xl flex items-center justify-center">
-                {IconComponent && <IconComponent className="w-8 h-8 text-[#FF5733]" />}
+          <div className="p-4 sm:p-8">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-[#FFF5F2] rounded-xl flex items-center justify-center flex-shrink-0">
+                {IconComponent && <IconComponent className="w-6 h-6 sm:w-8 sm:h-8 text-[#FF5733]" />}
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">{serviceCategory.name}</h1>
-                <p className="text-gray-600 mt-1">{serviceCategory.description}</p>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{serviceCategory.name}</h1>
+                <p className="text-sm sm:text-base text-gray-600 mt-1">{serviceCategory.description}</p>
               </div>
             </div>
 
             {/* Service Packages */}
             {filteredServices.length > 0 ? (
-              <div className="grid gap-8 mt-8">
+              <div className="grid gap-6 sm:gap-8 mt-6 sm:mt-8">
                 {filteredServices.map((service, index) => {
                   const priceQuery = servicePriceQueries[index];
                   const priceData = priceQuery.data as ServicePrice | null;
@@ -293,40 +293,40 @@ const ServiceDetails = () => {
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.2 }}
-                      className="border border-gray-200 rounded-xl p-6"
+                      className="border border-gray-200 rounded-xl p-4 sm:p-6"
                     >
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h3 className="text-xl font-semibold text-gray-900">{service.name}</h3>
-                          <div className="flex items-center gap-4 mt-2">
-                            <div className="flex items-center text-gray-600">
+                      <div className="flex flex-col lg:flex-row justify-between items-start gap-4 mb-4">
+                        <div className="w-full lg:w-3/5">
+                          <h3 className="text-lg sm:text-xl font-semibold text-gray-900">{service.name}</h3>
+                          <div className="flex flex-wrap items-center gap-3 mt-2">
+                            <div className="flex items-center text-sm text-gray-600">
                               <Clock className="w-4 h-4 mr-1" />
                               {service.duration}
                             </div>
-                            <div className="flex items-center text-gray-600">
+                            <div className="flex items-center text-sm text-gray-600">
                               <Shield className="w-4 h-4 mr-1" />
                               {service.warranty}
                             </div>
                           </div>
-                          <p className="text-sm text-gray-500 mt-1 mb-4">
+                          <p className="text-sm text-gray-500 mt-2 mb-3">
                             Recommended: {service.recommended}
                           </p>
 
                           <div className="grid gap-2">
                             {service.features.map((feature) => (
-                              <div key={feature.id} className="flex items-center text-gray-700">
-                                <CheckCircle2 className="w-5 h-5 text-green-500 mr-2" />
+                              <div key={feature.id} className="flex items-center text-sm text-gray-700">
+                                <CheckCircle2 className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
                                 {feature.name}
                               </div>
                             ))}
                           </div>
                         </div>
 
-                        <div className="text-right">
-                          <div className="flex flex-col items-end">
+                        <div className="w-full lg:w-2/5">
+                          <div className="flex flex-col items-center lg:items-end">
                             {!selectedVehicle ? (
-                              <div className="text-sm text-[#FF5733] font-medium">
-                                <div className="w-64 h-64 rounded-2xl overflow-hidden bg-white mb-2 border-2 border-gray-100 shadow-sm hover:border-[#FF5733]/20 transition-colors">
+                              <div className="text-sm text-[#FF5733] font-medium text-center lg:text-right">
+                                <div className="w-full sm:w-48 h-48 rounded-2xl overflow-hidden bg-white mb-2 border-2 border-gray-100 shadow-sm hover:border-[#FF5733]/20 transition-colors mx-auto lg:mx-0">
                                   <img 
                                     src={service.image_url || 'https://res.cloudinary.com/dz81bjuea/image/upload/v1748293273/service_images/w9lk6pnvvhnsp4dxhgop.png'} 
                                     alt="Service illustration"
@@ -336,36 +336,19 @@ const ServiceDetails = () => {
                                 Select vehicle to view pricing
                               </div>
                             ) : (
-                              <div className="flex justify-end items-center">
+                              <div className="flex flex-col items-center lg:items-end">
                                 {isPriceLoading ? (
                                   <div className="flex items-center">
                                     <Spin size="small" className="mr-2" />
                                     <span className="text-sm text-gray-500">Loading price...</span>
                                   </div>
                                 ) : (
-                                  <div className="flex flex-col items-end">
-                                    <div className="flex items-center text-lg font-semibold text-gray-900">
-                                      {priceData ? (
-                                        <>
-                                          <span>₹{parseFloat(priceData.price).toLocaleString('en-IN')}</span>
-                                          {priceData.is_custom_price ? (
-                                            <span className="ml-2 text-xs text-[#FF5733] font-normal">
-                                              Special price for {selectedVehicle.manufacturer} {selectedVehicle.model}
-                                            </span>
-                                          ) : (
-                                            <span className="ml-2 text-xs text-gray-500 font-normal">
-                                              Standard price for {selectedVehicle.manufacturer} {selectedVehicle.model}
-                                            </span>
-                                          )}
-                                        </>
-                                      ) : (
-                                        <>
-                                          <span>₹{parseFloat(service.base_price).toLocaleString('en-IN')}</span>
-                                          <span className="ml-2 text-xs text-gray-500 font-normal">
-                                            Standard price for {selectedVehicle.manufacturer} {selectedVehicle.model}
-                                          </span>
-                                        </>
-                                      )}
+                                  <div className="flex flex-col items-center lg:items-end">
+                                    <div className="flex flex-col lg:flex-row items-center lg:items-end text-lg font-semibold text-gray-900">
+                                      <span>₹{parseFloat(priceData?.price || service.base_price).toLocaleString('en-IN')}</span>
+                                      <span className="text-xs text-gray-500 font-normal mt-1 lg:mt-0 lg:ml-2">
+                                        {priceData?.is_custom_price ? 'Special' : 'Standard'} price for {selectedVehicle.manufacturer} {selectedVehicle.model}
+                                      </span>
                                     </div>
                                     {priceData?.is_custom_price && (
                                       <div className="text-xs text-gray-500 mt-1">
@@ -380,10 +363,10 @@ const ServiceDetails = () => {
                         </div>
                       </div>
 
-                      <div className="mt-8">
+                      <div className="mt-6">
                         {!selectedVehicle ? (
-                          <div className="bg-gray-50 rounded-lg p-4 text-center flex items-center justify-center">
-                            <p className="text-gray-600 font-medium">👆 Please select your vehicle to proceed</p>
+                          <div className="bg-gray-50 rounded-lg p-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+                            <p className="text-sm text-gray-600 font-medium text-center">👆 Please select your vehicle to proceed</p>
                             <VehicleSelectButton 
                               selectedVehicle={null} 
                               onOpenModal={() => setIsVehicleModalOpen(true)}
@@ -391,7 +374,7 @@ const ServiceDetails = () => {
                             />
                           </div>
                         ) : (
-                          <div className="flex items-center justify-between bg-gray-50 rounded-lg p-4">
+                          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-gray-50 rounded-lg p-4">
                             <VehicleSelectButton 
                               selectedVehicle={selectedVehicle} 
                               onOpenModal={() => setIsVehicleModalOpen(true)}

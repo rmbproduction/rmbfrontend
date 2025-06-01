@@ -8,12 +8,13 @@ interface Stat {
   value: string;
 }
 
-interface TeamMember {
-  name: string;
-  role: string;
-  image: string;
-  bio: string;
-}
+// Commented out TeamMember interface as it's no longer needed
+// interface TeamMember {
+//   name: string;
+//   role: string;
+//   image: string;
+//   bio: string;
+// }
 
 const AboutPage = () => {
   const stats: Stat[] = [
@@ -23,38 +24,39 @@ const AboutPage = () => {
     { icon: Award, label: 'Reliability', value: '100%' },
   ];
 
-  const team: TeamMember[] = [
-    {
-      name: 'John Smith',
-      role: 'Master Mechanic',
-      image: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
-      bio: '15 years of experience in bike repairs and maintenance.',
-    },
-    {
-      name: 'Sarah Johnson',
-      role: 'Service Manager',
-      image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
-      bio: 'Expert in customer service and team management.',
-    },
-    {
-      name: 'Michael Chen',
-      role: 'Technical Specialist',
-      image: 'https://images.unsplash.com/photo-1519244703995-f4e0f30006d5?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
-      bio: 'Specialized in modern bike electronics and diagnostics.',
-    },
-    {
-      name: 'Rajesh Kumar',
-      role: 'Senior Mechanic',
-      image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
-      bio: 'Over 20 years of experience in all types of bike repairs.',
-    },
-    {
-      name: 'Alex Rodriguez',
-      role: 'Performance Specialist',
-      image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
-      bio: 'Expert in high-performance bike tuning and racing modifications.',
-    },
-  ];
+  // Commented out team data as it's no longer needed
+  // const team: TeamMember[] = [
+  //   {
+  //     name: 'John Smith',
+  //     role: 'Master Mechanic',
+  //     image: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
+  //     bio: '15 years of experience in bike repairs and maintenance.',
+  //   },
+  //   {
+  //     name: 'Sarah Johnson',
+  //     role: 'Service Manager',
+  //     image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
+  //     bio: 'Expert in customer service and team management.',
+  //   },
+  //   {
+  //     name: 'Michael Chen',
+  //     role: 'Technical Specialist',
+  //     image: 'https://images.unsplash.com/photo-1519244703995-f4e0f30006d5?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
+  //     bio: 'Specialized in modern bike electronics and diagnostics.',
+  //   },
+  //   {
+  //     name: 'Rajesh Kumar',
+  //     role: 'Senior Mechanic',
+  //     image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
+  //     bio: 'Over 20 years of experience in all types of bike repairs.',
+  //   },
+  //   {
+  //     name: 'Alex Rodriguez',
+  //     role: 'Performance Specialist',
+  //     image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80',
+  //     bio: 'Expert in high-performance bike tuning and racing modifications.',
+  //   },
+  // ];
 
   return (
     <div className="py-20 bg-gray-50">
@@ -125,6 +127,7 @@ const AboutPage = () => {
           })}
         </motion.div>
 
+        {/* Commented out Our Expert Team section
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -158,6 +161,7 @@ const AboutPage = () => {
             </div>
           </div>
         </motion.div>
+        */}
       </div>
     </div>
   );

@@ -12,9 +12,6 @@ import { useActiveCart } from '../hooks/cart/useCartQueries';
 // Define menu items to avoid duplication
 const MENU_ITEMS = [
   { label: 'Services', path: '/', section: 'services' },
-  { label: 'How It Works', path: '/', section: 'how-it-works' },
-  { label: 'Subscription', path: '/subscription' },
-  { label: 'About Us', path: '/about-us' },
 ];
 
 // Define vehicle menu items for dropdown
