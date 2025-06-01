@@ -530,8 +530,7 @@ const Profile = () => {
         return <MyRepairs />;
       case 'subscriptions':
         return <MySubscription />;
-      // case 'change-password':
-      //   return <div>Change Password</div>;
+
       default:
         return null;
     }
