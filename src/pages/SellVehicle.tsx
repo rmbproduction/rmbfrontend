@@ -70,7 +70,7 @@ const VALIDATION_RULES: ValidationRules = {
   model: { required: true, message: 'Please enter the model name' },
   year: { 
     required: true, 
-    pattern: /^\d{4}$/, 
+    pattern: /^\d{4}$/,
     min: 1900,
     max: new Date().getFullYear(),
     message: 'Please enter a valid year'
@@ -237,8 +237,8 @@ export default function SellVehicle() {
     }
 
     // Time validation
-    const hours = pickupDate.getHours();
-    const minutes = pickupDate.getMinutes();
+    const selectedHours = pickupDate.getHours();
+    const selectedMinutes = pickupDate.getMinutes();
     
     // Create time boundaries for the selected date
     const startTime = setMinutes(setHours(new Date(pickupDate), 9), 0);  // 9:00 AM
@@ -250,7 +250,7 @@ export default function SellVehicle() {
     }
 
     // Validate 30-minute intervals
-    if (minutes !== 0 && minutes !== 30) {
+    if (selectedMinutes !== 0 && selectedMinutes !== 30) {
       return 'Pickup slots are available every 30 minutes';
     }
 
@@ -435,8 +435,6 @@ export default function SellVehicle() {
           }
         );
 
-        console.log('Registration check response:', checkResponse.data);
-
         if (checkResponse.data.exists) {
           setModalState({
             isOpen: true,
@@ -448,10 +446,8 @@ export default function SellVehicle() {
           return;
         }
       } catch (error: any) {
-        // Log the error for debugging
         console.error('Registration check error:', error.response || error);
         
-        // Only show error modal if it's not a 404 (not found) error
         if (error.response?.status !== 404) {
           setModalState({
             isOpen: true,
@@ -462,101 +458,72 @@ export default function SellVehicle() {
           setLoading(false);
           return;
         }
-        // If it's a 404, the registration number doesn't exist, so we can continue
       }
 
-      // Now create the sell request
-      try {
-        // Create a proper FormData object
-        const sellRequestFormData = new FormData();
-        
-        // Add all form fields
-        Object.entries(formData).forEach(([key, value]) => {
-          if (key === 'pickup_slot') {
-            // Format the pickup slot to ISO string
-            const pickupDate = new Date(value);
-            sellRequestFormData.append(key, pickupDate.toISOString());
-          } else {
-            sellRequestFormData.append(key, value.toString());
-          }
-        });
-
-        // Add all files with proper field names
-        Object.entries(files).forEach(([key, file]) => {
-          if (file) {
-            // Map the file keys to the expected backend field names
-            const fieldName = key.includes('photo_') ? key : key;
-            sellRequestFormData.append(fieldName, file);
-          }
-        });
-
-        const sellRequestResponse = await axios.post(
-          `${API_CONFIG.baseURL}/marketplace/sell-requests/`,
-          sellRequestFormData,
-          {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'multipart/form-data'
-            }
-          }
-        );
-
-        // Handle successful submission
-        setModalState({
-          isOpen: true,
-          type: 'success',
-          title: 'Success',
-          message: 'Your vehicle sell request has been submitted successfully. Our team will review it and get back to you soon.'
-        });
-        
-        // Reset form and loading state
-        setLoading(false);
-        resetForm();
-        
-      } catch (error: any) {
-        setLoading(false);
-        let errorMessage = 'Failed to submit sell request. Please try again.';
-        
-        if (error.response?.data?.detail) {
-          errorMessage = error.response.data.detail;
-        } else if (error.response?.data) {
-          // Format validation errors
-          const errors = error.response.data;
-          errorMessage = Object.entries(errors)
-            .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages[0] : messages}`)
-            .join('\n');
-        }
-        
-        setModalState({
-          isOpen: true,
-          type: 'error',
-          title: 'Submission Error',
-          message: errorMessage
-        });
-      }
-
-    } catch (error: any) {
-      let errorMessage = 'An unexpected error occurred. Please try again.';
+      // Create a proper FormData object
+      const sellRequestFormData = new FormData();
       
-      if (error.response?.status === 401) {
-        errorMessage = 'Your session has expired. Please log in again.';
-        navigate('/login', { state: { from: '/sell-vehicle' } });
-      } else if (error.response?.data?.detail) {
+      // Add all form fields
+      Object.entries(formData).forEach(([key, value]) => {
+        if (key === 'pickup_slot') {
+          // Format the pickup slot to ISO string
+          const pickupDate = new Date(value);
+          sellRequestFormData.append(key, pickupDate.toISOString());
+        } else {
+          sellRequestFormData.append(key, value.toString());
+        }
+      });
+
+      // Add all files with proper field names
+      Object.entries(files).forEach(([key, file]) => {
+        if (file) {
+          sellRequestFormData.append(key, file);
+        }
+      });
+
+      const response = await axios.post(
+        `${API_CONFIG.baseURL}/marketplace/sell-requests/`,
+        sellRequestFormData,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
+
+      // Handle successful submission
+      setModalState({
+        isOpen: true,
+        type: 'success',
+        title: 'Success',
+        message: 'Your vehicle sell request has been submitted successfully. Our team will review it and get back to you soon.'
+      });
+      
+      // Reset form and loading state
+      setLoading(false);
+      resetForm();
+      
+    } catch (error: any) {
+      setLoading(false);
+      let errorMessage = 'Failed to submit sell request. Please try again.';
+      
+      if (error.response?.data?.detail) {
         errorMessage = error.response.data.detail;
       } else if (error.response?.data) {
-        errorMessage = Object.entries(error.response.data)
-          .map(([key, value]) => `${key}: ${value}`)
+        // Format validation errors
+        const errors = error.response.data;
+        errorMessage = Object.entries(errors)
+          .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages[0] : messages}`)
           .join('\n');
       }
-
+      
       setModalState({
         isOpen: true,
         type: 'error',
-        title: 'Error',
+        title: 'Submission Error',
         message: errorMessage
       });
-    } finally {
-      setLoading(false);
     }
   };
 

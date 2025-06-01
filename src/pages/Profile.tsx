@@ -24,9 +24,6 @@ interface UserProfile {
   phone: string;
   address: string;
   profile_photo: string | null;
-  vehicle_name: number | null;
-  vehicle_type: number | null;
-  manufacturer: number | null;
   city: string;
   state: string;
   country: string;
@@ -40,26 +37,6 @@ interface SidebarProps {
 
 type TabType = 'profile' | 'vehicles' | 'bookings' | 'repairs' | 'subscriptions' | 'change-password';
 
-interface VehicleType {
-  id: number;
-  name: string;
-}
-
-interface Manufacturer {
-  id: number;
-  name: string;
-}
-
-interface VehicleModel {
-  id: number;
-  name: string;
-  manufacturer: number;
-  manufacturer_name: string;
-  vehicle_type: number;
-  vehicle_type_name: string;
-  image: string | null;
-}
-
 const defaultProfile: UserProfile = {
   email: '',
   username: '',
@@ -67,9 +44,6 @@ const defaultProfile: UserProfile = {
   phone: '',
   address: '',
   profile_photo: null,
-  vehicle_name: null,
-  vehicle_type: null,
-  manufacturer: null,
   city: '',
   state: '',
   country: '',
@@ -88,9 +62,6 @@ const Profile = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [profileData, setProfileData] = useState<UserProfile | null>(null);
   const [formData, setFormData] = useState<UserProfile>(defaultProfile);
-  const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
-  const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
-  const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([]);
   const [isLoadingVehicleData, setIsLoadingVehicleData] = useState(false);
   const [isNewProfile, setIsNewProfile] = useState(true);
   const [vehicleDataLoaded, setVehicleDataLoaded] = useState(false);
@@ -132,9 +103,6 @@ const Profile = () => {
         state: user.profile?.state || '',
         country: user.profile?.country || '',
         postal_code: user.profile?.postal_code || '',
-        vehicle_name: user.profile?.vehicle_name || null,
-        vehicle_type: user.profile?.vehicle_type || null,
-        manufacturer: user.profile?.manufacturer || null,
         profile_photo: user.profile?.profile_photo || null
       });
     }
@@ -171,9 +139,6 @@ const Profile = () => {
           state: profileData.state || '',
           country: profileData.country || '',
           postal_code: profileData.postal_code || '',
-          vehicle_name: profileData.vehicle_name || null,
-          vehicle_type: profileData.vehicle_type || null,
-          manufacturer: profileData.manufacturer || null,
           profile_photo: profileData.profile_photo || null
         });
 
@@ -200,119 +165,6 @@ const Profile = () => {
     }
   }, [isAuthenticated]);
 
-  // Fetch vehicle data
-  const fetchVehicleData = async () => {
-    try {
-      setIsLoadingVehicleData(true);
-      console.log('Fetching vehicle data...');
-
-      const [typesRes, manufacturersRes, modelsRes] = await Promise.all([
-        apiService.vehicle.getTypes(),
-        apiService.vehicle.getManufacturers(),
-        apiService.vehicle.getModels()
-      ]);
-
-      console.log('Vehicle Data Loaded:', {
-        types: typesRes.data,
-        manufacturers: manufacturersRes.data,
-        models: modelsRes.data
-      });
-
-      setVehicleTypes(typesRes.data);
-      setManufacturers(manufacturersRes.data);
-      setVehicleModels(modelsRes.data);
-      setVehicleDataLoaded(true);
-    } catch (error) {
-      console.error('Error fetching vehicle data:', error);
-      toast.error('Failed to load vehicle information');
-    } finally {
-      setIsLoadingVehicleData(false);
-    }
-  };
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchVehicleData();
-    }
-  }, [isAuthenticated]);
-
-  // Handle vehicle type change
-  const handleVehicleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const typeId = e.target.value ? Number(e.target.value) : null;
-    console.log('Vehicle Type Changed:', { typeId });
-    
-    setFormData(prev => ({
-      ...prev,
-      vehicle_type: typeId,
-      manufacturer: null, // Reset dependent fields
-      vehicle_name: null
-    }));
-  };
-
-  // Handle manufacturer change
-  const handleManufacturerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const manufacturerId = e.target.value ? Number(e.target.value) : null;
-    console.log('Manufacturer Changed:', { manufacturerId });
-    
-    setFormData(prev => ({
-      ...prev,
-      manufacturer: manufacturerId,
-      vehicle_name: null // Reset dependent field
-    }));
-  };
-
-  // Handle vehicle model change
-  const handleVehicleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const modelId = e.target.value ? Number(e.target.value) : null;
-    console.log('Vehicle Model Changed:', { modelId });
-    
-    setFormData(prev => ({
-      ...prev,
-      vehicle_name: modelId
-    }));
-  };
-
-  // Filter models based on selected manufacturer and type
-  const getFilteredModels = () => {
-    return vehicleModels.filter(model => 
-      (!formData.manufacturer || model.manufacturer === formData.manufacturer) &&
-      (!formData.vehicle_type || model.vehicle_type === formData.vehicle_type)
-    );
-  };
-
-  // Show loading state
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <Loader className="h-8 w-8 animate-spin text-[#FF5733] mx-auto" />
-          <p className="mt-2 text-gray-600">Loading profile...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // If not authenticated or no user data, show error state
-  if (!isAuthenticated || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-            <X className="h-6 w-6 text-red-600" />
-          </div>
-          <h2 className="text-lg font-semibold text-gray-900">Authentication Required</h2>
-          <p className="mt-2 text-gray-600">Please log in to view your profile</p>
-          <button
-            onClick={() => navigate('/login')}
-            className="mt-4 px-4 py-2 bg-[#FF5733] text-white rounded-lg hover:bg-[#ff4019]"
-          >
-            Go to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   const handleLogout = async () => {
     try {
       await logout();
@@ -336,25 +188,16 @@ const Profile = () => {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
-    // Convert vehicle-related fields to numbers
-    if (['vehicle_name', 'vehicle_type', 'manufacturer'].includes(name)) {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value ? Number(value) : null
-      }));
-    } else {
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
-    }
   };
 
   const handleSave = async () => {
     try {
       setIsSaving(true);
       
-      // Log the current form data
       console.log('Current Form Data:', formData);
 
       // Basic validation
@@ -394,9 +237,6 @@ const Profile = () => {
         name: formData.name,
         address: formData.address,
         profile_photo: formData.profile_photo,
-        vehicle_name: formData.vehicle_name,
-        vehicle_type: formData.vehicle_type,
-        manufacturer: formData.manufacturer,
         city: formData.city,
         state: formData.state,
         country: formData.country,
@@ -404,7 +244,6 @@ const Profile = () => {
         phone: formData.phone
       };
 
-      // Log the data being sent to API
       console.log('Sending Profile Data:', {
         method: isNewProfile ? 'POST' : 'PATCH',
         data: profileData
@@ -420,13 +259,11 @@ const Profile = () => {
         console.log('Profile Updated:', response.data);
       }
 
-      // Update the form data with the response data
       setFormData(prev => ({
         ...prev,
         ...response.data
       }));
 
-      // Update the profile cache
       updateProfile(response.data);
 
       console.log('Form data after save:', {
@@ -437,7 +274,6 @@ const Profile = () => {
       toast.success(`Profile ${isNewProfile ? 'created' : 'updated'} successfully!`);
       setIsEditing(false);
       
-      // Refresh profile data
       await fetchProfileData();
     } catch (error) {
       console.error('Error saving profile:', error);
@@ -655,9 +491,6 @@ const Profile = () => {
                     />
                   </div>
 
-              {/* Vehicle Information */}
-              {renderVehicleDropdowns()}
-
               {/* Save Button */}
               {isEditing && (
                 <div className="flex justify-end space-x-3">
@@ -768,72 +601,6 @@ const Profile = () => {
           <LogOut className="h-5 w-5 mr-3" />
           Logout
         </button>
-      </div>
-    </div>
-  );
-
-  // Update the vehicle dropdowns in the render section
-  const renderVehicleDropdowns = () => (
-    <div className="pt-6">
-      <h3 className="text-lg font-medium text-gray-900 mb-4">Vehicle Information</h3>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Vehicle Type
-          </label>
-          <select
-            name="vehicle_type"
-            value={formData.vehicle_type || ''}
-            onChange={handleVehicleTypeChange}
-            disabled={!isEditing}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-          >
-            <option value="">Select vehicle type</option>
-            {vehicleTypes.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Manufacturer
-          </label>
-          <select
-            name="manufacturer"
-            value={formData.manufacturer || ''}
-            onChange={handleManufacturerChange}
-            disabled={!isEditing || !formData.vehicle_type}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-          >
-            <option value="">Select manufacturer</option>
-            {manufacturers.map((mfr) => (
-              <option key={mfr.id} value={mfr.id}>
-                {mfr.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Vehicle Model
-          </label>
-          <select
-            name="vehicle_name"
-            value={formData.vehicle_name || ''}
-            onChange={handleVehicleModelChange}
-            disabled={!isEditing || !formData.manufacturer}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-          >
-            <option value="">Select model</option>
-            {getFilteredModels().map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.name}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
     </div>
   );
