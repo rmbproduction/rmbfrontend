@@ -184,12 +184,35 @@ const Checkout = () => {
         return;
       }
 
-      if (mode === 'cart' && !activeCart?.id) {
-        notification.error({
-          message: 'Cart Error',
-          description: 'Invalid cart. Please try refreshing the page.',
-        });
-        return;
+      // For cart mode, verify cart exists and has items
+      if (mode === 'cart') {
+        if (!activeCart) {
+          notification.error({
+            message: 'Cart Error',
+            description: 'Your cart could not be found. Please try refreshing the page.',
+          });
+          return;
+        }
+
+        if (!activeCart.items || activeCart.items.length === 0) {
+          notification.error({
+            message: 'Empty Cart',
+            description: 'Your cart is empty. Please add items before proceeding.',
+          });
+          return;
+        }
+      }
+
+      // For buy-now mode, verify checkout item exists
+      if (mode === 'buy-now') {
+        const checkoutItem = JSON.parse(localStorage.getItem('checkoutItem') || 'null');
+        if (!checkoutItem) {
+          notification.error({
+            message: 'Checkout Error',
+            description: 'Service information not found. Please try selecting the service again.',
+          });
+          return;
+        }
       }
 
       // Save the profile data to cache
@@ -235,7 +258,7 @@ const Checkout = () => {
       console.log('Submitting booking with data:', bookingData);
 
       // If it's a cart booking, immediately clear the cart UI
-      if (mode === 'cart') {
+      if (mode === 'cart' && activeCart?.id) {
         queryClient.setQueryData(['cart'], null);
         queryClient.setQueryData(['cart', 'active'], null);
       }
