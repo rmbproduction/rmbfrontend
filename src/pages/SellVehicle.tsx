@@ -72,46 +72,40 @@ const VALIDATION_RULES: ValidationRules = {
     pattern: /^\d{4}$/, 
     min: 1900,
     max: new Date().getFullYear(),
-    message: 'Please enter a valid year between 1900 and current year'
+    message: 'Please enter a valid year'
   },
   registration_number: { 
     required: true, 
-    pattern: /^[A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{4}$/,
-    message: 'Please enter a valid registration number (e.g., MH02AB1234)'
+    message: 'Please enter the registration number'
   },
   kms_driven: { 
     required: true, 
     min: 0,
-    max: 500000,
-    message: 'Please enter valid kilometers driven (0-500,000)'
+    message: 'Please enter kilometers driven'
   },
   fuel_type: { required: true, message: 'Please select a fuel type' },
   engine_capacity: { 
     required: true,
-    min: 50,
-    max: 2500,
-    message: 'Please enter valid engine capacity (50-2500cc)'
+    min: 1,
+    message: 'Please enter engine capacity'
   },
   color: { required: true, message: 'Please enter the vehicle color' },
   expected_price: { 
     required: true,
-    min: 1000,
-    max: 1000000,
-    message: 'Please enter a valid price between ₹1,000 and ₹10,00,000'
+    min: 1,
+    message: 'Please enter expected price'
   },
   pickup_address: { 
     required: true, 
-    min: 10,
-    message: 'Please provide a complete pickup address (minimum 10 characters)'
+    message: 'Please provide pickup address'
   },
   contact_number: { 
     required: true,
-    pattern: /^\+?[1-9]\d{9,14}$/,
-    message: 'Please enter a valid contact number'
+    message: 'Please enter contact number'
   },
   pickup_slot: { 
     required: true, 
-    message: 'Please select a valid pickup slot between 9 AM and 6 PM on weekdays' 
+    message: 'Please select a pickup slot' 
   }
 };
 
@@ -267,13 +261,8 @@ export default function SellVehicle() {
       return rules.message;
     }
 
-    // Handle minimum length for string fields (like pickup_address)
-    if (rules.min !== undefined) {
-      if (typeof value === 'string' && value.length < rules.min) {
-        return rules.message;
-      } else if (typeof value === 'number' && value < rules.min) {
-        return rules.message;
-      }
+    if (rules.min !== undefined && Number(value) < rules.min) {
+      return rules.message;
     }
 
     if (rules.max !== undefined && Number(value) > rules.max) {

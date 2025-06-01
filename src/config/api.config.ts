@@ -68,24 +68,35 @@ axiosInstance.interceptors.request.use(
         try {
           const refreshToken = TokenManager.getRefreshToken();
           if (!refreshToken) {
+            console.warn('No refresh token found during request interceptor');
             TokenManager.clearTokens();
-            // Only redirect if not accessing a public route
-            if (!isPublicRoute(config.url || '')) {
+            // Only redirect if not accessing a public route and not already trying to refresh
+            if (!isPublicRoute(config.url || '') && !config.url?.includes('/token/refresh/')) {
               window.location.href = '/login';
+              return Promise.reject(new Error('No refresh token available'));
             }
-            return Promise.reject(new Error('Session expired'));
           }
 
-          const response = await axios.post(`${API_BASE_URL}/accounts/token/refresh/`, {
-            refresh: refreshToken
-          }, {
-            withCredentials: true,
-          });
+          // Only attempt refresh if we have a refresh token and aren't already refreshing
+          if (refreshToken && !config.url?.includes('/token/refresh/')) {
+            console.log('Attempting token refresh...');
+            const response = await axios.post(`${API_BASE_URL}/accounts/token/refresh/`, {
+              refresh: refreshToken
+            }, {
+              withCredentials: true,
+            });
 
-          const { access, refresh } = response.data;
-          TokenManager.setTokens({ access, refresh }, true);
-          config.headers.Authorization = `Bearer ${access}`;
+            if (!response.data?.access || !response.data?.refresh) {
+              throw new Error('Invalid refresh response');
+            }
+
+            const { access, refresh } = response.data;
+            TokenManager.setTokens({ access, refresh }, true);
+            config.headers.Authorization = `Bearer ${access}`;
+            console.log('Token refresh successful');
+          }
         } catch (error) {
+          console.error('Token refresh failed:', error);
           TokenManager.clearTokens();
           // Only redirect if not accessing a public route
           if (!isPublicRoute(config.url || '')) {
@@ -143,21 +154,34 @@ axiosInstance.interceptors.response.use(
       try {
         const refreshToken = TokenManager.getRefreshToken();
         if (!refreshToken) {
-          throw new Error('No refresh token available');
+          console.warn('No refresh token found during response interceptor');
+          TokenManager.clearTokens();
+          if (!isPublicRoute(originalRequest.url || '')) {
+            window.location.href = '/login';
+          }
+          return Promise.reject(new Error('No refresh token available'));
         }
 
-        // Try to refresh the token
+        console.log('Attempting token refresh after 401...');
         const response = await axios.post(`${API_BASE_URL}/accounts/token/refresh/`, {
           refresh: refreshToken
+        }, {
+          withCredentials: true
         });
+
+        if (!response.data?.access || !response.data?.refresh) {
+          throw new Error('Invalid refresh response');
+        }
 
         const { access, refresh } = response.data;
         TokenManager.setTokens({ access, refresh }, true);
 
         // Update the original request with new token
         originalRequest.headers.Authorization = `Bearer ${access}`;
+        console.log('Token refresh successful, retrying original request');
         return axiosInstance(originalRequest);
       } catch (refreshError) {
+        console.error('Token refresh failed after 401:', refreshError);
         // If refresh fails, clear tokens and only redirect if not on a public route
         TokenManager.clearTokens();
         if (!isPublicRoute(originalRequest.url || '')) {
