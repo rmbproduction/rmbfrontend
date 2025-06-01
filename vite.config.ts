@@ -16,7 +16,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom', 'zustand'],
-          ui: ['antd', 'framer-motion', 'lucide-react'],
+          ui: ['antd', 'framer-motion', 'lucide-react', 'react-toastify'],
           form: ['react-hook-form', '@hookform/resolvers/zod', 'zod'],
           query: ['@tanstack/react-query']
         }
@@ -25,6 +25,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000
   },
   optimizeDeps: {
+    include: ['react-toastify'],
     exclude: ['lucide-react'],
   },
   server: {
