@@ -10,7 +10,6 @@ const VehicleList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [vehicleCount, setVehicleCount] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const fetchVehicles = async () => {

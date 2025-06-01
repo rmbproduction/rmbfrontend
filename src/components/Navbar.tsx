@@ -2,8 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Wrench, Menu, X, ShoppingCart, User, ChevronDown, 
-  Bike, Clock, Settings, LogOut, UserCircle, Wallet,
-  Info
+  Bike, Clock, LogOut, UserCircle, Wallet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -71,27 +70,6 @@ const Navbar = () => {
     setIsVehicleMenuOpen(false);
   };
   
-  const CartIcon = () => (
-    <div 
-      className="relative cursor-pointer"
-      onClick={() => navigate('/cart')}
-    >
-      <ShoppingCart className="h-6 w-6 text-gray-700 hover:text-[#FF5733]" />
-      <AnimatePresence>
-        {cartCount > 0 && (
-          <motion.span
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            exit={{ scale: 0 }}
-            className="absolute -top-2 -right-2 bg-[#FF5733] text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"
-          >
-            {cartCount}
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-
   // Close user menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
