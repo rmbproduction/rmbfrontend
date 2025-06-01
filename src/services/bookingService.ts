@@ -53,7 +53,7 @@ const api = {
 
       // First check if the vehicle is available for booking
       const vehicleResponse = await axiosInstance.get(
-        API_CONFIG.getApiUrl(`marketplace/vehicles/${bookingData.vehicle_id}/`)
+        `marketplace/vehicles/${bookingData.vehicle_id}/`
       );
       
       const vehicle = vehicleResponse.data;
@@ -63,7 +63,7 @@ const api = {
       
       // If validation passes, proceed with booking
       const response = await axiosInstance.post(
-        API_CONFIG.getApiUrl(`marketplace/vehicles/${bookingData.vehicle_id}/book/`),
+        `marketplace/vehicles/${bookingData.vehicle_id}/book/`,
         {
           contact_number: bookingData.contact_number,
           notes: bookingData.notes
@@ -84,7 +84,7 @@ const api = {
 
   getBooking: async (id: string): Promise<Booking> => {
     const response = await axiosInstance.get(
-      API_CONFIG.getApiUrl(`marketplace/bookings/${id}/`)
+      `marketplace/bookings/${id}/`
     );
     return response.data;
   },
