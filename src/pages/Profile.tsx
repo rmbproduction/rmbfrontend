@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Settings, LogOut, Bike, 
-  CreditCard, MapPin, Clock, Shield, Menu, X,
+  Clock, Menu,
   Loader, Wrench, CreditCard as Subscription
 } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -12,8 +12,7 @@ import ForSaleVehicles from '../components/ForSaleVehicles';
 import BookedVehicles from '../components/BookedVehicles';
 import MyRepairs from './MyRepairs';
 import MySubscription from '../components/subscription/MySubscription';
-import { apiService, API_ENDPOINTS } from '../config/api.config';
-import { ProfileUpdateData } from '../schemas/auth';
+import { apiService } from '../config/api.config.ts';
 import axios from 'axios';
 import { useUserProfile } from '../hooks/useUserProfile';
 
@@ -58,13 +57,10 @@ const Profile = () => {
   const { updateProfile } = useUserProfile();
   const [isEditing, setIsEditing] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [profileData, setProfileData] = useState<UserProfile | null>(null);
   const [formData, setFormData] = useState<UserProfile>(defaultProfile);
-  const [isLoadingVehicleData, setIsLoadingVehicleData] = useState(false);
   const [isNewProfile, setIsNewProfile] = useState(true);
-  const [vehicleDataLoaded, setVehicleDataLoaded] = useState(false);
 
   // Get active tab from URL query parameter
   const queryParams = new URLSearchParams(location.search);
@@ -174,14 +170,14 @@ const Profile = () => {
     }
   };
 
-  const handlePasswordChange = () => {
-    navigate('/reset-password');
-  };
-
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
     setIsDrawerOpen(false);
-    navigate(`/profile${tab === 'profile' ? '' : `?tab=${tab}`}`, { replace: true });
+    if (tab === 'change-password') {
+      navigate('/reset-password');
+    } else {
+      navigate(`/profile${tab === 'profile' ? '' : `?tab=${tab}`}`, { replace: true });
+    }
   };
 
   const handleInputChange = (
@@ -300,40 +296,6 @@ const Profile = () => {
     setIsEditing(false);
     setFormData(profileData || defaultProfile);
   };
-
-  const upcomingServices = [
-    {
-      id: 1,
-      service: 'Premium Tune-Up',
-      date: '2024-03-15',
-      time: '10:00 AM',
-      status: 'Scheduled'
-    },
-    {
-      id: 2,
-      service: 'Brake Service',
-      date: '2024-03-20',
-      time: '2:30 PM',
-      status: 'Pending'
-    }
-  ];
-
-  const serviceHistory = [
-    {
-      id: 3,
-      service: 'Basic Maintenance',
-      date: '2024-02-10',
-      mechanic: 'Mike Smith',
-      rating: 5
-    },
-    {
-      id: 4,
-      service: 'Tire Replacement',
-      date: '2024-01-15',
-      mechanic: 'Sarah Johnson',
-      rating: 4
-    }
-  ];
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -641,7 +603,7 @@ const Profile = () => {
                   onClick={() => setIsDrawerOpen(false)}
                   className="p-2 hover:bg-gray-100 rounded-lg"
                 >
-                  <X className="h-6 w-6 text-gray-600" />
+                  <Menu className="h-6 w-6 text-gray-600" />
                 </button>
               </div>
               <Sidebar className="rounded-none shadow-none" />

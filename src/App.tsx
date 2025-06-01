@@ -4,6 +4,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './contexts/AuthContext';
 import { SubscriptionProvider } from './contexts/SubscriptionContext';
+import MainLayout from './layouts/MainLayout';
 import AppRoutes from './routes';
 import Pricing from './pages/pricing';
 import LoginSignupPage from './pages/LoginSignupPage';
@@ -29,37 +30,38 @@ const queryClient = new QueryClient({
 // Create router with explicit handling of verification route
 const router = createBrowserRouter([
   {
-    path: "/verify-email/:token",
-    element: <VerifyEmail />,
-    errorElement: <NotFound />
-  },
-  {
-    path: "/login-signup",
-    element: <LoginSignupPage />
-  },
-  {
-    path: "/verify-email",
-    element: <EmailVerification />
-  },
-  {
-    path: "/reset-password/:token",
-    element: <ResetPassword />
-  },
-  {
-    path: "/password-reset-confirmation",
-    element: <PasswordResetConfirmation />
-  },
-  {
-    path: "/subscription",
-    element: <Pricing />
-  },
-  // {
-  //   path: "/pricing",
-  //   element: <Pricing />
-  // },
-  {
-    path: "/*",
-    element: <AppRoutes />
+    path: "/",
+    element: (
+      <MainLayout>
+        <AppRoutes />
+      </MainLayout>
+    ),
+    children: [
+      {
+        path: "verify-email/:token",
+        element: <VerifyEmail />
+      },
+      {
+        path: "login-signup",
+        element: <LoginSignupPage />
+      },
+      {
+        path: "verify-email",
+        element: <EmailVerification />
+      },
+      {
+        path: "reset-password/:token",
+        element: <ResetPassword />
+      },
+      {
+        path: "password-reset-confirmation",
+        element: <PasswordResetConfirmation />
+      },
+      {
+        path: "subscription",
+        element: <Pricing />
+      }
+    ]
   }
 ]);
 

@@ -11,7 +11,6 @@ interface VehicleDetailsModalProps {
 const VehicleDetailsModal: React.FC<VehicleDetailsModalProps> = ({ sellRequest, onClose }) => {
   const [loadingDocs, setLoadingDocs] = useState<{[key: string]: boolean}>({});
   const [documentErrors, setDocumentErrors] = useState<{[key: string]: string}>({});
-  const [selectedDoc, setSelectedDoc] = useState<{url: string; type: string} | null>(null);
 
   const handleDocumentClick = async (documentType: string) => {
     try {
@@ -124,7 +123,7 @@ const VehicleDetailsModal: React.FC<VehicleDetailsModalProps> = ({ sellRequest, 
       <div className="relative">
         <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200"></div>
         <div className="space-y-6 relative">
-          {timelineEvents.map((event, index) => (
+          {timelineEvents.map((event) => (
             <div key={event.status} className="flex items-start">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center relative z-10 
                 ${event.completed ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
@@ -145,8 +144,8 @@ const VehicleDetailsModal: React.FC<VehicleDetailsModalProps> = ({ sellRequest, 
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center z-50">
           <h2 className="text-2xl font-bold text-gray-900">Vehicle Details</h2>
           <button
             onClick={onClose}
@@ -156,7 +155,7 @@ const VehicleDetailsModal: React.FC<VehicleDetailsModalProps> = ({ sellRequest, 
           </button>
         </div>
 
-        <div className="p-6 space-y-8">
+        <div className="p-6 space-y-8 overflow-y-auto">
           {/* Status and Timeline */}
           <div className="bg-gray-50 rounded-lg p-6">
             <h3 className="text-lg font-semibold mb-4">Request Status</h3>

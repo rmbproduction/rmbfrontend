@@ -2,7 +2,7 @@ import axios from 'axios';
 import TokenManager from '../services/tokenManager';
 
 // Base configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://repairmybike.up.railway.app/api';
+const API_BASE_URL = 'https://repairmybike.up.railway.app/api';
 const FRONTEND_URL = import.meta.env.VITE_FRONTEND_URL || 'https://repairmybike.in';
 
 // Export API configuration for components that need it
@@ -11,9 +11,25 @@ export const API_CONFIG = {
   frontendURL: FRONTEND_URL,
   withCredentials: true, // Enable sending cookies in cross-origin requests
   getApiUrl: (endpoint?: string) => {
-    if (!endpoint) return API_BASE_URL;
-    // Remove leading slash if present to avoid double slashes
-    const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+    if (!endpoint || typeof endpoint !== 'string') {
+      console.error('[getApiUrl] Invalid or missing endpoint:', endpoint);
+      return API_BASE_URL;
+    }
+
+    // Remove leading slash to avoid double slashes
+    let cleanEndpoint = endpoint.trim().startsWith('/') ? endpoint.trim().slice(1) : endpoint.trim();
+
+    // Remove "undefined", "null", or double slashes in path
+    cleanEndpoint = cleanEndpoint
+      .split('/')
+      .filter(segment => !!segment && segment !== 'undefined' && segment !== 'null')
+      .join('/');
+
+    if (!cleanEndpoint) {
+      console.warn('[getApiUrl] Endpoint was cleaned to empty, using base URL');
+      return API_BASE_URL;
+    }
+
     return `${API_BASE_URL}/${cleanEndpoint}`;
   }
 };
@@ -45,76 +61,29 @@ export const axiosInstance = axios.create({
 // Add request interceptor for adding auth token
 axiosInstance.interceptors.request.use(
   async (config) => {
+    // Ensure trailing slash for Django URLs
+    if (config.url && !config.url.endsWith('/')) {
+      config.url = `${config.url}/`;
+    }
+
+    // Log the request details
     console.log('Making request:', {
       url: config.url,
+      baseURL: config.baseURL,
+      fullUrl: `${config.baseURL}/${config.url}`,
       method: config.method,
       headers: config.headers,
-      withCredentials: config.withCredentials
+      data: config.data
     });
 
     // Ensure CORS headers for all requests
     config.withCredentials = true;
-    
-    // Handle verification requests
-    if (config.url?.includes('/verify-email/')) {
-      // If the URL is a frontend URL, convert it to API URL
-      if (config.url.startsWith(FRONTEND_URL)) {
-        const token = config.url.split('/verify-email/')[1];
-        config.url = `${API_BASE_URL}/accounts/verify-email/${token}/`;
-      }
-      delete config.headers['Content-Type'];
-    } else if (!config.headers['Content-Type'] && !config.url?.includes('/upload')) {
-      config.headers['Content-Type'] = 'application/json';
-    }
 
     const token = TokenManager.getAccessToken();
-    // Skip authentication for public endpoints
     if (token && !config.url?.includes('/login') && !config.url?.includes('/verify-email/')) {
-      // Check token expiration before making request
-      if (TokenManager.isTokenExpired()) {
-        try {
-          const refreshToken = TokenManager.getRefreshToken();
-          if (!refreshToken) {
-            console.warn('No refresh token found during request interceptor');
-            TokenManager.clearTokens();
-            // Only redirect if not accessing a public route and not already trying to refresh
-            if (!isPublicRoute(config.url || '') && !config.url?.includes('/token/refresh/')) {
-              window.location.href = '/login';
-              return Promise.reject(new Error('No refresh token available'));
-            }
-          }
-
-          // Only attempt refresh if we have a refresh token and aren't already refreshing
-          if (refreshToken && !config.url?.includes('/token/refresh/')) {
-            console.log('Attempting token refresh...');
-            const response = await axios.post(`${API_BASE_URL}/accounts/token/refresh/`, {
-              refresh: refreshToken
-            }, {
-              withCredentials: true,
-            });
-
-            if (!response.data?.access || !response.data?.refresh) {
-              throw new Error('Invalid refresh response');
-            }
-
-            const { access, refresh } = response.data;
-            TokenManager.setTokens({ access, refresh }, true);
-            config.headers.Authorization = `Bearer ${access}`;
-            console.log('Token refresh successful');
-          }
-        } catch (error) {
-          console.error('Token refresh failed:', error);
-          TokenManager.clearTokens();
-          // Only redirect if not accessing a public route
-          if (!isPublicRoute(config.url || '')) {
-            window.location.href = '/login';
-          }
-          return Promise.reject(error);
-        }
-      } else {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+      config.headers.Authorization = `Bearer ${token}`;
     }
+    
     return config;
   },
   (error) => {
@@ -144,6 +113,21 @@ const isPublicRoute = (url: string): boolean => {
 axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Log detailed error information
+    console.error('API Error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      url: error.config?.url,
+      method: error.config?.method,
+      headers: error.config?.headers,
+      requestData: error.config?.data
+    });
+
+    // If it's a 500 error, provide more helpful error message
+    if (error.response?.status === 500) {
+      error.message = 'Server error occurred. Please try again later.';
+    }
+
     const originalRequest = error.config;
 
     // Handle rate limiting

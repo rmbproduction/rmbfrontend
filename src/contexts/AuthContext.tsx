@@ -21,22 +21,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { data: user, isLoading: profileLoading, refetch: refetchProfile } = useProfile();
   const queryClient = useQueryClient();
 
+  // Debug log for initial mount
+  useEffect(() => {
+    console.log('AuthProvider Initial State:', {
+      hasAccessToken: !!TokenManager.getAccessToken(),
+      hasRefreshToken: !!TokenManager.getRefreshToken(),
+      isTokenExpired: TokenManager.isTokenExpired(),
+      user: user
+    });
+  }, [user]);
+
   // Check token expiration periodically
   useEffect(() => {
+    console.log('Setting up token check interval');
     const checkTokenInterval = setInterval(() => {
-      if (TokenManager.isTokenExpired() && TokenManager.getRefreshToken()) {
+      const isExpired = TokenManager.isTokenExpired();
+      const hasRefresh = !!TokenManager.getRefreshToken();
+      console.log('Token check:', { isExpired, hasRefresh });
+      
+      if (isExpired && hasRefresh) {
+        console.log('Token expired, attempting refresh...');
         refetchProfile();
       }
     }, 60000); // Check every minute
 
-    return () => clearInterval(checkTokenInterval);
+    return () => {
+      console.log('Clearing token check interval');
+      clearInterval(checkTokenInterval);
+    };
   }, [refetchProfile]);
 
   const verifyTokenStorage = (tokens: { access: string; refresh: string }, rememberMe: boolean): boolean => {
     try {
+      console.log('Verifying token storage:', { rememberMe });
       TokenManager.setTokens(tokens, rememberMe);
       const storedAccess = TokenManager.getAccessToken();
       const storedRefresh = TokenManager.getRefreshToken();
+      
+      console.log('Token verification check:', {
+        hasStoredAccess: !!storedAccess,
+        hasStoredRefresh: !!storedRefresh,
+        tokensMatch: storedAccess === tokens.access && storedRefresh === tokens.refresh
+      });
       
       if (!storedAccess || !storedRefresh) {
         console.error('Token verification failed - tokens not found after storage');
@@ -60,7 +86,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('Making login request...');
       const response = await loginMutation.mutateAsync({ email, password, rememberMe });
-      console.log('Login response received:', response);
+      console.log('Login response received:', {
+        hasTokens: !!response.data?.tokens,
+        hasUser: !!response.data?.user,
+        status: response.status
+      });
 
       if (!response.data?.tokens) {
         throw new Error('Login failed: No tokens received');
@@ -81,10 +111,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           await refetchProfile();
           console.log('Profile fetched successfully');
-          } catch (error) {
+        } catch (error) {
           console.error('Profile fetch failed:', error);
           // Don't throw here - we still want to complete login even if profile fetch fails
-          }
+        }
       } else {
         console.log('No user data in response');
       }
@@ -98,7 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: error.response?.status,
         data: error.response?.data,
         headers: error.response?.headers
-  });
+      });
 
       // Clear any partially stored tokens
       TokenManager.clearTokens();
@@ -111,22 +141,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = useCallback(async () => {
     try {
+      console.log('Logout initiated');
       // Get refresh token before clearing
       const refreshToken = TokenManager.getRefreshToken();
       
       if (!refreshToken) {
-        // If no refresh token, just clear local state
         console.log('No refresh token found, clearing local state only');
         TokenManager.clearTokens();
         queryClient.clear();
         return;
       }
 
+      console.log('Attempting server logout...');
       // Try to logout from server first
       await logoutMutation.mutateAsync({ 
         refresh_token: refreshToken.replace('Bearer ', '') 
       });
       
+      console.log('Server logout successful, clearing local state');
       // Only clear local state after successful server logout
       TokenManager.clearTokens();
       queryClient.clear();
@@ -138,18 +170,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       TokenManager.clearTokens();
       queryClient.clear();
 
-      // Don't show error toast since we're logging out anyway
       console.log('Logged out locally (server logout failed)');
     }
   }, [logoutMutation, queryClient]);
 
-  const value = useMemo(() => ({
-    isAuthenticated: !!TokenManager.getAccessToken() && !TokenManager.isTokenExpired(),
-    user: user || null,
-    login,
-    logout,
-    isLoading: profileLoading
-  }), [user, login, logout, profileLoading]);
+  const value = useMemo(() => {
+    const isAuth = !!TokenManager.getAccessToken() && !TokenManager.isTokenExpired();
+    console.log('Auth context value updated:', {
+      isAuthenticated: isAuth,
+      hasUser: !!user,
+      isLoading: profileLoading
+    });
+    
+    return {
+      isAuthenticated: isAuth,
+      user: user || null,
+      login,
+      logout,
+      isLoading: profileLoading
+    };
+  }, [user, login, logout, profileLoading]);
 
   return (
     <AuthContext.Provider value={value}>

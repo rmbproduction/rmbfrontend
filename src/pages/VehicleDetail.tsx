@@ -1,15 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { 
-  Heart, Share2, ChevronLeft, ChevronRight, X
+  Heart, Share2, ChevronLeft
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import BookVehicleModal from '../components/BookVehicleModal';
 import VehicleImageSlider from '../components/VehicleImageSlider';
 import VehicleCard from '../components/VehicleCard';
 import { Vehicle } from '../types/vehicle';
-import { useCreateBooking, BookingResponse } from '../services/bookingService';
-import { useAuth } from '../contexts/AuthContext';
+import { useCreateBooking } from '../services/bookingService';
 import '../styles/swiper-custom.css';
 
 interface BookingFormData {
@@ -35,8 +34,6 @@ const VehicleDetail = () => {
   const [similarVehicles, setSimilarVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [showModal, setShowModal] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
@@ -45,7 +42,6 @@ const VehicleDetail = () => {
     contactNumber: '',
     notes: ''
   });
-  const { user } = useAuth();
   const createBooking = useCreateBooking();
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -103,26 +99,6 @@ const VehicleDetail = () => {
     if (vehicle.right_image_url) images.push(vehicle.right_image_url);
     if (vehicle.dashboard_image_url) images.push(vehicle.dashboard_image_url);
     return images;
-  };
-
-  const closeModal = () => {
-    setShowModal(false);
-  };
-
-  const nextImage = () => {
-    if (!vehicle) return;
-    const images = getGalleryImages(vehicle);
-    setActiveImageIndex((prev) => 
-      (prev + 1) % images.length
-    );
-  };
-
-  const prevImage = () => {
-    if (!vehicle) return;
-    const images = getGalleryImages(vehicle);
-    setActiveImageIndex((prev) => 
-      prev === 0 ? images.length - 1 : prev - 1
-    );
   };
 
   const handleFavoriteToggle = async () => {

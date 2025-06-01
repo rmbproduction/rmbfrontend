@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 export interface Tokens {
   access: string;
   refresh: string;
@@ -53,41 +55,11 @@ class TokenManager {
   }
 
   static getAccessToken(): string | null {
-    try {
-      const storageType = localStorage.getItem(this.STORAGE_TYPE_KEY);
-      const storage = storageType === 'local' ? localStorage : sessionStorage;
-      const token = storage.getItem(this.ACCESS_TOKEN_KEY);
-      
-      if (!token) {
-        // Try alternate storage as fallback
-        const altStorage = storageType === 'local' ? sessionStorage : localStorage;
-        return altStorage.getItem(this.ACCESS_TOKEN_KEY);
-      }
-      
-      return token;
-    } catch (error) {
-      console.error('Error getting access token:', error);
-      return null;
-    }
+    return localStorage.getItem(this.ACCESS_TOKEN_KEY);
   }
 
   static getRefreshToken(): string | null {
-    try {
-      const storageType = localStorage.getItem(this.STORAGE_TYPE_KEY);
-      const storage = storageType === 'local' ? localStorage : sessionStorage;
-      const token = storage.getItem(this.REFRESH_TOKEN_KEY);
-      
-      if (!token) {
-        // Try alternate storage as fallback
-        const altStorage = storageType === 'local' ? sessionStorage : localStorage;
-        return altStorage.getItem(this.REFRESH_TOKEN_KEY);
-      }
-      
-      return token;
-    } catch (error) {
-      console.error('Error getting refresh token:', error);
-      return null;
-    }
+    return localStorage.getItem(this.REFRESH_TOKEN_KEY);
   }
 
   static clearTokens(): void {
@@ -109,22 +81,13 @@ class TokenManager {
   }
 
   static isTokenExpired(): boolean {
+    const token = this.getAccessToken();
+    if (!token) return true;
+
     try {
-      const storageType = localStorage.getItem(this.STORAGE_TYPE_KEY);
-      const storage = storageType === 'local' ? localStorage : sessionStorage;
-      const expiry = storage.getItem(this.TOKEN_EXPIRY_KEY);
-      
-      if (!expiry) {
-        // Try alternate storage
-        const altStorage = storageType === 'local' ? sessionStorage : localStorage;
-        const altExpiry = altStorage.getItem(this.TOKEN_EXPIRY_KEY);
-        if (!altExpiry) return true;
-        return Date.now() > parseInt(altExpiry);
-      }
-      
-      return Date.now() > parseInt(expiry);
-    } catch (error) {
-      console.error('Error checking token expiry:', error);
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.exp * 1000 < Date.now();
+    } catch {
       return true;
     }
   }
@@ -137,6 +100,31 @@ class TokenManager {
     const access = this.getAccessToken();
     const refresh = this.getRefreshToken();
     return !!(access && refresh && !this.isTokenExpired());
+  }
+
+  static async refreshToken(): Promise<boolean> {
+    try {
+      const refreshToken = this.getRefreshToken();
+      if (!refreshToken) {
+        return false;
+      }
+
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_BASE_URL}/auth/token/refresh/`,
+        { refresh: refreshToken }
+      );
+
+      if (response.data.access) {
+        localStorage.setItem(this.ACCESS_TOKEN_KEY, response.data.access);
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+      this.clearTokens();
+      return false;
+    }
   }
 }
 

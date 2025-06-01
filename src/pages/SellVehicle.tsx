@@ -1,12 +1,16 @@
 import React, { useState, ChangeEvent, FormEvent, useEffect } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import TokenManager from '../services/tokenManager';
 import { useVehicleSelection } from '../hooks/vehicle/useVehicleSelection';
 import FormModal from '../components/FormModal';
 import { format, addDays, isWeekend, setHours, setMinutes, isBefore, isAfter, addHours } from 'date-fns';
-import { API_CONFIG, API_ENDPOINTS } from '../config/api.config';
+import { API_CONFIG, API_ENDPOINTS, axiosInstance } from '../config/api.config';
+import { 
+  Heart, Share2, ChevronLeft, ChevronRight, X
+} from 'lucide-react';
+import { toast } from 'react-toastify';
 
 interface FormData {
   vehicle_type: string;
@@ -422,15 +426,11 @@ export default function SellVehicle() {
 
       // First check if registration number exists
       try {
-        const checkResponse = await axios.get(
-          `${API_CONFIG.baseURL}/marketplace/vehicles/check-registration-number/`,
+        const checkResponse = await axiosInstance.get(
+          API_ENDPOINTS.vehicle.checkRegistration,
           {
             params: {
               registration_number: formData.registration_number
-            },
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Accept': 'application/json'
             }
           }
         );
@@ -440,7 +440,7 @@ export default function SellVehicle() {
             isOpen: true,
             type: 'error',
             title: 'Registration Error',
-            message: 'This registration number is already registered in our system. Please check the number and try again.'
+            message: checkResponse.data.message || 'This registration number is already registered in our system. Please check the number and try again.'
           });
           setLoading(false);
           return;
@@ -448,12 +448,13 @@ export default function SellVehicle() {
       } catch (error: any) {
         console.error('Registration check error:', error.response || error);
         
+        // Only show error if it's not a 404 (not found) response
         if (error.response?.status !== 404) {
           setModalState({
             isOpen: true,
             type: 'error',
             title: 'Error',
-            message: 'Failed to check registration number. Please try again.'
+            message: error.response?.data?.message || 'Failed to check registration number. Please try again.'
           });
           setLoading(false);
           return;
