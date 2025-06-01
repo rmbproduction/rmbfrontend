@@ -1,9 +1,7 @@
-import { axiosInstance } from '../config/api.config';
+import { axiosInstance, API_CONFIG } from '../config/api.config';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { AxiosError } from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export interface BookingRequest {
   contact_number: string;
@@ -13,7 +11,18 @@ export interface BookingRequest {
 
 export interface BookingResponse {
   detail: string;
-  booking: Booking;
+  booking: {
+    id: number;
+    reference: string;
+    status: string;
+    contact_number: string;
+    notes?: string;
+    vehicle_details: {
+      id: string;
+      brand: string;
+      model: string;
+    };
+  };
 }
 
 export interface Booking {
@@ -36,17 +45,31 @@ export interface Booking {
 const api = {
   createBooking: async (bookingData: BookingRequest): Promise<BookingResponse> => {
     try {
-      console.log('Creating booking with data:', bookingData);
+      // Validate contact number format
+      const contactNumberRegex = /^\+?[1-9]\d{9,14}$/;
+      if (!contactNumberRegex.test(bookingData.contact_number)) {
+        throw new Error('Invalid contact number format. Please enter a valid phone number with country code.');
+      }
+
+      // First check if the vehicle is available for booking
+      const vehicleResponse = await axiosInstance.get(
+        API_CONFIG.getApiUrl(`marketplace/vehicles/${bookingData.vehicle_id}/`)
+      );
       
+      const vehicle = vehicleResponse.data;
+      if (!vehicle.bookable || !vehicle.is_bookable || vehicle.status === 'under_inspection') {
+        throw new Error('This vehicle is not available for booking at the moment.');
+      }
+      
+      // If validation passes, proceed with booking
       const response = await axiosInstance.post(
-        `${API_BASE_URL}/marketplace/vehicles/${bookingData.vehicle_id}/book/`,
+        API_CONFIG.getApiUrl(`marketplace/vehicles/${bookingData.vehicle_id}/book/`),
         {
           contact_number: bookingData.contact_number,
           notes: bookingData.notes
         }
       );
       
-      console.log('Booking response:', response.data);
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError<any>;
@@ -61,7 +84,7 @@ const api = {
 
   getBooking: async (id: string): Promise<Booking> => {
     const response = await axiosInstance.get(
-      `${API_BASE_URL}/marketplace/bookings/${id}/`
+      API_CONFIG.getApiUrl(`marketplace/bookings/${id}/`)
     );
     return response.data;
   },
@@ -88,6 +111,7 @@ export const useCreateBooking = () => {
       const errorMessage = error?.response?.data?.error || 
                          error?.response?.data?.message || 
                          error?.response?.data?.detail ||
+                         error.message ||
                          'Failed to create booking';
       toast.error(errorMessage);
     }
