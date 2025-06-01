@@ -140,19 +140,28 @@ const Checkout = () => {
       const formData = watch();
       const prefilledData = prefillFormData(formData, 'checkout');
       
-      // Set each field individually
-      Object.entries(prefilledData).forEach(([key, value]) => {
-        if (key === 'address') {
-          // Handle nested address object
-          Object.entries(value as Record<string, string>).forEach(([addressKey, addressValue]) => {
-            setValue(`address.${addressKey}` as any, addressValue);
+      // Batch update form values to prevent infinite loops
+      const updates = Object.entries(prefilledData).reduce((acc: Record<string, any>, [key, value]) => {
+        if (key === 'address' && typeof value === 'object') {
+          Object.entries(value).forEach(([addressKey, addressValue]) => {
+            acc[`address.${addressKey}`] = addressValue;
           });
         } else {
-          setValue(key as keyof CheckoutFormData, value);
+          acc[key] = value;
         }
+        return acc;
+      }, {});
+
+      // Update all form values at once
+      Object.entries(updates).forEach(([key, value]) => {
+        setValue(key as any, value, { 
+          shouldValidate: false,
+          shouldDirty: false,
+          shouldTouch: false 
+        });
       });
     }
-  }, [isProfileLoading, prefillFormData, setValue]);
+  }, [isProfileLoading, prefillFormData]);
 
   // Debug form state
   useEffect(() => {
