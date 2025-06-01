@@ -1,22 +1,30 @@
 {
   "rewrites": [
     {
-      "source": "/verify-email/:path*",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/login-signup",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/reset-password/:path*",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/:path*",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
+  "routes": [
+    {
+      "src": "/profile",
+      "dest": "/index.html",
+      "status": 200
+    },
+    {
+      "src": "/profile\\?tab=.*",
+      "dest": "/index.html",
+      "status": 200
+    },
+    {
+      "src": "/[^.]+",
+      "dest": "/",
+      "status": 200
+    }
+  ],
+  "github": {
+    "silent": true
+  },
   "headers": [
     {
       "source": "/(.*)",
