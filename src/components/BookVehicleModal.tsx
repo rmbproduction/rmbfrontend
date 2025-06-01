@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useUserProfile } from '../hooks/useUserProfile';
 
@@ -12,6 +12,9 @@ interface BookVehicleModalProps {
   isLoading?: boolean;
 }
 
+// Phone number validation regex
+const PHONE_REGEX = /^\+?[1-9]\d{9,14}$/;
+
 const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
   isOpen,
   onClose,
@@ -22,6 +25,7 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
   isLoading = false
 }) => {
   const { profile, updateProfile } = useUserProfile();
+  const [error, setError] = useState<string>('');
 
   // Pre-fill contact number from cache if empty
   useEffect(() => {
@@ -33,12 +37,49 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
     }
   }, [isOpen, contactNumber, profile?.phone, onInputChange]);
 
-  // Wrap the onInputChange to also update the cache
+  // Validate and handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    onInputChange(e);
-    if (e.target.name === 'contactNumber') {
-      updateProfile({ phone: e.target.value });
+    const { name, value } = e.target;
+    
+    if (name === 'contactNumber') {
+      // Clear error when user starts typing
+      setError('');
+      
+      // Remove any spaces, dashes, or parentheses
+      const cleanedNumber = value.replace(/[\s\-\(\)]/g, '');
+      
+      // Basic format validation before sending to server
+      if (cleanedNumber && !PHONE_REGEX.test(cleanedNumber)) {
+        setError('Please enter a valid phone number (10-15 digits with optional + prefix)');
+      }
+      
+      // Update the profile cache with the new number
+      updateProfile({ phone: cleanedNumber });
     }
+    
+    // Pass the event to parent's handler
+    onInputChange(e);
+  };
+
+  // Validate before submitting
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Remove any spaces, dashes, or parentheses
+    const cleanedNumber = contactNumber.replace(/[\s\-\(\)]/g, '');
+    
+    if (!cleanedNumber) {
+      setError('Contact number is required');
+      return;
+    }
+    
+    if (!PHONE_REGEX.test(cleanedNumber)) {
+      setError('Please enter a valid phone number (10-15 digits with optional + prefix)');
+      return;
+    }
+    
+    // If validation passes, call the parent's submit handler
+    onSubmit(e);
   };
 
   if (!isOpen) return null;
@@ -51,7 +92,7 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
           Fill out the form below to book this vehicle. Our team will contact you soon to guide you through the process.
         </p>
 
-        <form onSubmit={onSubmit}>
+        <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
               <label htmlFor="contact" className="block text-sm font-medium text-gray-700 mb-1">
@@ -63,11 +104,15 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
                 name="contactNumber"
                 value={contactNumber}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent"
+                className={`w-full px-3 py-2 border ${error ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] focus:border-transparent`}
                 placeholder="Enter your contact number"
                 required
                 disabled={isLoading}
               />
+              {error && (
+                <p className="mt-1 text-sm text-red-600">{error}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-500">Format: +91XXXXXXXXXX (10-15 digits)</p>
             </div>
 
             <div>
@@ -87,7 +132,7 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
             </div>
           </div>
 
-          <div className="mt-6 flex gap-3">
+          <div className="flex gap-4 mt-6">
             <button
               type="button"
               onClick={onClose}
@@ -99,7 +144,7 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
             <button
               type="submit"
               className="flex-1 px-4 py-2 bg-[#FF5733] text-white rounded-lg hover:bg-[#ff4019] transition-colors disabled:opacity-50 flex items-center justify-center"
-              disabled={isLoading}
+              disabled={isLoading || !!error}
             >
               {isLoading ? (
                 <>

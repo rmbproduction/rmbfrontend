@@ -85,7 +85,7 @@ const Checkout = () => {
       console.log('Loading profile data...');
     }
   }, [isProfileLoading]);
-
+  
   const {
     register,
     handleSubmit,

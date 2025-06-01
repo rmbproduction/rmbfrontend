@@ -1,92 +1,152 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
-import { toast } from 'react-toastify';
-import { useVerifyEmail } from '../hooks/auth/useEmailVerification';
-
-interface VerificationState {
-  status: 'verifying' | 'success' | 'error';
-  message: string;
-}
+import React, { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Mail, RefreshCw, AlertCircle } from 'lucide-react';
+import { axiosInstance, API_ENDPOINTS } from '../config/api.config';
 
 const EmailVerification = () => {
-  const { token } = useParams<{ token: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [state, setState] = useState<VerificationState>({
-    status: 'verifying',
-    message: 'Verifying your email...'
-  });
-
-  const verifyEmail = useVerifyEmail();
+  const [countdown, setCountdown] = useState(60);
+  const email = searchParams.get('email');
+  const [isLoading, setIsLoading] = useState(false);
+  const [resendStatus, setResendStatus] = useState<{ success?: string; error?: string }>({});
 
   useEffect(() => {
-    const verifyToken = async () => {
-      if (!token) {
-        setState({
-          status: 'error',
-          message: 'No verification token provided.'
-        });
-        return;
-      }
+    if (!email) {
+      setTimeout(() => {
+        navigate('/login-signup');
+      }, 3000);
+      return;
+    }
 
-      try {
-        await verifyEmail.mutateAsync(token);
-        setState({
-          status: 'success',
-          message: 'Email verified successfully!'
-        });
-        toast.success('Email verified successfully!');
-        // Redirect to login after 3 seconds
-        setTimeout(() => navigate('/login'), 3000);
-      } catch (error: any) {
-        setState({
-          status: 'error',
-          message: error.response?.data?.detail || 'Failed to verify email.'
-        });
-        toast.error('Failed to verify email.');
-      }
-    };
+    // Start countdown timer
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
-    verifyToken();
-  }, [token, navigate, verifyEmail]);
+    return () => clearInterval(timer);
+  }, [email, navigate]);
+
+  const handleResendVerification = async () => {
+    if (!email) {
+      setResendStatus({ error: 'Email address is required' });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await axiosInstance.post(API_ENDPOINTS.auth.resendVerification, { email });
+      setCountdown(60);
+      setResendStatus({ success: 'Verification email has been resent!' });
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Failed to resend verification email';
+      setResendStatus({ error: errorMessage });
+    } finally {
+      setIsLoading(false);
+      // Clear status after 3 seconds
+      setTimeout(() => setResendStatus({}), 3000);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-white to-[#ffe4d4] p-6">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-8 text-center">
-        {state.status === 'verifying' && (
-          <>
-            <AlertTriangle className="mx-auto h-16 w-16 text-yellow-500" />
-            <h2 className="mt-4 text-2xl font-bold text-gray-800">Verifying Email</h2>
-          </>
-        )}
-        
-        {state.status === 'success' && (
-          <>
-            <CheckCircle className="mx-auto h-16 w-16 text-green-500" />
-            <h2 className="mt-4 text-2xl font-bold text-gray-800">Email Verified!</h2>
-          </>
-        )}
-        
-        {state.status === 'error' && (
-          <>
-            <XCircle className="mx-auto h-16 w-16 text-red-500" />
-            <h2 className="mt-4 text-2xl font-bold text-gray-800">Verification Failed</h2>
-          </>
-        )}
-        
-        <p className="mt-2 text-gray-600">{state.message}</p>
-        
-        {state.status === 'error' && (
-          <div className="mt-6">
-            <button
-              onClick={() => navigate('/resend-verification')}
-              className="text-[#FF5733] hover:underline"
-            >
-              Resend verification email
-            </button>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="bg-white rounded-xl shadow-2xl w-full max-w-md p-8 text-center"
+      >
+        {!email ? (
+          // Show error state if no email
+          <div className="text-center">
+            <div className="mx-auto h-16 w-16 flex items-center justify-center rounded-full bg-red-100">
+              <AlertCircle className="h-8 w-8 text-red-500" />
+            </div>
+            <h2 className="mt-6 text-4xl font-extrabold text-gray-800">Missing Email</h2>
+            <div className="mt-2 h-1 w-16 bg-[#FF5733] mx-auto mb-6" />
+            <p className="text-gray-600 mb-8">No email address was provided. Redirecting to login page...</p>
+          </div>
+        ) : (
+          // Show verification waiting state
+          <div className="text-center">
+            <div className="mx-auto h-16 w-16 flex items-center justify-center rounded-full bg-[#FFF5F2]">
+              <Mail className="h-8 w-8 text-[#FF5733]" />
+            </div>
+            <h2 className="mt-6 text-4xl font-extrabold text-gray-800">Check Your Email</h2>
+            <div className="mt-2 h-1 w-16 bg-[#FF5733] mx-auto mb-6" />
+            
+            <div className="space-y-6">
+              <div className="text-center text-sm text-gray-600">
+                <p className="mb-4">We've sent a verification link to:</p>
+                <p className="font-medium text-gray-800 text-lg mb-4 break-all">{email}</p>
+                <p className="mb-4">
+                  Please check your email inbox and click the verification link to complete your registration.
+                  Don't forget to check your spam folder if you can't find the email.
+                </p>
+                
+                {/* Status messages */}
+                {resendStatus.success && (
+                  <div className="mb-4 text-green-600 font-medium">
+                    {resendStatus.success}
+                  </div>
+                )}
+                {resendStatus.error && (
+                  <div className="mb-4 text-red-600 font-medium">
+                    {resendStatus.error}
+                  </div>
+                )}
+                
+                <button
+                  onClick={handleResendVerification}
+                  disabled={countdown > 0 || isLoading}
+                  className={`inline-flex items-center justify-center mt-2 font-medium ${
+                    countdown > 0 || isLoading
+                      ? 'text-gray-400 cursor-not-allowed'
+                      : 'text-[#FF5733] hover:text-[#ff4019]'
+                  }`}
+                >
+                  {isLoading ? (
+                    <>
+                      <RefreshCw className="animate-spin h-4 w-4 mr-2" />
+                      Sending...
+                    </>
+                  ) : countdown > 0 ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Resend available in {countdown}s
+                    </>
+                  ) : (
+                    'Resend verification email'
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-8 space-y-4">
+              <button
+                onClick={() => navigate('/login-signup')}
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-[#FF5733] hover:bg-[#ff4019] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FF5733]"
+              >
+                Return to Login
+              </button>
+              
+              <button
+                onClick={() => navigate('/')}
+                className="text-sm font-medium text-[#FF5733] hover:text-[#ff4019]"
+              >
+                Return to Homepage
+              </button>
+            </div>
           </div>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 };

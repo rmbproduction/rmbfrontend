@@ -8,6 +8,12 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://repairmybike.
 export const API_CONFIG = {
   baseURL: API_BASE_URL,
   withCredentials: true, // Enable sending cookies in cross-origin requests
+  getApiUrl: (endpoint?: string) => {
+    if (!endpoint) return API_BASE_URL;
+    // Remove leading slash if present to avoid double slashes
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+    return `${API_BASE_URL}/${cleanEndpoint}`;
+  }
 };
 
 // CDN Configuration
@@ -46,7 +52,11 @@ axiosInstance.interceptors.request.use(
 
     // Ensure CORS headers for all requests
     config.withCredentials = true;
-    if (!config.headers['Content-Type'] && !config.url?.includes('/upload')) {
+    
+    // Don't set Content-Type for verification requests
+    if (config.url?.includes('/verify-email/')) {
+      delete config.headers['Content-Type'];
+    } else if (!config.headers['Content-Type'] && !config.url?.includes('/upload')) {
       config.headers['Content-Type'] = 'application/json';
     }
 
@@ -378,8 +388,29 @@ export const apiService = {
       axiosInstance.post(API_ENDPOINTS.auth.passwordReset, data),
     resetPasswordConfirm: (token: string, data: { password: string; confirmPassword: string }) =>
       axiosInstance.post(API_ENDPOINTS.auth.passwordResetConfirm(token), data),
-    logout: async (data: { refresh_token: string }) => {
-      return axiosInstance.post(API_ENDPOINTS.auth.logout, data);
+    logout: async () => {
+      try {
+        const refreshToken = TokenManager.getRefreshToken();
+        if (!refreshToken) {
+          throw new Error('No refresh token found');
+        }
+
+        const response = await axiosInstance.post(API_ENDPOINTS.auth.logout, {
+          refresh: refreshToken
+        });
+
+        // Clear tokens on successful logout
+        if (response.status === 200) {
+          TokenManager.clearTokens();
+        }
+
+        return response;
+      } catch (error) {
+        console.error('Logout error:', error);
+        // Clear tokens even if logout fails
+        TokenManager.clearTokens();
+        throw error;
+      }
     },
     getProfile: async () => {
       return axiosInstance.get(API_ENDPOINTS.auth.profile);

@@ -13,7 +13,7 @@ import { useActiveCart } from '../hooks/cart/useCartQueries';
 const MENU_ITEMS = [
   { label: 'Services', path: '/', section: 'services' },
   { label: 'How It Works', path: '/', section: 'how-it-works' },
-  { label: 'Subscription', path: '/pricing' },
+  { label: 'Subscription', path: '/subscription' },
   { label: 'About Us', path: '/about' },
 ];
 

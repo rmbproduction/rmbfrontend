@@ -1,7 +1,7 @@
 // LoginSignupPage.tsx
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaGoogle, FaFacebookF, FaEye, FaEyeSlash } from "react-icons/fa";
+import { FaGoogle, FaFacebookF, FaEye, FaEyeSlash, FaCheck } from "react-icons/fa";
 import { Loader } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -15,6 +15,14 @@ interface FormData {
   email: string;
   password: string;
   rememberMe: boolean;
+}
+
+interface PasswordCriteria {
+  hasUpperCase: boolean;
+  hasLowerCase: boolean;
+  hasNumber: boolean;
+  hasSymbol: boolean;
+  hasMinLength: boolean;
 }
 
 type Mode = "login" | "signup" | "forgot";
@@ -70,6 +78,13 @@ const LoginSignupPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+  const [passwordCriteria, setPasswordCriteria] = useState<PasswordCriteria>({
+    hasUpperCase: false,
+    hasLowerCase: false,
+    hasNumber: false,
+    hasSymbol: false,
+    hasMinLength: false,
+  });
 
   // Use our custom hooks
   const signupMutation = useSignup();
@@ -104,10 +119,25 @@ const LoginSignupPage = () => {
     }
   };
 
+  const validatePassword = (password: string) => {
+    setPasswordCriteria({
+      hasUpperCase: /[A-Z]/.test(password),
+      hasLowerCase: /[a-z]/.test(password),
+      hasNumber: /[0-9]/.test(password),
+      hasSymbol: /[!@#$%^&*(),.?":{}|<>]/.test(password),
+      hasMinLength: password.length >= 8,
+    });
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setFormData({ ...formData, [e.target.name]: value });
     if (error) setError("");
+    
+    // Validate password on change
+    if (e.target.name === 'password') {
+      validatePassword(e.target.value as string);
+    }
   };
 
   const togglePasswordVisibility = () => {
@@ -180,13 +210,10 @@ const LoginSignupPage = () => {
           password: formData.password
         });
         
-        if (response.data?.verification_token) {
-          navigate(`/verify-email/${response.data.verification_token}`);
-          toast.success("Account created! Please verify your email.");
-        } else {
-          navigate("/verify-email");
-          toast.success("Account created! Please check your email for verification.");
-        }
+        toast.success("Account created! Please verify your email.");
+        
+        // Always navigate to verify-email with email parameter
+        navigate(`/verify-email?email=${encodeURIComponent(formData.email)}`);
       } else if (mode === "forgot") {
         await forgotPasswordMutation.mutateAsync({
           email: formData.email
@@ -234,6 +261,21 @@ const LoginSignupPage = () => {
 
   const isLoading = authLoading || signupMutation.isPending || 
                     forgotPasswordMutation.isPending || googleLoginMutation.isPending;
+
+  const PasswordCriteriaItem = ({ isValid, text }: { isValid: boolean; text: string }) => (
+    <div className="flex items-center space-x-2">
+      <motion.div
+        initial={{ scale: 0 }}
+        animate={{ scale: isValid ? 1 : 0 }}
+        className="w-5 h-5 flex items-center justify-center rounded-full"
+      >
+        {isValid && <FaCheck className="text-green-500" size={14} />}
+      </motion.div>
+      <span className={`text-sm ${isValid ? 'text-green-500' : 'text-gray-500'}`}>
+        {text}
+      </span>
+    </div>
+  );
 
   // Prevent rendering during initial auth check
   if (authLoading && !error) {
@@ -393,7 +435,18 @@ const LoginSignupPage = () => {
                         {showPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
                       </button>
                     </div>
-                    <p className="mt-1 text-xs text-gray-500">Password must be at least 8 characters</p>
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      transition={{ duration: 0.3 }}
+                      className="mt-2 space-y-1"
+                    >
+                      <PasswordCriteriaItem isValid={passwordCriteria.hasUpperCase} text="At least one uppercase letter" />
+                      <PasswordCriteriaItem isValid={passwordCriteria.hasLowerCase} text="At least one lowercase letter" />
+                      <PasswordCriteriaItem isValid={passwordCriteria.hasNumber} text="At least one number" />
+                      <PasswordCriteriaItem isValid={passwordCriteria.hasSymbol} text="At least one special character" />
+                      <PasswordCriteriaItem isValid={passwordCriteria.hasMinLength} text="Minimum 8 characters" />
+                    </motion.div>
                   </div>
                   <button
                     type="submit"

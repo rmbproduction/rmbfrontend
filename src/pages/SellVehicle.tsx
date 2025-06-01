@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import TokenManager from '../services/tokenManager';
 import { useVehicleSelection } from '../hooks/vehicle/useVehicleSelection';
+import FormModal from '../components/FormModal';
+import { format, addDays, isWeekend, setHours, setMinutes, isBefore, isAfter } from 'date-fns';
 
 interface FormData {
   vehicle_type: string;
@@ -40,6 +42,97 @@ interface FileData {
 interface Previews {
   [key: string]: string;
 }
+
+interface ValidationRule {
+  required: boolean;
+  message: string;
+  pattern?: RegExp;
+  min?: number;
+  max?: number;
+}
+
+interface ValidationRules {
+  [key: string]: ValidationRule;
+}
+
+// Add new interface for time slots
+interface TimeSlot {
+  value: string;
+  label: string;
+  disabled: boolean;
+}
+
+// Validation rules for form fields
+const VALIDATION_RULES: ValidationRules = {
+  vehicle_type: { required: true, message: 'Please select a vehicle type' },
+  brand: { required: true, message: 'Please enter the brand name' },
+  model: { required: true, message: 'Please enter the model name' },
+  year: { 
+    required: true, 
+    pattern: /^\d{4}$/, 
+    min: 1900,
+    max: new Date().getFullYear(),
+    message: 'Please enter a valid year between 1900 and current year'
+  },
+  registration_number: { 
+    required: true, 
+    pattern: /^[A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{4}$/,
+    message: 'Please enter a valid registration number (e.g., MH02AB1234)'
+  },
+  kms_driven: { 
+    required: true, 
+    min: 0,
+    max: 500000,
+    message: 'Please enter valid kilometers driven (0-500,000)'
+  },
+  fuel_type: { required: true, message: 'Please select a fuel type' },
+  engine_capacity: { 
+    required: true,
+    min: 50,
+    max: 2500,
+    message: 'Please enter valid engine capacity (50-2500cc)'
+  },
+  color: { required: true, message: 'Please enter the vehicle color' },
+  expected_price: { 
+    required: true,
+    min: 1000,
+    max: 1000000,
+    message: 'Please enter a valid price between ₹1,000 and ₹10,00,000'
+  },
+  pickup_address: { 
+    required: true, 
+    min: 10,
+    message: 'Please provide a complete pickup address (minimum 10 characters)'
+  },
+  contact_number: { 
+    required: true,
+    pattern: /^\+?[1-9]\d{9,14}$/,
+    message: 'Please enter a valid contact number'
+  },
+  pickup_slot: { 
+    required: true, 
+    message: 'Please select a valid pickup slot between 9 AM and 6 PM on weekdays' 
+  }
+};
+
+// Required document types
+const REQUIRED_DOCUMENTS = [
+  'registration_certificate',
+  'insurance_document',
+  'puc_certificate',
+  'ownership_transfer'
+];
+
+// Required photos
+const REQUIRED_PHOTOS = [
+  'photo_front',
+  'photo_back',
+  'photo_left',
+  'photo_right',
+  'photo_dashboard',
+  'photo_odometer',
+  'photo_engine'
+];
 
 export default function SellVehicle() {
   const navigate = useNavigate();
@@ -83,33 +176,152 @@ export default function SellVehicle() {
   const [loading, setLoading] = useState(false);
   const [formErrors, setFormErrors] = useState<{[key: string]: string}>({});
 
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    type: 'success' | 'error';
+    title: string;
+    message: string;
+  }>({
+    isOpen: false,
+    type: 'error',
+    title: '',
+    message: ''
+  });
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/login', { state: { from: '/sell-vehicle' } });
     }
   }, [isAuthenticated, navigate]);
 
-  const validatePickupSlot = (dateTimeStr: string): boolean => {
+  // Generate available time slots
+  const generateTimeSlots = (selectedDate: Date): TimeSlot[] => {
+    const slots: TimeSlot[] = [];
+    const now = new Date();
+    const startHour = 9;
+    const endHour = 18;
+
+    // Check if selected date is today
+    const isToday = selectedDate.toDateString() === now.toDateString();
+    
+    for (let hour = startHour; hour < endHour; hour++) {
+      for (let minute of [0, 30]) {
+        const slotTime = setMinutes(setHours(selectedDate, hour), minute);
+        const isDisabled = isToday && isBefore(slotTime, now);
+        
+        slots.push({
+          value: format(slotTime, "yyyy-MM-dd'T'HH:mm"),
+          label: format(slotTime, 'hh:mm a'),
+          disabled: isDisabled
+        });
+      }
+    }
+
+    return slots;
+  };
+
+  // Validate pickup slot
+  const validatePickupSlot = (dateTimeStr: string): string => {
+    if (!dateTimeStr) return 'Pickup slot is required';
+
     const pickupDate = new Date(dateTimeStr);
     const now = new Date();
+    const maxDate = addDays(now, 14); // Allow booking up to 14 days in advance
+
+    if (isBefore(pickupDate, now)) {
+      return 'Pickup slot cannot be in the past';
+    }
+
+    if (isAfter(pickupDate, maxDate)) {
+      return 'Pickup slot cannot be more than 14 days in advance';
+    }
+
+    if (isWeekend(pickupDate)) {
+      return 'Pickup is only available on weekdays (Monday to Friday)';
+    }
+
     const hour = pickupDate.getHours();
-
-    // Clear previous error
-    setFormErrors(prev => ({ ...prev, pickup_slot: '' }));
-
-    // Check if date is in the past
-    if (pickupDate < now) {
-      setFormErrors(prev => ({ ...prev, pickup_slot: 'Pickup slot cannot be in the past' }));
-      return false;
+    const minutes = pickupDate.getMinutes();
+    
+    if (hour < 9 || (hour === 18 && minutes > 0) || hour > 18) {
+      return 'Pickup slot must be between 9:00 AM and 6:00 PM';
     }
 
-    // Check business hours (9 AM to 6 PM)
-    if (hour < 9 || hour >= 18) {
-      setFormErrors(prev => ({ ...prev, pickup_slot: 'Pickup slot must be between 9 AM and 6 PM' }));
-      return false;
+    if (minutes !== 0 && minutes !== 30) {
+      return 'Pickup slots are available every 30 minutes';
     }
 
-    return true;
+    return '';
+  };
+
+  // Validate a single field
+  const validateField = (name: string, value: any): string => {
+    const rules = VALIDATION_RULES[name as keyof typeof VALIDATION_RULES];
+    if (!rules) return '';
+
+    if (rules.required && !value) {
+      return rules.message;
+    }
+
+    if (rules.pattern && !rules.pattern.test(value.toString())) {
+      return rules.message;
+    }
+
+    // Handle minimum length for string fields (like pickup_address)
+    if (rules.min !== undefined) {
+      if (typeof value === 'string' && value.length < rules.min) {
+        return rules.message;
+      } else if (typeof value === 'number' && value < rules.min) {
+        return rules.message;
+      }
+    }
+
+    if (rules.max !== undefined && Number(value) > rules.max) {
+      return rules.message;
+    }
+
+    return '';
+  };
+
+  // Validate all fields
+  const validateForm = (): boolean => {
+    const newErrors: {[key: string]: string} = {};
+    let isValid = true;
+
+    // Validate form fields
+    Object.keys(formData).forEach(key => {
+      const error = validateField(key, formData[key as keyof FormData]);
+      if (error) {
+        newErrors[key] = error;
+        isValid = false;
+      }
+    });
+
+    // Validate pickup slot
+    const pickupSlotError = validatePickupSlot(formData.pickup_slot);
+    if (pickupSlotError) {
+      newErrors.pickup_slot = pickupSlotError;
+      isValid = false;
+    }
+
+    // Validate required documents
+    REQUIRED_DOCUMENTS.forEach(doc => {
+      if (!files[doc as keyof FileData]) {
+        newErrors[doc] = 'This document is required';
+        isValid = false;
+      }
+    });
+
+    // Validate required photos
+    REQUIRED_PHOTOS.forEach(photo => {
+      if (!files[photo as keyof FileData]) {
+        newErrors[photo] = 'This photo is required';
+        isValid = false;
+      }
+    });
+
+    setFormErrors(newErrors);
+    return isValid;
   };
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -180,8 +392,13 @@ export default function SellVehicle() {
     e.preventDefault();
     setLoading(true);
 
-    // Validate pickup slot before submission
-    if (!validatePickupSlot(formData.pickup_slot)) {
+    if (!validateForm()) {
+      setModalState({
+        isOpen: true,
+        type: 'error',
+        title: 'Validation Error',
+        message: 'Please fill in all required fields correctly before submitting.'
+      });
       setLoading(false);
       return;
     }
@@ -193,7 +410,7 @@ export default function SellVehicle() {
         throw new Error('No access token found');
       }
 
-      // First, create the vehicle
+      // First, prepare all the data but don't submit yet
       const vehicleData = {
         vehicle_type: formData.vehicle_type,
         brand: formData.brand,
@@ -205,10 +422,51 @@ export default function SellVehicle() {
         engine_capacity: parseInt(formData.engine_capacity),
         color: formData.color,
         expected_price: parseFloat(formData.expected_price),
-        status: 'pending'  // Initial status for newly created vehicles
+        status: 'pending'
       };
 
-      // Create vehicle
+      // Prepare sell request data
+      const sellRequestData = new FormData();
+      const pickupDate = new Date(formData.pickup_slot);
+      sellRequestData.append('pickup_slot', pickupDate.toISOString());
+      sellRequestData.append('pickup_address', formData.pickup_address);
+      sellRequestData.append('contact_number', formData.contact_number);
+
+      // Add all files
+      Object.entries(files).forEach(([key, file]) => {
+        if (file) {
+          sellRequestData.append(key, file);
+        }
+      });
+
+      // First check if registration number exists
+      try {
+        const checkResponse = await axios.get(
+          `https://repairmybike.up.railway.app/api/marketplace/vehicles/check-registration/${formData.registration_number}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`
+            }
+          }
+        );
+
+        if (checkResponse.data.exists) {
+          setModalState({
+            isOpen: true,
+            type: 'error',
+            title: 'Registration Error',
+            message: 'This registration number is already registered in our system. Please check the number and try again.'
+          });
+          setLoading(false);
+          return;
+        }
+      } catch (error) {
+        // If the check endpoint fails, we'll proceed with the submission
+        // as the main create endpoint will still validate the registration number
+        console.warn('Registration number check failed:', error);
+      }
+
+      // Now create both vehicle and sell request in sequence
       const vehicleResponse = await axios.post(
         'https://repairmybike.up.railway.app/api/marketplace/vehicles/',
         vehicleData,
@@ -222,65 +480,74 @@ export default function SellVehicle() {
       );
 
       const vehicleId = vehicleResponse.data.id;
-
-      // Now create the sell request with the vehicle ID
-      const sellRequestData = new FormData();
-      
-      // Add the vehicle ID
       sellRequestData.append('vehicle', vehicleId.toString());
 
-      // Format pickup_slot to ISO string for backend
-      const pickupDate = new Date(formData.pickup_slot);
-      sellRequestData.append('pickup_slot', pickupDate.toISOString());
+      try {
+        // Try to create the sell request
+        await axios.post(
+          'https://repairmybike.up.railway.app/api/marketplace/sell-requests/',
+          sellRequestData,
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'multipart/form-data'
+            },
+            withCredentials: true
+          }
+        );
 
-      // Add other sell request fields
-      sellRequestData.append('pickup_address', formData.pickup_address);
-      sellRequestData.append('contact_number', formData.contact_number);
+        // If successful, show success message and redirect
+        setModalState({
+          isOpen: true,
+          type: 'success',
+          title: 'Success!',
+          message: 'Your vehicle sell request has been submitted successfully. Our team will contact you shortly to arrange the pickup.'
+        });
 
-      // Add all files
-      Object.entries(files).forEach(([key, file]) => {
-        if (file) {
-          sellRequestData.append(key, file);
+        // Navigate after modal is closed
+        setTimeout(() => {
+          navigate('/profile?tab=vehicles');
+        }, 2000);
+
+      } catch (sellRequestError: any) {
+        // If sell request fails, delete the vehicle we just created
+        try {
+          await axios.delete(
+            `https://repairmybike.up.railway.app/api/marketplace/vehicles/${vehicleId}/`,
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`
+              }
+            }
+          );
+        } catch (deleteError) {
+          console.error('Failed to cleanup vehicle after sell request error:', deleteError);
         }
-      });
 
-      // Debug request data
-      console.log('Vehicle created:', vehicleResponse.data);
-      console.log('Sell Request Data being sent:', Object.fromEntries(sellRequestData.entries()));
-      console.log('Files being sent:', Object.fromEntries(Object.entries(files).filter(([_, file]) => file !== null)));
-
-      // Create sell request
-      const sellRequestResponse = await axios.post(
-        'https://repairmybike.up.railway.app/api/marketplace/sell-requests/',
-        sellRequestData,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'multipart/form-data'
-          },
-          withCredentials: true
-        }
-      );
-
-      console.log('Sell Request Response:', sellRequestResponse);
-      alert('Vehicle sell request submitted successfully!');
-      navigate('/profile?tab=vehicles');
-    } catch (error: any) {
-      console.error('Submission error:', error);
-      console.error('Error response:', error.response);
-      console.error('Error response data:', error.response?.data);
-      console.error('Error details:', error.response?.data?.detail || error.response?.data);
-      
-      if (error.message === 'No access token found' || error.response?.status === 401) {
-        alert('Authentication failed. Please try logging in again.');
-        navigate('/login', { state: { from: '/sell-vehicle' } });
-      } else {
-        const errorMessage = error.response?.data?.detail || 
-                           error.response?.data?.message || 
-                           Object.entries(error.response?.data || {}).map(([key, value]) => `${key}: ${value}`).join('\n') ||
-                           error.message;
-        alert(`Failed to submit sell request:\n${errorMessage}`);
+        // Re-throw the original error to be handled by the outer catch block
+        throw sellRequestError;
       }
+
+    } catch (error: any) {
+      let errorMessage = 'An unexpected error occurred. Please try again.';
+      
+      if (error.response?.status === 401) {
+        errorMessage = 'Your session has expired. Please log in again.';
+        navigate('/login', { state: { from: '/sell-vehicle' } });
+      } else if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.response?.data) {
+        errorMessage = Object.entries(error.response.data)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join('\n');
+      }
+
+      setModalState({
+        isOpen: true,
+        type: 'error',
+        title: 'Error',
+        message: errorMessage
+      });
     } finally {
       setLoading(false);
     }
@@ -300,284 +567,345 @@ export default function SellVehicle() {
     return null;
   }
 
+  const renderFieldError = (fieldName: string) => {
+    if (!formErrors[fieldName]) return null;
+    return (
+      <p className="mt-1 text-sm text-red-600">
+        {formErrors[fieldName]}
+      </p>
+    );
+  };
+
+  const renderInputField = (
+    name: keyof FormData,
+    label: string,
+    type: string = 'text',
+    placeholder: string = '',
+    options?: { value: string; label: string }[]
+  ) => {
+    const hasError = !!formErrors[name];
+    const baseClasses = "w-full rounded-lg border p-2.5 text-gray-900 focus:ring-2 focus:ring-[#FF5733] focus:border-transparent";
+    const classes = `${baseClasses} ${
+      hasError 
+        ? 'border-red-500 bg-red-50' 
+        : 'border-gray-300 bg-white'
+    }`;
+
+    if (name === 'pickup_slot') {
+      const selectedDate = formData.pickup_slot 
+        ? new Date(formData.pickup_slot)
+        : new Date();
+
+      const minDate = format(new Date(), "yyyy-MM-dd");
+      const maxDate = format(addDays(new Date(), 14), "yyyy-MM-dd");
+      
+      return (
+        <div className="space-y-4">
+          <label className="block mb-2 text-sm font-medium text-gray-900">
+            {label}
+            <span className="text-red-500 ml-1">*</span>
+          </label>
+          
+          {/* Date Selection */}
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Select Date</label>
+            <input
+              type="date"
+              name="pickup_date"
+              value={format(selectedDate, 'yyyy-MM-dd')}
+              min={minDate}
+              max={maxDate}
+              onChange={(e) => {
+                const newDate = new Date(e.target.value);
+                const currentTime = formData.pickup_slot 
+                  ? new Date(formData.pickup_slot)
+                  : setHours(setMinutes(new Date(), 0), 9);
+                
+                newDate.setHours(currentTime.getHours());
+                newDate.setMinutes(currentTime.getMinutes());
+                
+                handleInputChange({
+                  target: {
+                    name: 'pickup_slot',
+                    value: format(newDate, "yyyy-MM-dd'T'HH:mm")
+                  }
+                } as any);
+              }}
+              className={classes}
+              disabled={loading}
+            />
+          </div>
+
+          {/* Time Slot Selection */}
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Select Time Slot</label>
+            <div className="grid grid-cols-4 gap-2">
+              {generateTimeSlots(selectedDate).map((slot, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  disabled={slot.disabled || loading}
+                  onClick={() => {
+                    handleInputChange({
+                      target: {
+                        name: 'pickup_slot',
+                        value: slot.value
+                      }
+                    } as any);
+                  }}
+                  className={`p-2 text-sm rounded-lg transition-colors ${
+                    formData.pickup_slot === slot.value
+                      ? 'bg-[#FF5733] text-white'
+                      : slot.disabled
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-gray-50 hover:bg-gray-100'
+                  }`}
+                >
+                  {slot.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="text-xs text-gray-500 space-y-1">
+            <p>• Available on weekdays (Monday to Friday)</p>
+            <p>• Slots every 30 minutes from 9 AM to 6 PM</p>
+            <p>• Book up to 14 days in advance</p>
+          </div>
+          
+          {renderFieldError(name)}
+        </div>
+      );
+    }
+
+    return (
+      <div className="mb-4">
+        <label className="block mb-2 text-sm font-medium text-gray-900">
+          {label}
+          <span className="text-red-500 ml-1">*</span>
+        </label>
+        
+        {type === 'select' ? (
+          <select
+            name={name}
+            value={formData[name]}
+            onChange={handleInputChange}
+            className={classes}
+            disabled={loading}
+            required
+          >
+            <option value="">Select {label}</option>
+            {options?.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        ) : type === 'datetime-local' ? (
+          <div className="relative">
+            <input
+              type="datetime-local"
+              name={name}
+              value={formData[name]}
+              onChange={handleInputChange}
+              className={classes}
+              min={new Date().toISOString().slice(0, 16)}
+              required
+              disabled={loading}
+            />
+            <div className="mt-1 text-xs text-gray-500">
+              Available slots: 9 AM to 6 PM
+            </div>
+          </div>
+        ) : (
+          <input
+            type={type}
+            name={name}
+            value={formData[name]}
+            onChange={handleInputChange}
+            placeholder={placeholder}
+            className={classes}
+            required
+            disabled={loading}
+          />
+        )}
+        {renderFieldError(name)}
+      </div>
+    );
+  };
+
+  const renderFileInput = (
+    name: keyof FileData,
+    label: string,
+    required: boolean = true
+  ) => {
+    const hasError = !!formErrors[name];
+    const baseClasses = "block w-full text-sm text-gray-900 border rounded-lg cursor-pointer focus:outline-none";
+    const classes = `${baseClasses} ${
+      hasError 
+        ? 'border-red-500 bg-red-50' 
+        : 'border-gray-300 bg-gray-50'
+    }`;
+
+    return (
+      <div className="mb-4">
+        <label className="block mb-2 text-sm font-medium text-gray-900">
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </label>
+        <input
+          type="file"
+          name={name}
+          onChange={handleFileChange}
+          className={classes}
+          accept={name.includes('photo') ? "image/*" : ".pdf,image/*"}
+          required={required}
+          disabled={loading}
+        />
+        {previews[name] && (
+          <div className="mt-2">
+            <img 
+              src={previews[name]} 
+              alt={`${label} Preview`} 
+              className="h-32 object-contain rounded-lg border border-gray-200"
+            />
+          </div>
+        )}
+        {renderFieldError(name)}
+      </div>
+    );
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Sell Your Vehicle</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Sell Your Vehicle</h1>
         <button
           onClick={handleReset}
-          className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+          type="button"
         >
           Reset Form
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-8">
         {/* Vehicle Details */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Vehicle Details</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <select
-              name="vehicle_type"
-              value={formData.vehicle_type}
-              onChange={handleInputChange}
-              className="border rounded p-2"
-              required
-            >
-              <option value="">Select Vehicle Type</option>
-              <option value="bike">Bike</option>
-              <option value="scooter">Scooter</option>
-              <option value="electric_bike">Electric Bike</option>
-              <option value="electric_scooter">Electric Scooter</option>
-            </select>
-
-            <input
-              type="text"
-              name="brand"
-              placeholder="Brand"
-              value={formData.brand}
-              onChange={handleInputChange}
-              className="border rounded p-2"
-              required
-            />
-
-            <input
-              type="text"
-              name="model"
-              placeholder="Model"
-              value={formData.model}
-              onChange={handleInputChange}
-              className="border rounded p-2"
-              required
-            />
-
-            <input
-              type="number"
-              name="year"
-              placeholder="Year"
-              value={formData.year}
-              onChange={handleInputChange}
-              className="border rounded p-2"
-              required
-            />
-
-            <input
-              type="text"
-              name="registration_number"
-              placeholder="Registration Number"
-              value={formData.registration_number}
-              onChange={handleInputChange}
-              className="border rounded p-2"
-              required
-            />
-
-            <input
-              type="number"
-              name="kms_driven"
-              placeholder="Kilometers Driven"
-              value={formData.kms_driven}
-              onChange={handleInputChange}
-              className="border rounded p-2"
-              required
-            />
-
-            <select
-              name="fuel_type"
-              value={formData.fuel_type}
-              onChange={handleInputChange}
-              className="border rounded p-2"
-              required
-            >
-              <option value="">Select Fuel Type</option>
-              <option value="petrol">Petrol</option>
-              <option value="electric">Electric</option>
-            </select>
-
-            <input
-              type="number"
-              name="engine_capacity"
-              placeholder="Engine Capacity (cc)"
-              value={formData.engine_capacity}
-              onChange={handleInputChange}
-              className="border rounded p-2"
-              required
-            />
-
-            <input
-              type="text"
-              name="color"
-              placeholder="Color"
-              value={formData.color}
-              onChange={handleInputChange}
-              className="border rounded p-2"
-              required
-            />
-
-            <input
-              type="number"
-              name="expected_price"
-              placeholder="Expected Price"
-              value={formData.expected_price}
-              onChange={handleInputChange}
-              className="border rounded p-2"
-              required
-            />
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Vehicle Details</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {renderInputField('vehicle_type', 'Vehicle Type', 'select', '', [
+              { value: 'bike', label: 'Bike' },
+              { value: 'scooter', label: 'Scooter' },
+              { value: 'electric_bike', label: 'Electric Bike' },
+              { value: 'electric_scooter', label: 'Electric Scooter' }
+            ])}
+            {renderInputField('brand', 'Brand')}
+            {renderInputField('model', 'Model')}
+            {renderInputField('year', 'Year', 'number', 'YYYY')}
+            {renderInputField('registration_number', 'Registration Number', 'text', 'e.g., MH02AB1234')}
+            {renderInputField('kms_driven', 'Kilometers Driven', 'number')}
+            {renderInputField('fuel_type', 'Fuel Type', 'select', '', [
+              { value: 'petrol', label: 'Petrol' },
+              { value: 'electric', label: 'Electric' }
+            ])}
+            {renderInputField('engine_capacity', 'Engine Capacity (cc)', 'number')}
+            {renderInputField('color', 'Color')}
+            {renderInputField('expected_price', 'Expected Price', 'number')}
           </div>
         </div>
 
         {/* Documents */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Required Documents</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block mb-2">Registration Certificate</label>
-              <input
-                type="file"
-                name="registration_certificate"
-                onChange={handleFileChange}
-                className="border rounded p-2 w-full"
-                accept=".pdf,image/*"
-                required
-              />
-              {previews.registration_certificate && (
-                <img src={previews.registration_certificate} alt="RC Preview" className="mt-2 h-32 object-contain" />
-              )}
-            </div>
-
-            <div>
-              <label className="block mb-2">Insurance Document</label>
-              <input
-                type="file"
-                name="insurance_document"
-                onChange={handleFileChange}
-                className="border rounded p-2 w-full"
-                accept=".pdf,image/*"
-                required
-              />
-              {previews.insurance_document && (
-                <img src={previews.insurance_document} alt="Insurance Preview" className="mt-2 h-32 object-contain" />
-              )}
-            </div>
-
-            <div>
-              <label className="block mb-2">PUC Certificate</label>
-              <input
-                type="file"
-                name="puc_certificate"
-                onChange={handleFileChange}
-                className="border rounded p-2 w-full"
-                accept=".pdf,image/*"
-                required
-              />
-              {previews.puc_certificate && (
-                <img src={previews.puc_certificate} alt="PUC Preview" className="mt-2 h-32 object-contain" />
-              )}
-            </div>
-
-            <div>
-              <label className="block mb-2">Ownership Transfer</label>
-              <input
-                type="file"
-                name="ownership_transfer"
-                onChange={handleFileChange}
-                className="border rounded p-2 w-full"
-                accept=".pdf,image/*"
-                required
-              />
-              {previews.ownership_transfer && (
-                <img src={previews.ownership_transfer} alt="Transfer Preview" className="mt-2 h-32 object-contain" />
-              )}
-            </div>
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Required Documents</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {renderFileInput('registration_certificate', 'Registration Certificate')}
+            {renderFileInput('insurance_document', 'Insurance Document')}
+            {renderFileInput('puc_certificate', 'PUC Certificate')}
+            {renderFileInput('ownership_transfer', 'Ownership Transfer')}
+            {renderFileInput('additional_documents', 'Additional Documents', false)}
           </div>
         </div>
 
         {/* Vehicle Photos */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Vehicle Photos</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              ['photo_front', 'Front View'],
-              ['photo_back', 'Back View'],
-              ['photo_left', 'Left Side'],
-              ['photo_right', 'Right Side'],
-              ['photo_dashboard', 'Dashboard'],
-              ['photo_odometer', 'Odometer'],
-              ['photo_engine', 'Engine'],
-              ['photo_extras', 'Additional Photos']
-            ].map(([name, label]) => (
-              <div key={name}>
-                <label className="block mb-2">{label}</label>
-                <input
-                  type="file"
-                  name={name}
-                  onChange={handleFileChange}
-                  className="border rounded p-2 w-full"
-                  accept="image/*"
-                  required={name !== 'photo_extras'}
-                />
-                {previews[name] && (
-                  <img src={previews[name]} alt={label} className="mt-2 h-32 object-contain" />
-                )}
-              </div>
-            ))}
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Vehicle Photos</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {renderFileInput('photo_front', 'Front View')}
+            {renderFileInput('photo_back', 'Back View')}
+            {renderFileInput('photo_left', 'Left Side')}
+            {renderFileInput('photo_right', 'Right Side')}
+            {renderFileInput('photo_dashboard', 'Dashboard')}
+            {renderFileInput('photo_odometer', 'Odometer')}
+            {renderFileInput('photo_engine', 'Engine')}
+            {renderFileInput('photo_extras', 'Additional Photos', false)}
           </div>
         </div>
 
         {/* Pickup Details */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Pickup Details</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              {/* Input for pickup slot - minimum date set to now */}
-              <input
-                type="datetime-local"
-                name="pickup_slot"
-                value={formData.pickup_slot}
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Pickup Details</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {renderInputField('pickup_slot', 'Preferred Pickup Time', 'datetime-local')}
+            {renderInputField('contact_number', 'Contact Number', 'tel', '+91XXXXXXXXXX')}
+            <div className="md:col-span-2">
+              <label className="block mb-2 text-sm font-medium text-gray-900">
+                Pickup Address
+                <span className="text-red-500 ml-1">*</span>
+              </label>
+              <textarea
+                name="pickup_address"
+                value={formData.pickup_address}
                 onChange={handleInputChange}
-                className={`border rounded p-2 w-full ${formErrors.pickup_slot ? 'border-red-500' : ''}`}
+                className={`w-full rounded-lg border p-2.5 text-gray-900 focus:ring-2 focus:ring-[#FF5733] focus:border-transparent ${
+                  formErrors.pickup_address 
+                    ? 'border-red-500 bg-red-50' 
+                    : 'border-gray-300 bg-white'
+                }`}
+                rows={3}
                 required
-                min={new Date().toISOString().slice(0, 16)}
+                disabled={loading}
               />
-              {formErrors.pickup_slot && (
-                <p className="text-red-500 text-sm mt-1">{formErrors.pickup_slot}</p>
-              )}
+              {renderFieldError('pickup_address')}
             </div>
-
-            <input
-              type="tel"
-              name="contact_number"
-              placeholder="Contact Number (e.g., +919999999999)"
-              value={formData.contact_number}
-              onChange={handleInputChange}
-              className="border rounded p-2"
-              required
-              pattern="^\+?[1-9]\d{9,14}$"
-            />
-
-            <textarea
-              name="pickup_address"
-              placeholder="Pickup Address"
-              value={formData.pickup_address}
-              onChange={handleInputChange}
-              className="border rounded p-2 md:col-span-2"
-              rows={3}
-              required
-            />
           </div>
         </div>
 
+        {/* Submit Button */}
         <div className="flex justify-end">
           <button
             type="submit"
             disabled={loading}
-            className={`px-6 py-3 rounded-md text-white font-semibold ${
-              loading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
+            className={`px-6 py-3 rounded-lg text-white font-semibold ${
+              loading 
+                ? 'bg-gray-400 cursor-not-allowed' 
+                : 'bg-[#FF5733] hover:bg-[#ff4019] transition-colors'
             }`}
           >
-            {loading ? 'Submitting...' : 'Submit Sell Request'}
+            {loading ? (
+              <span className="flex items-center">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Submitting...
+              </span>
+            ) : (
+              'Submit Sell Request'
+            )}
           </button>
         </div>
       </form>
+
+      {/* Form Modal */}
+      <FormModal
+        isOpen={modalState.isOpen}
+        onClose={() => setModalState(prev => ({ ...prev, isOpen: false }))}
+        type={modalState.type}
+        title={modalState.title}
+        message={modalState.message}
+        supportPhone="+91 1800 123 4567"
+      />
     </div>
   );
 } 

@@ -156,11 +156,19 @@ const VehicleDetail = () => {
       return;
     }
 
-    createBooking.mutate({
-      vehicle: vehicle.id,
-      contact_number: bookingData.contactNumber,
-      notes: bookingData.notes
-    });
+    // Clean and format the contact number
+    const cleanedNumber = bookingData.contactNumber.replace(/[\s\-\(\)]/g, '');
+    
+    try {
+      createBooking.mutate({
+        vehicle: vehicle.id,
+        contact_number: cleanedNumber,
+        notes: bookingData.notes
+      });
+    } catch (error: any) {
+      console.error('Booking submission error:', error);
+      toast.error(error?.response?.data?.detail || 'Failed to submit booking');
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {

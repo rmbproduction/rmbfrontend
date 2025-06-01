@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { axiosInstance, API_ENDPOINTS } from '../../config/api.config';
 import OrderSuccessModal from '../OrderSuccessModal';
 import ErrorModal from '../ErrorModal';
+import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { User, MapPin, CheckCircle2, Loader2 } from 'lucide-react';
-import { useUserProfile } from '../../hooks/useUserProfile';
 
 interface SubscriptionFormData {
   plan_variant: number;
@@ -43,10 +43,6 @@ interface VehicleModel {
   manufacturer: number;
 }
 
-interface VehicleModelResponse {
-  data: VehicleModel[];
-}
-
 // Add these validation helper functions at the top level
 const validateEmail = (email: string): boolean => {
   const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
@@ -67,9 +63,6 @@ const validatePostalCode = (postalCode: string): boolean => {
 
 const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onClose, onError }) => {
   const navigate = useNavigate();
-  const { profile, prefillFormData, isLoading: isProfileLoading } = useUserProfile();
-
-  // Initialize form state first
   const [formData, setFormData] = useState<SubscriptionFormData>({
     plan_variant: planVariantId,
     vehicle_type: 0,
@@ -84,7 +77,6 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
     postal_code: ''
   });
 
-  // Other state declarations
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -93,109 +85,36 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorModalMessage, setErrorModalMessage] = useState('');
-  const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
-  const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
-  const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([]);
-  const [isLoadingModels, setIsLoadingModels] = useState(false);
 
   // Fetch vehicle types
-  useEffect(() => {
-    const fetchVehicleTypes = async () => {
-      try {
-        const response = await axiosInstance.get<VehicleType[]>(API_ENDPOINTS.vehicle.types);
-        setVehicleTypes(response.data);
-      } catch (error) {
-        console.error('Error fetching vehicle types:', error);
-        setError('Failed to load vehicle types');
-      }
-    };
-    fetchVehicleTypes();
-  }, []);
+  const { data: vehicleTypes } = useQuery<VehicleType[]>({
+    queryKey: ['vehicleTypes'],
+    queryFn: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.vehicle.types);
+      return response.data;
+    }
+  });
 
   // Fetch manufacturers
-  useEffect(() => {
-    const fetchManufacturers = async () => {
-      try {
-        const response = await axiosInstance.get<Manufacturer[]>(API_ENDPOINTS.vehicle.manufacturers);
-        setManufacturers(response.data);
-      } catch (error) {
-        console.error('Error fetching manufacturers:', error);
-        setError('Failed to load manufacturers');
-      }
-    };
-    fetchManufacturers();
-  }, []);
-
-  // Fetch vehicle models when manufacturer changes
-  useEffect(() => {
-    const fetchVehicleModels = async () => {
-      if (!formData.manufacturer) {
-        setVehicleModels([]);
-        return;
-      }
-      
-      setIsLoadingModels(true);
-      try {
-        const response = await axiosInstance.get<VehicleModelResponse>(API_ENDPOINTS.vehicle.models, {
-          params: { manufacturer: formData.manufacturer }
-        });
-        const models = response.data.data;
-        if (!models.length) {
-          setFieldErrors(prev => ({
-            ...prev,
-            vehicle_model: 'No models available for this manufacturer'
-          }));
-        }
-        setVehicleModels(models);
-      } catch (error) {
-        console.error('Error fetching vehicle models:', error);
-        setFieldErrors(prev => ({
-          ...prev,
-          vehicle_model: 'Failed to load models. Please try again.'
-        }));
-      } finally {
-        setIsLoadingModels(false);
-      }
-    };
-    fetchVehicleModels();
-  }, [formData.manufacturer]);
-
-  // Reset model when manufacturer changes
-  useEffect(() => {
-    if (formData.manufacturer === 0) {
-      setFormData(prev => ({
-        ...prev,
-        vehicle_model: 0
-      }));
+  const { data: manufacturers } = useQuery<Manufacturer[]>({
+    queryKey: ['manufacturers'],
+    queryFn: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.vehicle.manufacturers);
+      return response.data;
     }
-  }, [formData.manufacturer]);
+  });
 
-  // Effect for pre-filling form data
-  useEffect(() => {
-    if (profile && !isProfileLoading) {
-      console.log('Pre-filling subscription form with profile data');
-      const prefilledData = prefillFormData({
-        ...formData
-      }, 'subscription');
-      
-      setFormData(prefilledData);
-    }
-  }, [profile, isProfileLoading, prefillFormData, formData]);
-
-  // Render loading state
-  const renderLoading = () => {
-    if (isProfileLoading) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="text-center">
-            <Loader2 className="h-8 w-8 animate-spin text-[#FF5733] mx-auto" />
-            <p className="mt-2 text-gray-600">Loading your information...</p>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
+  // Fetch vehicle models based on selected manufacturer
+  const { data: vehicleModels } = useQuery<VehicleModel[]>({
+    queryKey: ['vehicleModels', formData.manufacturer],
+    queryFn: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.vehicle.models, {
+        params: { manufacturer: formData.manufacturer }
+      });
+      return response.data;
+    },
+    enabled: !!formData.manufacturer // Only fetch when manufacturer is selected
+  });
 
   const validateField = (name: string, value: any): string => {
     // Convert number to string for validation if needed
@@ -222,22 +141,13 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
+    // Convert ID fields to numbers
     if (['plan_variant', 'vehicle_type', 'manufacturer', 'vehicle_model'].includes(name)) {
       const numValue = value ? parseInt(value, 10) : 0;
-      
-      // Reset dependent fields
-      if (name === 'manufacturer') {
-        setFormData(prev => ({
-          ...prev,
-          [name]: numValue,
-          vehicle_model: 0 // Reset model when manufacturer changes
-        }));
-      } else {
-        setFormData(prev => ({
-          ...prev,
-          [name]: numValue
-        }));
-      }
+      setFormData(prev => ({
+        ...prev,
+        [name]: numValue
+      }));
       
       if (submitAttempted) {
         setFieldErrors(prev => ({
@@ -264,7 +174,9 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
     const newErrors: Record<string, string> = {};
     let isValid = true;
 
+    // Validate all fields
     Object.entries(formData).forEach(([key, value]) => {
+      // Skip validation for optional fields if they're empty
       if (value === '' && ['service_notes'].includes(key)) {
         return;
       }
@@ -307,12 +219,18 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
 
       const response = await axiosInstance.post(
         API_ENDPOINTS.subscription.requests,
-        formattedData
+        formattedData,
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
       );
 
       setBookingReference(response.data.reference);
       setShowSuccessModal(true);
       
+      // Clear form data after successful submission
       setFormData({
         plan_variant: planVariantId,
         vehicle_type: 0,
@@ -331,84 +249,94 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
       
     } catch (err: any) {
       console.error('Subscription request error:', err);
-      handleError(err);
+      
+      // Handle different types of errors
+      if (err.response?.status === 400) {
+        const errorMessage = Array.isArray(err.response.data) ? err.response.data[0] : err.response.data?.detail;
+        
+        // Handle active subscription case
+        if (errorMessage === "You already have an active subscription. Please cancel it before requesting a new one.") {
+          const activeMessage = 
+            `⚠️ Active Subscription Detected\n\n` +
+            `• You already have an active subscription plan\n` +
+            `• Only one active subscription is allowed at a time\n` +
+            `• Your current plan must expire before starting a new one\n\n` +
+            `What can you do?\n` +
+            `• Call us to discuss upgrade options\n` +
+            `• Continue with your current plan\n` +
+            `• Check your subscription status in dashboard`;
+
+          // First trigger parent's error handler
+          onError(activeMessage);
+          
+          // Then close form modal after a small delay
+          setTimeout(() => {
+            onClose();
+          }, 100);
+          
+          return;
+        }
+        
+        // Handle pending subscription case
+        if (errorMessage === "You already have a pending subscription request.") {
+          const pendingMessage = 
+            `⏳ Subscription Request In Progress\n\n` +
+            `We're currently processing your subscription request. Our team is reviewing the details to ensure everything is in order.\n\n` +
+            `What you can do now:\n` +
+            `• Check your email for updates about your request\n` +
+            `• View your request status in the "Subscription Requests" tab\n` +
+            `• Contact our support team if you need immediate assistance\n\n` +
+            `Your request is important to us, and we'll process it as quickly as possible.`;
+
+          setErrorModalMessage(pendingMessage);
+          setShowErrorModal(true);
+          return;
+        }
+
+        // Handle validation errors
+        const backendErrors = err.response.data;
+        if (typeof backendErrors === 'object') {
+          const newFieldErrors: Record<string, string> = {};
+          Object.entries(backendErrors).forEach(([key, value]) => {
+            newFieldErrors[key] = Array.isArray(value) ? value[0] : value as string;
+          });
+          setFieldErrors(newFieldErrors);
+          setError('Please correct the highlighted fields');
+        } else {
+          setError(err.response.data.detail || 'Validation failed. Please check your input.');
+        }
+      } else if (err.response?.status === 401) {
+        const sessionMessage = 
+          `🔑 Session Expired\n\n` +
+          `Your login session has expired. For your security, please log in again to continue.\n\n` +
+          `Don't worry:\n` +
+          `• Your subscription information is safely stored\n` +
+          `• You can continue right where you left off after logging in\n` +
+          `• All your subscription details will be available after login`;
+
+        setErrorModalMessage(sessionMessage);
+        setShowErrorModal(true);
+        navigate('/login', { state: { from: window.location.pathname } });
+      } else {
+        const unexpectedMessage = 
+          `❌ Unexpected Error\n\n` +
+          `We encountered an unexpected error while processing your request.\n\n` +
+          `Troubleshooting steps:\n` +
+          `• Check your internet connection\n` +
+          `• Refresh the page and try again\n` +
+          `• Clear your browser cache\n` +
+          `• Contact our support team if the problem persists\n\n` +
+          `Error Reference: ${err.response?.status || 'Unknown'}`;
+
+        setErrorModalMessage(unexpectedMessage);
+        setShowErrorModal(true);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleError = (err: any) => {
-    if (err.response?.status === 400) {
-      const errorMessage = Array.isArray(err.response.data) 
-        ? err.response.data[0] 
-        : err.response.data?.detail;
-      
-      if (errorMessage === "You already have an active subscription. Please cancel it before requesting a new one.") {
-        onError(
-          `⚠️ Active Subscription Detected\n\n` +
-          `• You already have an active subscription plan\n` +
-          `• Only one active subscription is allowed at a time\n` +
-          `• Your current plan must expire before starting a new one\n\n` +
-          `What can you do?\n` +
-          `• Call us to discuss upgrade options\n` +
-          `• Continue with your current plan\n` +
-          `• Check your subscription status in dashboard`
-        );
-        setTimeout(() => onClose(), 100);
-        return;
-      }
-      
-      if (errorMessage === "You already have a pending subscription request.") {
-        setErrorModalMessage(
-          `⏳ Subscription Request In Progress\n\n` +
-          `We're currently processing your subscription request. Our team is reviewing the details to ensure everything is in order.\n\n` +
-          `What you can do now:\n` +
-          `• Check your email for updates about your request\n` +
-          `• View your request status in the "Subscription Requests" tab\n` +
-          `• Contact our support team if you need immediate assistance\n\n` +
-          `Your request is important to us, and we'll process it as quickly as possible.`
-        );
-        setShowErrorModal(true);
-        return;
-      }
-
-      const backendErrors = err.response.data;
-      if (typeof backendErrors === 'object') {
-        const newFieldErrors: Record<string, string> = {};
-        Object.entries(backendErrors).forEach(([key, value]) => {
-          newFieldErrors[key] = Array.isArray(value) ? value[0] : value as string;
-        });
-        setFieldErrors(newFieldErrors);
-        setError('Please correct the highlighted fields');
-      } else {
-        setError(err.response.data.detail || 'Validation failed. Please check your input.');
-      }
-    } else if (err.response?.status === 401) {
-      setErrorModalMessage(
-        `🔑 Session Expired\n\n` +
-        `Your login session has expired. For your security, please log in again to continue.\n\n` +
-        `Don't worry:\n` +
-        `• Your subscription information is safely stored\n` +
-        `• You can continue right where you left off after logging in\n` +
-        `• All your subscription details will be available after login`
-      );
-      setShowErrorModal(true);
-      navigate('/login', { state: { from: window.location.pathname } });
-    } else {
-      setErrorModalMessage(
-        `❌ Unexpected Error\n\n` +
-        `We encountered an unexpected error while processing your request.\n\n` +
-        `Troubleshooting steps:\n` +
-        `• Check your internet connection\n` +
-        `• Refresh the page and try again\n` +
-        `• Clear your browser cache\n` +
-        `• Contact our support team if the problem persists\n\n` +
-        `Error Reference: ${err.response?.status || 'Unknown'}`
-      );
-      setShowErrorModal(true);
-    }
-  };
-
+  // Add this function to render field error messages
   const renderFieldError = (fieldName: string) => {
     return fieldErrors[fieldName] ? (
       <p className="mt-1 text-sm text-red-600">{fieldErrors[fieldName]}</p>
@@ -417,6 +345,7 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
 
   return (
     <>
+      {/* Error Modal - Moved outside of showForm condition */}
       <ErrorModal
         isOpen={showErrorModal}
         message={errorModalMessage}
@@ -425,258 +354,247 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
         showCloseButton={false}
       />
 
-      {renderLoading()}
+      <div className="bg-gray-50 p-8 rounded-lg">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-2xl font-bold text-gray-900">Subscribe to Plan</h2>
+            {error && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-md mb-4">
+                {error}
+              </div>
+            )}
+          </div>
 
-      {!isProfileLoading && (
-        <div className="bg-gray-50 p-8 rounded-lg">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-bold text-gray-900">Subscribe to Plan</h2>
-              {error && (
-                <div className="bg-red-50 text-red-600 p-3 rounded-md mb-4">
-                  {error}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Vehicle Information */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white rounded-xl p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5 text-[#FF5733]" />
                 </div>
-              )}
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Vehicle Information */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-xl p-6 shadow-sm"
-              >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
-                    <CheckCircle2 className="w-5 h-5 text-[#FF5733]" />
-                  </div>
-                  <h3 className="font-semibold">Vehicle Information</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <select
-                      name="vehicle_type"
-                      value={formData.vehicle_type}
-                      onChange={handleInputChange}
-                      className={`mt-1 block w-full rounded-md border ${
-                        fieldErrors.vehicle_type ? 'border-red-300' : 'border-gray-300'
-                      } px-3 py-2 focus:outline-none focus:ring-orange-500 focus:border-orange-500`}
-                      disabled={loading}
-                    >
-                      <option value={0}>Select Vehicle Type</option>
-                      {(vehicleTypes || []).map((type: VehicleType) => (
-                        <option key={type.id} value={type.id}>
-                          {type.name}
-                        </option>
-                      ))}
-                    </select>
-                    {renderFieldError('vehicle_type')}
-                  </div>
-
-                  <div>
-                    <select
-                      name="manufacturer"
-                      value={formData.manufacturer}
-                      onChange={handleInputChange}
-                      required
-                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                        fieldErrors.manufacturer ? 'border-red-300' : ''
-                      }`}
-                      disabled={loading}
-                    >
-                      <option value="">Select Manufacturer</option>
-                      {(manufacturers || []).map((manufacturer: Manufacturer) => (
-                        <option key={manufacturer.id} value={manufacturer.id}>
-                          {manufacturer.name}
-                        </option>
-                      ))}
-                    </select>
-                    {renderFieldError('manufacturer')}
-                  </div>
-
-                  <div>
-                    <select
-                      name="vehicle_model"
-                      value={formData.vehicle_model}
-                      onChange={handleInputChange}
-                      className={`mt-1 block w-full rounded-md border ${
-                        fieldErrors.vehicle_model ? 'border-red-300' : 'border-gray-300'
-                      } px-3 py-2 focus:outline-none focus:ring-orange-500 focus:border-orange-500`}
-                      disabled={!formData.manufacturer || loading || isLoadingModels}
-                    >
-                      <option value={0}>
-                        {isLoadingModels ? 'Loading models...' : 'Select Model'}
-                      </option>
-                      {(vehicleModels || []).map((model: VehicleModel) => (
-                        <option key={model.id} value={model.id}>
-                          {model.name}
-                        </option>
-                      ))}
-                    </select>
-                    {renderFieldError('vehicle_model')}
-                  </div>
-                </div>
-              </motion.div>
-
-              {/* Customer Information */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="bg-white rounded-xl p-6 shadow-sm"
-              >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
-                    <User className="w-5 h-5 text-[#FF5733]" />
-                  </div>
-                  <h3 className="font-semibold">Customer Information</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <input
-                    type="text"
-                    name="customer_name"
-                    value={formData.customer_name}
-                    onChange={handleInputChange}
-                    placeholder="Full Name *"
-                    required
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                      fieldErrors.customer_name ? 'border-red-300' : ''
-                    }`}
-                    disabled={loading}
-                  />
-                  {renderFieldError('customer_name')}
-                  <input
-                    type="email"
-                    name="customer_email"
-                    value={formData.customer_email}
-                    onChange={handleInputChange}
-                    placeholder="Email Address *"
-                    required
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                      fieldErrors.customer_email ? 'border-red-300' : ''
-                    }`}
-                    disabled={loading}
-                  />
-                  {renderFieldError('customer_email')}
-                  <input
-                    type="tel"
-                    name="customer_phone"
-                    value={formData.customer_phone}
-                    onChange={handleInputChange}
-                    placeholder="Phone Number *"
-                    required
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                      fieldErrors.customer_phone ? 'border-red-300' : ''
-                    }`}
-                    disabled={loading}
-                  />
-                  {renderFieldError('customer_phone')}
-                </div>
-              </motion.div>
-
-              {/* Address Information */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="bg-white rounded-xl p-6 shadow-sm"
-              >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
-                    <MapPin className="w-5 h-5 text-[#FF5733]" />
-                  </div>
-                  <h3 className="font-semibold">Address Information</h3>
-                </div>
-                <div className="space-y-4">
-                  <input
-                    type="text"
-                    name="address"
-                    value={formData.address}
-                    onChange={handleInputChange}
-                    placeholder="Street Address *"
-                    required
-                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                      fieldErrors.address ? 'border-red-300' : ''
-                    }`}
-                    disabled={loading}
-                  />
-                  {renderFieldError('address')}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <input
-                      type="text"
-                      name="city"
-                      value={formData.city}
-                      onChange={handleInputChange}
-                      placeholder="City *"
-                      required
-                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                        fieldErrors.city ? 'border-red-300' : ''
-                      }`}
-                      disabled={loading}
-                    />
-                    {renderFieldError('city')}
-                    <input
-                      type="text"
-                      name="state"
-                      value={formData.state}
-                      onChange={handleInputChange}
-                      placeholder="State *"
-                      required
-                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                        fieldErrors.state ? 'border-red-300' : ''
-                      }`}
-                      disabled={loading}
-                    />
-                    {renderFieldError('state')}
-                    <input
-                      type="text"
-                      name="postal_code"
-                      value={formData.postal_code}
-                      onChange={handleInputChange}
-                      placeholder="Postal Code *"
-                      required
-                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                        fieldErrors.postal_code ? 'border-red-300' : ''
-                      }`}
-                      disabled={loading}
-                    />
-                    {renderFieldError('postal_code')}
-                  </div>
-                </div>
-              </motion.div>
-
-              {/* Submit Buttons */}
-              <div className="flex justify-end space-x-4 mt-6">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                <h3 className="font-semibold">Vehicle Information</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <select
+                  name="vehicle_type"
+                  value={formData.vehicle_type}
+                  onChange={handleInputChange}
+                  className={`mt-1 block w-full rounded-md border ${
+                    fieldErrors.vehicle_type ? 'border-red-300' : 'border-gray-300'
+                  } px-3 py-2 focus:outline-none focus:ring-orange-500 focus:border-orange-500`}
                   disabled={loading}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className={`px-6 py-2 bg-[#FF5733] text-white rounded-lg hover:bg-[#ff4019] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${
-                    loading ? 'opacity-50 cursor-not-allowed' : ''
+                  <option value={0}>Select Vehicle Type</option>
+                  {vehicleTypes?.map(type => (
+                    <option key={type.id} value={type.id}>
+                      {type.name}
+                    </option>
+                  ))}
+                </select>
+                {renderFieldError('vehicle_type')}
+
+                <select
+                  name="manufacturer"
+                  value={formData.manufacturer}
+                  onChange={handleInputChange}
+                  required
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                    fieldErrors.manufacturer ? 'border-red-300' : ''
                   }`}
                   disabled={loading}
                 >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    'Submit Request'
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                  <option value="">Select Manufacturer</option>
+                  {manufacturers?.map(manufacturer => (
+                    <option key={manufacturer.id} value={manufacturer.id}>
+                      {manufacturer.name}
+                    </option>
+                  ))}
+                </select>
+                {renderFieldError('manufacturer')}
 
+                <select
+                  name="vehicle_model"
+                  value={formData.vehicle_model}
+                  onChange={handleInputChange}
+                  className={`mt-1 block w-full rounded-md border ${
+                    fieldErrors.vehicle_model ? 'border-red-300' : 'border-gray-300'
+                  } px-3 py-2 focus:outline-none focus:ring-orange-500 focus:border-orange-500`}
+                  disabled={!formData.manufacturer || loading}
+                >
+                  <option value={0}>Select Model</option>
+                  {vehicleModels?.map(model => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+                {renderFieldError('vehicle_model')}
+              </div>
+            </motion.div>
+
+            {/* Customer Information */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded-xl p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                  <User className="w-5 h-5 text-[#FF5733]" />
+                </div>
+                <h3 className="font-semibold">Customer Information</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input
+                  type="text"
+                  name="customer_name"
+                  value={formData.customer_name}
+                  onChange={handleInputChange}
+                  placeholder="Full Name *"
+                  required
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                    fieldErrors.customer_name ? 'border-red-300' : ''
+                  }`}
+                  disabled={loading}
+                />
+                {renderFieldError('customer_name')}
+                <input
+                  type="email"
+                  name="customer_email"
+                  value={formData.customer_email}
+                  onChange={handleInputChange}
+                  placeholder="Email Address *"
+                  required
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                    fieldErrors.customer_email ? 'border-red-300' : ''
+                  }`}
+                  disabled={loading}
+                />
+                {renderFieldError('customer_email')}
+                <input
+                  type="tel"
+                  name="customer_phone"
+                  value={formData.customer_phone}
+                  onChange={handleInputChange}
+                  placeholder="Phone Number *"
+                  required
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                    fieldErrors.customer_phone ? 'border-red-300' : ''
+                  }`}
+                  disabled={loading}
+                />
+                {renderFieldError('customer_phone')}
+              </div>
+            </motion.div>
+
+            {/* Address Information */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-white rounded-xl p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                  <MapPin className="w-5 h-5 text-[#FF5733]" />
+                </div>
+                <h3 className="font-semibold">Address Information</h3>
+              </div>
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  name="address"
+                  value={formData.address}
+                  onChange={handleInputChange}
+                  placeholder="Street Address *"
+                  required
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                    fieldErrors.address ? 'border-red-300' : ''
+                  }`}
+                  disabled={loading}
+                />
+                {renderFieldError('address')}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <input
+                    type="text"
+                    name="city"
+                    value={formData.city}
+                    onChange={handleInputChange}
+                    placeholder="City *"
+                    required
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                      fieldErrors.city ? 'border-red-300' : ''
+                    }`}
+                    disabled={loading}
+                  />
+                  {renderFieldError('city')}
+                  <input
+                    type="text"
+                    name="state"
+                    value={formData.state}
+                    onChange={handleInputChange}
+                    placeholder="State *"
+                    required
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                      fieldErrors.state ? 'border-red-300' : ''
+                    }`}
+                    disabled={loading}
+                  />
+                  {renderFieldError('state')}
+                  <input
+                    type="text"
+                    name="postal_code"
+                    value={formData.postal_code}
+                    onChange={handleInputChange}
+                    placeholder="Postal Code *"
+                    required
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                      fieldErrors.postal_code ? 'border-red-300' : ''
+                    }`}
+                    disabled={loading}
+                  />
+                  {renderFieldError('postal_code')}
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Submit Buttons */}
+            <div className="flex justify-end space-x-4 mt-6">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className={`px-6 py-2 bg-[#FF5733] text-white rounded-lg hover:bg-[#ff4019] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${
+                  loading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  'Submit Request'
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* Success Modal */}
       <OrderSuccessModal
         isOpen={showSuccessModal}
         onClose={() => {

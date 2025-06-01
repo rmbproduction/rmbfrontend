@@ -1,18 +1,14 @@
 // React and Router imports
+import React from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-
-// Third-party imports
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-
-// Components
 import { AuthProvider } from './contexts/AuthContext';
 import { SubscriptionProvider } from './contexts/SubscriptionContext';
 import AppRoutes from './routes';
 import Pricing from './pages/pricing';
 import LoginSignupPage from './pages/LoginSignupPage';
-import VerifyEmail from './pages/VerifyEmail';
+import EmailVerification from './pages/EmailVerification';
+import EmailConfirmation from './pages/EmailConfirmation';
 import ResetPassword from './pages/ResetPassword';
 import PasswordResetConfirmation from './pages/PasswordResetConfirmation';
 
@@ -32,12 +28,16 @@ const queryClient = new QueryClient({
 // Create router
 const router = createBrowserRouter([
   {
-    path: "/login",
+    path: "/login-signup",
     element: <LoginSignupPage />
   },
   {
-    path: "/verify-email/:token",
-    element: <VerifyEmail />
+    path: "/verify-email",
+    element: <EmailVerification />
+  },
+  {
+    path: "/verify-email/:key",
+    element: <EmailConfirmation />
   },
   {
     path: "/reset-password/:token",
@@ -51,6 +51,10 @@ const router = createBrowserRouter([
     path: "/subscription",
     element: <Pricing />
   },
+  // {
+  //   path: "/pricing",
+  //   element: <Pricing />
+  // },
   {
     path: "/*",
     element: <AppRoutes />
@@ -63,7 +67,6 @@ const App: React.FC = () => {
       <AuthProvider>
         <SubscriptionProvider>
           <RouterProvider router={router} />
-          <ToastContainer position="top-right" />
         </SubscriptionProvider>
       </AuthProvider>
     </QueryClientProvider>

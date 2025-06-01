@@ -652,8 +652,8 @@ const Profile = () => {
                   disabled={!isEditing}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
                   placeholder={isEditing ? "Enter your country" : ""}
-                />
-              </div>
+                    />
+                  </div>
 
               {/* Vehicle Information */}
               {renderVehicleDropdowns()}
