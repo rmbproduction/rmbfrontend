@@ -133,6 +133,12 @@ const Checkout = () => {
     }
   });
 
+  // Add form state debugging
+  const formValues = watch();
+  useEffect(() => {
+    console.log('Form values:', formValues);
+  }, [formValues]);
+
   // Check authentication
   useEffect(() => {
     if (!user) {
@@ -338,7 +344,7 @@ const Checkout = () => {
     }
   };
 
-  // Update the Personal Information section in the render
+  // Update the Personal Information section
   const renderPersonalInformation = () => (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -359,7 +365,10 @@ const Checkout = () => {
               type="text"
               placeholder="Full Name *"
               {...register('name')}
-              onChange={(e) => setValue('name', e.target.value)}
+              value={formValues.name}
+              onChange={(e) => {
+                setValue('name', e.target.value);
+              }}
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
                 errors.name ? 'border-red-500' : 'border-gray-300'
               }`}
@@ -373,7 +382,10 @@ const Checkout = () => {
               type="email"
               placeholder="Email Address *"
               {...register('email')}
-              onChange={(e) => setValue('email', e.target.value)}
+              value={formValues.email}
+              onChange={(e) => {
+                setValue('email', e.target.value);
+              }}
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
                 errors.email ? 'border-red-500' : 'border-gray-300'
               }`}
@@ -388,7 +400,10 @@ const Checkout = () => {
             type="tel"
             placeholder="Phone Number *"
             {...register('phone')}
-            onChange={(e) => setValue('phone', e.target.value)}
+            value={formValues.phone}
+            onChange={(e) => {
+              setValue('phone', e.target.value);
+            }}
             className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
               errors.phone ? 'border-red-500' : 'border-gray-300'
             }`}
@@ -421,7 +436,10 @@ const Checkout = () => {
             placeholder="Street Address *"
             rows={3}
             {...register('address.street')}
-            onChange={(e) => setValue('address.street', e.target.value)}
+            value={formValues.address.street}
+            onChange={(e) => {
+              setValue('address.street', e.target.value);
+            }}
             className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
               errors.address?.street ? 'border-red-500' : 'border-gray-300'
             }`}
@@ -436,7 +454,10 @@ const Checkout = () => {
               type="text"
               placeholder="City *"
               {...register('address.city')}
-              onChange={(e) => setValue('address.city', e.target.value)}
+              value={formValues.address.city}
+              onChange={(e) => {
+                setValue('address.city', e.target.value);
+              }}
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
                 errors.address?.city ? 'border-red-500' : 'border-gray-300'
               }`}
@@ -450,7 +471,10 @@ const Checkout = () => {
               type="text"
               placeholder="State *"
               {...register('address.state')}
-              onChange={(e) => setValue('address.state', e.target.value)}
+              value={formValues.address.state}
+              onChange={(e) => {
+                setValue('address.state', e.target.value);
+              }}
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
                 errors.address?.state ? 'border-red-500' : 'border-gray-300'
               }`}
@@ -464,7 +488,10 @@ const Checkout = () => {
               type="text"
               placeholder="Postal Code *"
               {...register('address.zipCode')}
-              onChange={(e) => setValue('address.zipCode', e.target.value)}
+              value={formValues.address.zipCode}
+              onChange={(e) => {
+                setValue('address.zipCode', e.target.value);
+              }}
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
                 errors.address?.zipCode ? 'border-red-500' : 'border-gray-300'
               }`}
