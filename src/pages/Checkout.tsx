@@ -13,8 +13,7 @@ import OrderSuccessModal from '../components/OrderSuccessModal';
 import { useCreateServiceBooking } from '../hooks/services/useServiceBooking';
 import { useAuth } from '../contexts/AuthContext';
 import { useVehicleSelection } from '../hooks/vehicle/useVehicleSelection';
-import { useActiveCart, CartItem as CartItemType } from '../hooks/cart/useCartQueries';
-import { useUserProfile } from '../hooks/useUserProfile';
+import { useActiveCart } from '../hooks/cart/useCartQueries';
 
 interface ServiceItem {
   serviceId: string;
@@ -57,7 +56,6 @@ const checkoutFormSchema = z.object({
 
 type CheckoutFormData = z.infer<typeof checkoutFormSchema>;
 
-// Add type for booking data
 interface BookingProfile {
   name: string;
   email: string;
@@ -105,7 +103,6 @@ const Checkout = () => {
   const createServiceBooking = useCreateServiceBooking();
   const { selectedVehicle } = useVehicleSelection();
   const { activeCart, isLoading: isCartLoading } = useActiveCart();
-  const { isLoading: isProfileLoading, prefillFormData } = useUserProfile();
   
   const {
     register,
@@ -116,60 +113,8 @@ const Checkout = () => {
     reset
   } = useForm<CheckoutFormData>({
     resolver: zodResolver(checkoutFormSchema),
-    mode: 'onChange',
-    defaultValues: {
-      name: '',
-      email: '',
-      phone: '',
-      address: {
-        street: '',
-        city: '',
-        state: '',
-        zipCode: ''
-      },
-      serviceDate: '',
-      serviceTime: '',
-      totalAmount: '0',
-      bookingReference: ''
-    }
+    mode: 'onChange'
   });
-
-  // Pre-fill form with user profile data
-  useEffect(() => {
-    if (!isProfileLoading && prefillFormData) {
-      const formData = watch();
-      const prefilledData = prefillFormData(formData, 'checkout');
-      
-      // Batch update form values to prevent infinite loops
-      const updates = Object.entries(prefilledData).reduce((acc: Record<string, any>, [key, value]) => {
-        if (key === 'address' && typeof value === 'object') {
-          Object.entries(value).forEach(([addressKey, addressValue]) => {
-            acc[`address.${addressKey}`] = addressValue;
-          });
-        } else {
-          acc[key] = value;
-        }
-        return acc;
-      }, {});
-
-      // Update all form values at once
-      Object.entries(updates).forEach(([key, value]) => {
-        setValue(key as any, value, { 
-          shouldValidate: false,
-          shouldDirty: false,
-          shouldTouch: false 
-        });
-      });
-    }
-  }, [isProfileLoading, prefillFormData]);
-
-  // Debug form state
-  useEffect(() => {
-    const subscription = watch((value, { name, type }) => {
-      console.log('Form value changed:', { field: name, type, value });
-    });
-    return () => subscription.unsubscribe();
-  }, [watch]);
 
   // Check authentication
   useEffect(() => {
@@ -178,47 +123,30 @@ const Checkout = () => {
     }
   }, [user, navigate]);
 
-  // Handle cleanup on unmount
-  useEffect(() => {
-    return () => {
-      localStorage.removeItem('checkoutMode');
-      localStorage.removeItem('cartItems');
-      localStorage.removeItem('checkoutTotal');
-    };
-  }, []);
-
   // Load cart data
   useEffect(() => {
     try {
       if (mode === 'cart' && activeCart?.items) {
-        const cartServices = activeCart.items.map((item: CartItemType) => {
-          // Safely access nested properties
-          const serviceId = item?.service?.id || '';
-          const packageId = item?.package?.id;
-          const serviceName = item?.service_name || item?.service?.name || '';
-          const packageName = item?.package_name || item?.package?.name || '';
-
-          return {
-            serviceId,
-            packageId,
-            serviceName,
-            packageName,
-            price: item.service_price || '0',
-            quantity: item.quantity || 1,
-            features: [],
-            vehicle: selectedVehicle ? {
-              manufacturerId: selectedVehicle.manufacturerId,
-              modelId: selectedVehicle.modelId,
-              manufacturer: selectedVehicle.manufacturer,
-              model: selectedVehicle.model
-            } : {
-              manufacturerId: '0',
-              modelId: '0',
-              manufacturer: '',
-              model: ''
-            }
-          };
-        });
+        const cartServices = activeCart.items.map((item: any) => ({
+          serviceId: item?.service?.id || '',
+          packageId: item?.package?.id,
+          serviceName: item?.service_name || item?.service?.name || '',
+          packageName: item?.package_name || item?.package?.name || '',
+          price: item.service_price || '0',
+          quantity: item.quantity || 1,
+          features: [],
+          vehicle: selectedVehicle ? {
+            manufacturerId: selectedVehicle.manufacturerId,
+            modelId: selectedVehicle.modelId,
+            manufacturer: selectedVehicle.manufacturer,
+            model: selectedVehicle.model
+          } : {
+            manufacturerId: '0',
+            modelId: '0',
+            manufacturer: '',
+            model: ''
+          }
+        }));
         setServices(cartServices);
         setValue('totalAmount', activeCart.total_amount || '0');
       } else if (mode === 'buy-now') {
@@ -230,7 +158,6 @@ const Checkout = () => {
       }
     } catch (error) {
       console.error('Error loading cart data:', error);
-      // Set default values in case of error
       setServices([]);
       setValue('totalAmount', '0');
       notification.error({
@@ -239,18 +166,6 @@ const Checkout = () => {
       });
     }
   }, [mode, activeCart, selectedVehicle, setValue]);
-
-  // Add debug logging
-  useEffect(() => {
-    console.log('Current services:', services);
-    console.log('Active cart:', activeCart);
-    console.log('Selected vehicle:', selectedVehicle);
-  }, [services, activeCart, selectedVehicle]);
-
-  // Add a useEffect to log total amount changes
-  useEffect(() => {
-    console.log('Total Amount Updated:', watch('totalAmount'));
-  }, [watch('totalAmount')]);
 
   // Show loading state
   if (isCartLoading) {
@@ -317,8 +232,6 @@ const Checkout = () => {
         };
       }
 
-      console.log('Submitting booking with data:', bookingData);
-
       // If it's a cart booking, immediately clear the cart UI
       if (bookingData.mode === 'cart') {
         queryClient.setQueryData(['cart'], null);
@@ -328,29 +241,21 @@ const Checkout = () => {
       // Make the API call with complete data
       const response = await createServiceBooking.mutateAsync(bookingData);
 
-      console.log('Booking response:', response);
-
       if (response && response.reference) {
         setValue('bookingReference', response.reference);
         setShowSuccessModal(true);
-
-        // Clear form data
         reset();
-
-        // Navigate to repairs page after a short delay
         setTimeout(() => {
           navigate('/profile/?tab=repairs');
         }, 2000);
       }
 
     } catch (error: any) {
-      // If there was an error and we cleared the cart UI, restore it
       if (mode === 'cart') {
         queryClient.invalidateQueries({ queryKey: ['cart'] });
       }
 
       console.error('Error submitting form:', error);
-      console.error('Response data:', error?.response?.data);
       
       const errorMessage = error?.response?.data?.error || 
                          error?.response?.data?.message || 
@@ -364,151 +269,6 @@ const Checkout = () => {
       });
     }
   };
-
-  // Update the Personal Information section
-  const renderPersonalInformation = () => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 }}
-      className="bg-white rounded-xl p-6 shadow-sm"
-    >
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
-          <User className="w-5 h-5 text-[#FF5733]" />
-        </div>
-        <h3 className="font-semibold">Personal Information</h3>
-      </div>
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <input
-              type="text"
-              placeholder="Full Name *"
-              {...register('name')}
-              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                errors.name ? 'border-red-500' : 'border-gray-300'
-              }`}
-            />
-            {errors.name && (
-              <p className="mt-1 text-sm text-red-500">{errors.name.message}</p>
-            )}
-          </div>
-          <div>
-            <input
-              type="email"
-              placeholder="Email Address *"
-              {...register('email')}
-              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                errors.email ? 'border-red-500' : 'border-gray-300'
-              }`}
-            />
-            {errors.email && (
-              <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
-            )}
-          </div>
-        </div>
-        <div>
-          <input
-            type="tel"
-            placeholder="Phone Number *"
-            {...register('phone')}
-            className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-              errors.phone ? 'border-red-500' : 'border-gray-300'
-            }`}
-          />
-          {errors.phone && (
-            <p className="mt-1 text-sm text-red-500">{errors.phone.message}</p>
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
-
-  // Update the Service Address section
-  const renderServiceAddress = () => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.2 }}
-      className="bg-white rounded-xl p-6 shadow-sm"
-    >
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
-          <MapPin className="w-5 h-5 text-[#FF5733]" />
-        </div>
-        <h3 className="font-semibold">Service Address</h3>
-      </div>
-      <div className="space-y-4">
-        <div>
-          <textarea
-            placeholder="Street Address *"
-            rows={3}
-            {...register('address.street')}
-            className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-              errors.address?.street ? 'border-red-500' : 'border-gray-300'
-            }`}
-          />
-          {errors.address?.street && (
-            <p className="mt-1 text-sm text-red-500">{errors.address.street.message}</p>
-          )}
-        </div>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <input
-              type="text"
-              placeholder="City *"
-              {...register('address.city')}
-              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                errors.address?.city ? 'border-red-500' : 'border-gray-300'
-              }`}
-            />
-            {errors.address?.city && (
-              <p className="mt-1 text-sm text-red-500">{errors.address.city.message}</p>
-            )}
-          </div>
-          <div>
-            <input
-              type="text"
-              placeholder="State *"
-              {...register('address.state')}
-              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                errors.address?.state ? 'border-red-500' : 'border-gray-300'
-              }`}
-            />
-            {errors.address?.state && (
-              <p className="mt-1 text-sm text-red-500">{errors.address.state.message}</p>
-            )}
-          </div>
-          <div>
-            <input
-              type="text"
-              placeholder="Postal Code *"
-              {...register('address.zipCode')}
-              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                errors.address?.zipCode ? 'border-red-500' : 'border-gray-300'
-              }`}
-            />
-            {errors.address?.zipCode && (
-              <p className="mt-1 text-sm text-red-500">{errors.address.zipCode.message}</p>
-            )}
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-
-  // Show loading state while profile data is being fetched
-  if (isProfileLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-[#FF5733] mx-auto" />
-          <p className="mt-2 text-gray-600">Loading your information...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <>
@@ -569,10 +329,133 @@ const Checkout = () => {
                 </motion.div>
 
                 {/* Personal Information */}
-                {renderPersonalInformation()}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className="bg-white rounded-xl p-6 shadow-sm"
+                >
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                      <User className="w-5 h-5 text-[#FF5733]" />
+                    </div>
+                    <h3 className="font-semibold">Personal Information</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="Full Name *"
+                          {...register('name')}
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                            errors.name ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        />
+                        {errors.name && (
+                          <p className="mt-1 text-sm text-red-500">{errors.name.message}</p>
+                        )}
+                      </div>
+                      <div>
+                        <input
+                          type="email"
+                          placeholder="Email Address *"
+                          {...register('email')}
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                            errors.email ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        />
+                        {errors.email && (
+                          <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <input
+                        type="tel"
+                        placeholder="Phone Number *"
+                        {...register('phone')}
+                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                          errors.phone ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                      />
+                      {errors.phone && (
+                        <p className="mt-1 text-sm text-red-500">{errors.phone.message}</p>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
 
                 {/* Service Address */}
-                {renderServiceAddress()}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="bg-white rounded-xl p-6 shadow-sm"
+                >
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                      <MapPin className="w-5 h-5 text-[#FF5733]" />
+                    </div>
+                    <h3 className="font-semibold">Service Address</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <textarea
+                        placeholder="Street Address *"
+                        rows={3}
+                        {...register('address.street')}
+                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                          errors.address?.street ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                      />
+                      {errors.address?.street && (
+                        <p className="mt-1 text-sm text-red-500">{errors.address.street.message}</p>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="City *"
+                          {...register('address.city')}
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                            errors.address?.city ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        />
+                        {errors.address?.city && (
+                          <p className="mt-1 text-sm text-red-500">{errors.address.city.message}</p>
+                        )}
+                      </div>
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="State *"
+                          {...register('address.state')}
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                            errors.address?.state ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        />
+                        {errors.address?.state && (
+                          <p className="mt-1 text-sm text-red-500">{errors.address.state.message}</p>
+                        )}
+                      </div>
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="Postal Code *"
+                          {...register('address.zipCode')}
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                            errors.address?.zipCode ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        />
+                        {errors.address?.zipCode && (
+                          <p className="mt-1 text-sm text-red-500">{errors.address.zipCode.message}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
 
                 {/* Schedule Service */}
                 <motion.div
@@ -624,9 +507,6 @@ const Checkout = () => {
                       )}
                     </div>
                   </div>
-                  <p className="text-sm text-gray-500 mt-2">
-                    Our service technicians are available from 9AM to 5PM daily. Please choose a convenient time slot.
-                  </p>
                 </motion.div>
               </form>
             </div>
@@ -664,19 +544,6 @@ const Checkout = () => {
                           <p className="text-sm text-gray-500">Qty: 1</p>
                         </div>
                       </div>
-                      <div className="mt-2 space-y-1">
-                        {service.features.slice(0, 3).map((feature, i) => (
-                          <div key={i} className="flex items-center text-sm text-gray-600">
-                            <CheckCircle2 className="w-4 h-4 text-green-500 mr-2" />
-                            {feature}
-                          </div>
-                        ))}
-                        {service.features.length > 3 && (
-                          <p className="text-sm text-[#FF5733]">
-                            +{service.features.length - 3} more features
-                          </p>
-                        )}
-                      </div>
                     </div>
                   ))}
                 </div>
@@ -712,11 +579,6 @@ const Checkout = () => {
                       'Complete Booking'
                     )}
                   </button>
-
-                  <p className="text-xs text-gray-500 text-center mt-4">
-                    By confirming, you agree to our{' '}
-                    <a href="/terms" className="text-[#FF5733]">Terms & Conditions</a>
-                  </p>
                 </div>
               </motion.div>
             </div>
@@ -729,8 +591,6 @@ const Checkout = () => {
         isOpen={showSuccessModal}
         onClose={() => {
           setShowSuccessModal(false);
-          localStorage.removeItem('customerInfo');
-          localStorage.removeItem('checkoutItem');
           navigate('/profile/?tab=repairs');
         }}
         mode={mode || 'buy-now'}
