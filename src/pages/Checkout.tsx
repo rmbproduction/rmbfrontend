@@ -55,6 +55,43 @@ const checkoutFormSchema = z.object({
 
 type CheckoutFormData = z.infer<typeof checkoutFormSchema>;
 
+// Add type for booking data
+interface BookingProfile {
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  postalCode: string;
+}
+
+interface BookingVehicle {
+  vehicle_type: string;
+  manufacturer: string;
+  model: string;
+}
+
+interface BaseBookingData {
+  profile: BookingProfile;
+  vehicle: BookingVehicle;
+  scheduleDate: string;
+  scheduleTime: string;
+}
+
+interface CartBooking extends BaseBookingData {
+  mode: 'cart';
+  cart_id: number;
+}
+
+interface ServiceBooking extends BaseBookingData {
+  mode: 'buy-now';
+  service_id: number;
+  package_id?: string;
+}
+
+type BookingData = CartBooking | ServiceBooking;
+
 const Checkout = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -125,37 +162,63 @@ const Checkout = () => {
 
   // Load cart data
   useEffect(() => {
-    if (mode === 'cart' && activeCart?.items) {
-      const cartServices = activeCart.items.map((item: CartItemType) => ({
-        serviceId: item.service.id,
-        packageId: item.package?.id,
-        serviceName: item.service_name || item.service.name,
-        packageName: item.package_name || item.package?.name || '',
-        price: item.service_price,
-        quantity: item.quantity,
-        features: [],
-        vehicle: selectedVehicle ? {
-          manufacturerId: selectedVehicle.manufacturerId,
-          modelId: selectedVehicle.modelId,
-          manufacturer: selectedVehicle.manufacturer,
-          model: selectedVehicle.model
-        } : {
-          manufacturerId: '0',
-          modelId: '0',
-          manufacturer: '',
-          model: ''
+    try {
+      if (mode === 'cart' && activeCart?.items) {
+        const cartServices = activeCart.items.map((item: CartItemType) => {
+          // Safely access nested properties
+          const serviceId = item?.service?.id || '';
+          const packageId = item?.package?.id;
+          const serviceName = item?.service_name || item?.service?.name || '';
+          const packageName = item?.package_name || item?.package?.name || '';
+
+          return {
+            serviceId,
+            packageId,
+            serviceName,
+            packageName,
+            price: item.service_price || '0',
+            quantity: item.quantity || 1,
+            features: [],
+            vehicle: selectedVehicle ? {
+              manufacturerId: selectedVehicle.manufacturerId,
+              modelId: selectedVehicle.modelId,
+              manufacturer: selectedVehicle.manufacturer,
+              model: selectedVehicle.model
+            } : {
+              manufacturerId: '0',
+              modelId: '0',
+              manufacturer: '',
+              model: ''
+            }
+          };
+        });
+        setServices(cartServices);
+        setValue('totalAmount', activeCart.total_amount || '0');
+      } else if (mode === 'buy-now') {
+        const checkoutItem = JSON.parse(localStorage.getItem('checkoutItem') || 'null');
+        if (checkoutItem) {
+          setServices([checkoutItem]);
+          setValue('totalAmount', checkoutItem.price || '0');
         }
-      }));
-      setServices(cartServices);
-      setValue('totalAmount', activeCart.total_amount || '0');
-    } else if (mode === 'buy-now') {
-      const checkoutItem = JSON.parse(localStorage.getItem('checkoutItem') || 'null');
-      if (checkoutItem) {
-        setServices([checkoutItem]);
-        setValue('totalAmount', checkoutItem.price);
       }
+    } catch (error) {
+      console.error('Error loading cart data:', error);
+      // Set default values in case of error
+      setServices([]);
+      setValue('totalAmount', '0');
+      notification.error({
+        message: 'Error Loading Cart',
+        description: 'There was an error loading your cart data. Please try refreshing the page.',
+      });
     }
   }, [mode, activeCart, selectedVehicle, setValue]);
+
+  // Add debug logging
+  useEffect(() => {
+    console.log('Current services:', services);
+    console.log('Active cart:', activeCart);
+    console.log('Selected vehicle:', selectedVehicle);
+  }, [services, activeCart, selectedVehicle]);
 
   // Add a useEffect to log total amount changes
   useEffect(() => {
@@ -184,59 +247,7 @@ const Checkout = () => {
         return;
       }
 
-      // For cart mode, verify cart exists and has items
-      if (mode === 'cart') {
-        if (!activeCart) {
-          notification.error({
-            message: 'Cart Error',
-            description: 'Your cart could not be found. Please try refreshing the page.',
-          });
-          return;
-        }
-
-        if (!activeCart.items || activeCart.items.length === 0) {
-          notification.error({
-            message: 'Empty Cart',
-            description: 'Your cart is empty. Please add items before proceeding.',
-          });
-          return;
-        }
-      }
-
-      // For buy-now mode, verify checkout item exists
-      if (mode === 'buy-now') {
-        const checkoutItem = JSON.parse(localStorage.getItem('checkoutItem') || 'null');
-        if (!checkoutItem) {
-          notification.error({
-            message: 'Checkout Error',
-            description: 'Service information not found. Please try selecting the service again.',
-          });
-          return;
-        }
-      }
-
-      // Save the profile data to cache
-      prefillFormData({
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        address: formData.address.street,
-        city: formData.address.city,
-        state: formData.address.state,
-        zipCode: formData.address.zipCode
-      }, 'checkout');
-
-      // Create the booking data object with all required fields
-      const bookingData = {
-        ...(mode === 'buy-now' 
-          ? { 
-              service_id: parseInt(services[0]?.serviceId),
-              package_id: services[0]?.packageId 
-            }
-          : { 
-              cart_id: activeCart?.id
-            }
-        ),
+      const baseBookingData: BaseBookingData = {
         profile: {
           name: formData.name,
           email: formData.email,
@@ -255,10 +266,34 @@ const Checkout = () => {
         scheduleTime: formData.serviceTime
       };
 
+      let bookingData: BookingData;
+
+      if (mode === 'buy-now') {
+        const serviceId = services[0]?.serviceId ? parseInt(services[0].serviceId) : null;
+        if (!serviceId) {
+          throw new Error('Invalid service information');
+        }
+        bookingData = {
+          ...baseBookingData,
+          mode: 'buy-now',
+          service_id: serviceId,
+          package_id: services[0]?.packageId
+        };
+      } else {
+        if (!activeCart?.id) {
+          throw new Error('Invalid cart information');
+        }
+        bookingData = {
+          ...baseBookingData,
+          mode: 'cart',
+          cart_id: activeCart.id
+        };
+      }
+
       console.log('Submitting booking with data:', bookingData);
 
       // If it's a cart booking, immediately clear the cart UI
-      if (mode === 'cart' && activeCart?.id) {
+      if (bookingData.mode === 'cart') {
         queryClient.setQueryData(['cart'], null);
         queryClient.setQueryData(['cart', 'active'], null);
       }
@@ -293,6 +328,7 @@ const Checkout = () => {
       const errorMessage = error?.response?.data?.error || 
                          error?.response?.data?.message || 
                          error?.response?.data?.detail ||
+                         error.message ||
                          'Unable to complete booking. Please try again.';
                          
       notification.error({
