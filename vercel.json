@@ -1,13 +1,21 @@
 {
   "rewrites": [
-    { "source": "/verify-email/:token", "destination": "/index.html" },
-    { "source": "/verify-email/*", "destination": "/index.html" },
-    { "source": "/login-signup", "destination": "/index.html" },
-    { "source": "/reset-password/:token", "destination": "/index.html" },
-    { "source": "/password-reset-confirmation", "destination": "/index.html" },
-    { "source": "/subscription", "destination": "/index.html" },
-    { "source": "/resend-verification", "destination": "/index.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/verify-email/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/login-signup",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/reset-password/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
@@ -34,5 +42,6 @@
   ],
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "public": true
+  "public": true,
+  "trailingSlash": false
 }
