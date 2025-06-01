@@ -8,8 +8,14 @@ import BookVehicleModal from '../components/BookVehicleModal';
 import VehicleImageSlider from '../components/VehicleImageSlider';
 import VehicleCard from '../components/VehicleCard';
 import { Vehicle } from '../types/vehicle';
-import { useCreateBooking } from '../services/bookingService';
+import { useCreateBooking, BookingResponse } from '../services/bookingService';
+import { useAuth } from '../contexts/AuthContext';
 import '../styles/swiper-custom.css';
+
+interface BookingFormData {
+  contactNumber: string;
+  notes: string;
+}
 
 const VehicleDetail = () => {
   const navigate = useNavigate();
@@ -24,10 +30,14 @@ const VehicleDetail = () => {
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [bookingData, setBookingData] = useState({
+  const [formData, setFormData] = useState<BookingFormData>({
     contactNumber: '',
     notes: ''
   });
+  const { user } = useAuth();
+  const createBooking = useCreateBooking();
+  const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     const fetchVehicleDetail = async () => {
@@ -140,14 +150,6 @@ const VehicleDetail = () => {
     }
   };
 
-  // Initialize the booking mutation
-  const createBooking = useCreateBooking({
-    onSuccess: () => {
-      setShowBookingModal(false);
-      setBookingData({ contactNumber: '', notes: '' });
-    }
-  });
-
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -156,15 +158,20 @@ const VehicleDetail = () => {
       return;
     }
 
-    // Clean and format the contact number
-    const cleanedNumber = bookingData.contactNumber.replace(/[\s\-\(\)]/g, '');
-    
     try {
-      createBooking.mutate({
-        vehicle: vehicle.id,
+      // Clean and format the contact number
+      const cleanedNumber = formData.contactNumber.replace(/[\s\-\(\)]/g, '');
+      
+      // Create the booking request
+      const bookingRequest = {
+        vehicle_id: vehicle.id,
         contact_number: cleanedNumber,
-        notes: bookingData.notes
-      });
+        notes: formData.notes
+      };
+
+      const response = await createBooking.mutateAsync(bookingRequest);
+      setSuccessMessage(response.detail);
+      setBookingSuccess(true);
     } catch (error: any) {
       console.error('Booking submission error:', error);
       toast.error(error?.response?.data?.detail || 'Failed to submit booking');
@@ -173,7 +180,7 @@ const VehicleDetail = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setBookingData(prev => ({
+    setFormData(prev => ({
       ...prev,
       [name]: value
     }));
@@ -389,12 +396,19 @@ const VehicleDetail = () => {
       {/* Booking Modal */}
       <BookVehicleModal
         isOpen={showBookingModal}
-        onClose={() => setShowBookingModal(false)}
+        onClose={() => {
+          setShowBookingModal(false);
+          setBookingSuccess(false);
+          setSuccessMessage('');
+          setFormData({ contactNumber: '', notes: '' });
+        }}
         onSubmit={handleBookingSubmit}
-        contactNumber={bookingData.contactNumber}
-        notes={bookingData.notes}
+        contactNumber={formData.contactNumber}
+        notes={formData.notes}
         onInputChange={handleInputChange}
         isLoading={createBooking.isPending}
+        bookingSuccess={bookingSuccess}
+        successMessage={successMessage}
       />
     </div>
   );

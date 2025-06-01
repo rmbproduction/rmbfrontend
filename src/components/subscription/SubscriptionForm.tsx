@@ -35,12 +35,14 @@ interface VehicleType {
 interface Manufacturer {
   id: number;
   name: string;
+  vehicle_types?: number[];
 }
 
 interface VehicleModel {
   id: number;
   name: string;
   manufacturer: number;
+  vehicle_type: number;
 }
 
 // Add these validation helper functions at the top level
@@ -95,25 +97,34 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
     }
   });
 
-  // Fetch manufacturers
+  // Fetch manufacturers based on selected vehicle type
   const { data: manufacturers } = useQuery<Manufacturer[]>({
-    queryKey: ['manufacturers'],
+    queryKey: ['manufacturers', formData.vehicle_type],
     queryFn: async () => {
-      const response = await axiosInstance.get(API_ENDPOINTS.vehicle.manufacturers);
-      return response.data;
-    }
-  });
-
-  // Fetch vehicle models based on selected manufacturer
-  const { data: vehicleModels } = useQuery<VehicleModel[]>({
-    queryKey: ['vehicleModels', formData.manufacturer],
-    queryFn: async () => {
-      const response = await axiosInstance.get(API_ENDPOINTS.vehicle.models, {
-        params: { manufacturer: formData.manufacturer }
+      const response = await axiosInstance.get(API_ENDPOINTS.vehicle.manufacturers, {
+        params: { vehicle_type: formData.vehicle_type }
       });
       return response.data;
     },
-    enabled: !!formData.manufacturer // Only fetch when manufacturer is selected
+    enabled: !!formData.vehicle_type
+  });
+
+  // Fetch vehicle models based on selected manufacturer and vehicle type
+  const { data: vehicleModels } = useQuery<VehicleModel[]>({
+    queryKey: ['vehicleModels', formData.manufacturer, formData.vehicle_type],
+    queryFn: async () => {
+      if (!formData.manufacturer || !formData.vehicle_type) {
+        return [];
+      }
+      const response = await axiosInstance.get(API_ENDPOINTS.vehicle.models, {
+        params: {
+          manufacturer: formData.manufacturer,
+          vehicle_type: formData.vehicle_type
+        }
+      });
+      return response.data;
+    },
+    enabled: !!formData.manufacturer && !!formData.vehicle_type
   });
 
   const validateField = (name: string, value: any): string => {
@@ -144,10 +155,27 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
     // Convert ID fields to numbers
     if (['plan_variant', 'vehicle_type', 'manufacturer', 'vehicle_model'].includes(name)) {
       const numValue = value ? parseInt(value, 10) : 0;
-      setFormData(prev => ({
-        ...prev,
-        [name]: numValue
-      }));
+      
+      // Reset dependent fields when parent field changes
+      if (name === 'vehicle_type') {
+        setFormData(prev => ({
+          ...prev,
+          [name]: numValue,
+          manufacturer: 0,
+          vehicle_model: 0
+        }));
+      } else if (name === 'manufacturer') {
+        setFormData(prev => ({
+          ...prev,
+          [name]: numValue,
+          vehicle_model: 0
+        }));
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          [name]: numValue
+        }));
+      }
       
       if (submitAttempted) {
         setFieldErrors(prev => ({
@@ -379,60 +407,65 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
                 <h3 className="font-semibold">Vehicle Information</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <select
-                  name="vehicle_type"
-                  value={formData.vehicle_type}
-                  onChange={handleInputChange}
-                  className={`mt-1 block w-full rounded-md border ${
-                    fieldErrors.vehicle_type ? 'border-red-300' : 'border-gray-300'
-                  } px-3 py-2 focus:outline-none focus:ring-orange-500 focus:border-orange-500`}
-                  disabled={loading}
-                >
-                  <option value={0}>Select Vehicle Type</option>
-                  {vehicleTypes?.map(type => (
-                    <option key={type.id} value={type.id}>
-                      {type.name}
-                    </option>
-                  ))}
-                </select>
-                {renderFieldError('vehicle_type')}
+                <div>
+                  <select
+                    name="vehicle_type"
+                    value={formData.vehicle_type}
+                    onChange={handleInputChange}
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                      fieldErrors.vehicle_type ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                    disabled={loading}
+                  >
+                    <option value={0}>Select Vehicle Type</option>
+                    {vehicleTypes?.map(type => (
+                      <option key={type.id} value={type.id}>
+                        {type.name}
+                      </option>
+                    ))}
+                  </select>
+                  {renderFieldError('vehicle_type')}
+                </div>
 
-                <select
-                  name="manufacturer"
-                  value={formData.manufacturer}
-                  onChange={handleInputChange}
-                  required
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
-                    fieldErrors.manufacturer ? 'border-red-300' : ''
-                  }`}
-                  disabled={loading}
-                >
-                  <option value="">Select Manufacturer</option>
-                  {manufacturers?.map(manufacturer => (
-                    <option key={manufacturer.id} value={manufacturer.id}>
-                      {manufacturer.name}
-                    </option>
-                  ))}
-                </select>
-                {renderFieldError('manufacturer')}
+                <div>
+                  <select
+                    name="manufacturer"
+                    value={formData.manufacturer}
+                    onChange={handleInputChange}
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                      fieldErrors.manufacturer ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                    disabled={!formData.vehicle_type || loading}
+                  >
+                    <option value={0}>Select Manufacturer</option>
+                    {manufacturers?.map(manufacturer => (
+                      <option key={manufacturer.id} value={manufacturer.id}>
+                        {manufacturer.name}
+                      </option>
+                    ))}
+                  </select>
+                  {renderFieldError('manufacturer')}
+                </div>
 
-                <select
-                  name="vehicle_model"
-                  value={formData.vehicle_model}
-                  onChange={handleInputChange}
-                  className={`mt-1 block w-full rounded-md border ${
-                    fieldErrors.vehicle_model ? 'border-red-300' : 'border-gray-300'
-                  } px-3 py-2 focus:outline-none focus:ring-orange-500 focus:border-orange-500`}
-                  disabled={!formData.manufacturer || loading}
-                >
-                  <option value={0}>Select Model</option>
-                  {vehicleModels?.map(model => (
-                    <option key={model.id} value={model.id}>
-                      {model.name}
-                    </option>
-                  ))}
-                </select>
-                {renderFieldError('vehicle_model')}
+                <div>
+                  <select
+                    name="vehicle_model"
+                    value={formData.vehicle_model}
+                    onChange={handleInputChange}
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
+                      fieldErrors.vehicle_model ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                    disabled={!formData.manufacturer || !formData.vehicle_type || loading}
+                  >
+                    <option value={0}>Select Model</option>
+                    {vehicleModels?.map(model => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))}
+                  </select>
+                  {renderFieldError('vehicle_model')}
+                </div>
               </div>
             </motion.div>
 

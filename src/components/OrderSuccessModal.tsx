@@ -68,7 +68,7 @@ const OrderSuccessModal = ({ isOpen, onClose, mode, bookingReference }: OrderSuc
 
   const handleViewRepairs = () => {
     onClose();
-    navigate('/profile?tab=repairs');
+    navigate('/profile?tab=subscriptions');
   };
 
   const handleBackToHome = () => {

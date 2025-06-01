@@ -334,12 +334,13 @@ export const API_ENDPOINTS = {
   // Vehicle endpoints
   vehicle: {
     types: '/vehicle/vehicle-types/',
-    manufacturers: '/repairing-service/manufacturers/',
-    models: '/repairing-service/vehicle-models/',
+    manufacturers: '/vehicle/manufacturers/',
+    models: '/vehicle/vehicle-models/',
     userVehicles: '/vehicle/user-vehicles/',
     checkCloudinary: '/vehicle/check-cloudinary/',
     vehicleImages: (id: string) => `/vehicle/vehicles/${id}/images/`,
     uploadParams: (id: string) => `/vehicle/vehicles/${id}/upload-params/`,
+    checkRegistration: '/marketplace/vehicles/check-registration-number/',
   },
 };
 

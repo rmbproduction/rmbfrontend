@@ -5,7 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import TokenManager from '../services/tokenManager';
 import { useVehicleSelection } from '../hooks/vehicle/useVehicleSelection';
 import FormModal from '../components/FormModal';
-import { format, addDays, isWeekend, setHours, setMinutes, isBefore, isAfter } from 'date-fns';
+import { format, addDays, isWeekend, setHours, setMinutes, isBefore, isAfter, addHours } from 'date-fns';
+import { API_CONFIG, API_ENDPOINTS } from '../config/api.config';
 
 interface FormData {
   vehicle_type: string;
@@ -35,8 +36,8 @@ interface FileData {
   photo_right: File | null;
   photo_dashboard: File | null;
   photo_odometer: File | null;
+  photo_chassis: File | null;
   photo_engine: File | null;
-  photo_extras: File | null;
 }
 
 interface Previews {
@@ -162,8 +163,8 @@ export default function SellVehicle() {
     photo_right: null,
     photo_dashboard: null,
     photo_odometer: null,
-    photo_engine: null,
-    photo_extras: null
+    photo_chassis: null,
+    photo_engine: null
   });
 
   const [previews, setPreviews] = useState<Previews>({});
@@ -222,6 +223,7 @@ export default function SellVehicle() {
     const now = new Date();
     const maxDate = addDays(now, 14); // Allow booking up to 14 days in advance
 
+    // Basic date validation
     if (isBefore(pickupDate, now)) {
       return 'Pickup slot cannot be in the past';
     }
@@ -234,15 +236,30 @@ export default function SellVehicle() {
       return 'Pickup is only available on weekdays (Monday to Friday)';
     }
 
-    const hour = pickupDate.getHours();
+    // Time validation
+    const hours = pickupDate.getHours();
     const minutes = pickupDate.getMinutes();
     
-    if (hour < 9 || (hour === 18 && minutes > 0) || hour > 18) {
+    // Create time boundaries for the selected date
+    const startTime = setMinutes(setHours(new Date(pickupDate), 9), 0);  // 9:00 AM
+    const endTime = setMinutes(setHours(new Date(pickupDate), 18), 0);   // 6:00 PM
+
+    // Check if the selected time is within business hours
+    if (isBefore(pickupDate, startTime) || isAfter(pickupDate, endTime)) {
       return 'Pickup slot must be between 9:00 AM and 6:00 PM';
     }
 
+    // Validate 30-minute intervals
     if (minutes !== 0 && minutes !== 30) {
       return 'Pickup slots are available every 30 minutes';
+    }
+
+    // If today, ensure slot is at least 1 hour in the future
+    if (format(pickupDate, 'yyyy-MM-dd') === format(now, 'yyyy-MM-dd')) {
+      const oneHourFromNow = addHours(now, 1);
+      if (isBefore(pickupDate, oneHourFromNow)) {
+        return 'Pickup slot must be at least 1 hour from now';
+      }
     }
 
     return '';
@@ -255,6 +272,10 @@ export default function SellVehicle() {
 
     if (rules.required && !value) {
       return rules.message;
+    }
+
+    if (name === 'pickup_slot') {
+      return validatePickupSlot(value);
     }
 
     if (rules.pattern && !rules.pattern.test(value.toString())) {
@@ -399,45 +420,22 @@ export default function SellVehicle() {
         throw new Error('No access token found');
       }
 
-      // First, prepare all the data but don't submit yet
-      const vehicleData = {
-        vehicle_type: formData.vehicle_type,
-        brand: formData.brand,
-        model: formData.model,
-        year: parseInt(formData.year),
-        registration_number: formData.registration_number,
-        kms_driven: parseInt(formData.kms_driven),
-        fuel_type: formData.fuel_type,
-        engine_capacity: parseInt(formData.engine_capacity),
-        color: formData.color,
-        expected_price: parseFloat(formData.expected_price),
-        status: 'pending'
-      };
-
-      // Prepare sell request data
-      const sellRequestData = new FormData();
-      const pickupDate = new Date(formData.pickup_slot);
-      sellRequestData.append('pickup_slot', pickupDate.toISOString());
-      sellRequestData.append('pickup_address', formData.pickup_address);
-      sellRequestData.append('contact_number', formData.contact_number);
-
-      // Add all files
-      Object.entries(files).forEach(([key, file]) => {
-        if (file) {
-          sellRequestData.append(key, file);
-        }
-      });
-
       // First check if registration number exists
       try {
         const checkResponse = await axios.get(
-          `https://repairmybike.up.railway.app/api/marketplace/vehicles/check-registration/${formData.registration_number}`,
+          `${API_CONFIG.baseURL}/marketplace/vehicles/check-registration-number/`,
           {
+            params: {
+              registration_number: formData.registration_number
+            },
             headers: {
-              'Authorization': `Bearer ${accessToken}`
+              'Authorization': `Bearer ${accessToken}`,
+              'Accept': 'application/json'
             }
           }
         );
+
+        console.log('Registration check response:', checkResponse.data);
 
         if (checkResponse.data.exists) {
           setModalState({
@@ -449,72 +447,92 @@ export default function SellVehicle() {
           setLoading(false);
           return;
         }
-      } catch (error) {
-        // If the check endpoint fails, we'll proceed with the submission
-        // as the main create endpoint will still validate the registration number
-        console.warn('Registration number check failed:', error);
+      } catch (error: any) {
+        // Log the error for debugging
+        console.error('Registration check error:', error.response || error);
+        
+        // Only show error modal if it's not a 404 (not found) error
+        if (error.response?.status !== 404) {
+          setModalState({
+            isOpen: true,
+            type: 'error',
+            title: 'Error',
+            message: 'Failed to check registration number. Please try again.'
+          });
+          setLoading(false);
+          return;
+        }
+        // If it's a 404, the registration number doesn't exist, so we can continue
       }
 
-      // Now create both vehicle and sell request in sequence
-      const vehicleResponse = await axios.post(
-        'https://repairmybike.up.railway.app/api/marketplace/vehicles/',
-        vehicleData,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          },
-          withCredentials: true
-        }
-      );
-
-      const vehicleId = vehicleResponse.data.id;
-      sellRequestData.append('vehicle', vehicleId.toString());
-
+      // Now create the sell request
       try {
-        // Try to create the sell request
-        await axios.post(
-          'https://repairmybike.up.railway.app/api/marketplace/sell-requests/',
-          sellRequestData,
+        // Create a proper FormData object
+        const sellRequestFormData = new FormData();
+        
+        // Add all form fields
+        Object.entries(formData).forEach(([key, value]) => {
+          if (key === 'pickup_slot') {
+            // Format the pickup slot to ISO string
+            const pickupDate = new Date(value);
+            sellRequestFormData.append(key, pickupDate.toISOString());
+          } else {
+            sellRequestFormData.append(key, value.toString());
+          }
+        });
+
+        // Add all files with proper field names
+        Object.entries(files).forEach(([key, file]) => {
+          if (file) {
+            // Map the file keys to the expected backend field names
+            const fieldName = key.includes('photo_') ? key : key;
+            sellRequestFormData.append(fieldName, file);
+          }
+        });
+
+        const sellRequestResponse = await axios.post(
+          `${API_CONFIG.baseURL}/marketplace/sell-requests/`,
+          sellRequestFormData,
           {
             headers: {
               'Authorization': `Bearer ${accessToken}`,
               'Content-Type': 'multipart/form-data'
-            },
-            withCredentials: true
+            }
           }
         );
 
-        // If successful, show success message and redirect
+        // Handle successful submission
         setModalState({
           isOpen: true,
           type: 'success',
-          title: 'Success!',
-          message: 'Your vehicle sell request has been submitted successfully. Our team will contact you shortly to arrange the pickup.'
+          title: 'Success',
+          message: 'Your vehicle sell request has been submitted successfully. Our team will review it and get back to you soon.'
         });
-
-        // Navigate after modal is closed
-        setTimeout(() => {
-          navigate('/profile?tab=vehicles');
-        }, 2000);
-
-      } catch (sellRequestError: any) {
-        // If sell request fails, delete the vehicle we just created
-        try {
-          await axios.delete(
-            `https://repairmybike.up.railway.app/api/marketplace/vehicles/${vehicleId}/`,
-            {
-              headers: {
-                'Authorization': `Bearer ${accessToken}`
-              }
-            }
-          );
-        } catch (deleteError) {
-          console.error('Failed to cleanup vehicle after sell request error:', deleteError);
+        
+        // Reset form and loading state
+        setLoading(false);
+        resetForm();
+        
+      } catch (error: any) {
+        setLoading(false);
+        let errorMessage = 'Failed to submit sell request. Please try again.';
+        
+        if (error.response?.data?.detail) {
+          errorMessage = error.response.data.detail;
+        } else if (error.response?.data) {
+          // Format validation errors
+          const errors = error.response.data;
+          errorMessage = Object.entries(errors)
+            .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages[0] : messages}`)
+            .join('\n');
         }
-
-        // Re-throw the original error to be handled by the outer catch block
-        throw sellRequestError;
+        
+        setModalState({
+          isOpen: true,
+          type: 'error',
+          title: 'Submission Error',
+          message: errorMessage
+        });
       }
 
     } catch (error: any) {
@@ -765,6 +783,39 @@ export default function SellVehicle() {
     );
   };
 
+  const resetForm = () => {
+    setFormData({
+      vehicle_type: '',
+      brand: '',
+      model: '',
+      year: '',
+      registration_number: '',
+      kms_driven: '',
+      fuel_type: '',
+      engine_capacity: '',
+      color: '',
+      expected_price: '',
+      pickup_slot: '',
+      pickup_address: '',
+      contact_number: ''
+    });
+    setFiles({
+      registration_certificate: null,
+      insurance_document: null,
+      puc_certificate: null,
+      ownership_transfer: null,
+      additional_documents: null,
+      photo_front: null,
+      photo_back: null,
+      photo_left: null,
+      photo_right: null,
+      photo_dashboard: null,
+      photo_odometer: null,
+      photo_chassis: null,
+      photo_engine: null
+    });
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
@@ -826,8 +877,8 @@ export default function SellVehicle() {
             {renderFileInput('photo_right', 'Right Side')}
             {renderFileInput('photo_dashboard', 'Dashboard')}
             {renderFileInput('photo_odometer', 'Odometer')}
+            {renderFileInput('photo_chassis', 'Chassis')}
             {renderFileInput('photo_engine', 'Engine')}
-            {renderFileInput('photo_extras', 'Additional Photos', false)}
           </div>
         </div>
 

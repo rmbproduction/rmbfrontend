@@ -32,6 +32,22 @@ interface ServiceItem {
   features: string[];
 }
 
+interface CartItem {
+  service_id: number;
+  package_id?: number;
+  service_name: string;
+  package_name?: string;
+  service_price: string;
+  quantity: number;
+  features?: string[];
+}
+
+interface Cart {
+  id: number;
+  items: CartItem[];
+  total_amount: string;
+}
+
 // Form validation schema
 const checkoutFormSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -50,20 +66,12 @@ const checkoutFormSchema = z.object({
       .regex(/^[0-9]+$/, 'Postal code must contain only digits')
   }),
   serviceDate: z.string().min(1, 'Service date is required'),
-  serviceTime: z.string().min(1, 'Service time is required')
+  serviceTime: z.string().min(1, 'Service time is required'),
+  totalAmount: z.string(),
+  bookingReference: z.string().optional()
 });
 
 type CheckoutFormData = z.infer<typeof checkoutFormSchema>;
-
-interface CartItemType {
-  service_id: number;
-  package_id?: number;
-  service_name: string;
-  package_name?: string;
-  service_price: string;
-  quantity: number;
-  features?: string[];
-}
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -76,6 +84,7 @@ const Checkout = () => {
   const clearCart = useClearCartMutation();
   const createServiceBooking = useCreateServiceBooking();
   const { selectedVehicle } = useVehicleSelection();
+  const { activeCart, isLoading: isCartLoading } = useActiveCart();
   const { data: vehicleTypes } = useVehicleTypes();
   const { profile, isLoading: isProfileLoading, prefillFormData } = useUserProfile();
   
@@ -106,65 +115,32 @@ const Checkout = () => {
         zipCode: ''
       },
       serviceDate: '',
-      serviceTime: ''
+      serviceTime: '',
+      totalAmount: '0',
+      bookingReference: ''
     }
   });
 
-  // Update form when profile data loads
+  // Check authentication
   useEffect(() => {
-    if (profile) {
-      console.log('Pre-filling checkout form with profile data');
-      const prefilledData = prefillFormData({
-        name: '',
-        email: '',
-        phone: '',
-        address: {
-          street: '',
-          city: '',
-          state: '',
-          zipCode: ''
-        },
-        serviceDate: '',
-        serviceTime: ''
-      }, 'checkout');
-
-      reset(prefilledData);
+    if (!user) {
+      navigate('/login', { state: { from: '/checkout' } });
     }
-  }, [profile, reset, prefillFormData]);
+  }, [user, navigate]);
 
-  const [bookingReference, setBookingReference] = useState<string | null>(null);
-  const [totalAmount, setTotalAmount] = useState<string>('0');
-
-  const { activeCart } = useActiveCart();
-
-  // Add a state to track if component is mounted
-  const [isMounted, setIsMounted] = useState(false);
-
-  // Handle cleanup on unmount only
+  // Handle cleanup on unmount
   useEffect(() => {
-    setIsMounted(true);
     return () => {
-      setIsMounted(false);
       localStorage.removeItem('checkoutMode');
       localStorage.removeItem('cartItems');
       localStorage.removeItem('checkoutTotal');
     };
   }, []);
 
-  // Handle data loading
+  // Load cart data
   useEffect(() => {
-    if (!isMounted) return;
-
-    console.log('Checkout Mode:', mode);
-    console.log('LocalStorage Data:', {
-      checkoutMode: localStorage.getItem('checkoutMode'),
-      checkoutTotal: localStorage.getItem('checkoutTotal'),
-      cartItems: localStorage.getItem('cartItems')
-    });
-
-    // Load services based on mode
     if (mode === 'cart' && activeCart?.items) {
-      const cartServices = activeCart.items.map(item => ({
+      const cartServices = activeCart.items.map((item: CartItem) => ({
         serviceId: item.service_id.toString(),
         packageId: item.package_id?.toString(),
         serviceName: item.service_name,
@@ -185,21 +161,32 @@ const Checkout = () => {
         }
       }));
       setServices(cartServices);
-      setTotalAmount(activeCart.total_amount || '0');
+      setValue('totalAmount', activeCart.total_amount || '0');
     } else if (mode === 'buy-now') {
       const checkoutItem = JSON.parse(localStorage.getItem('checkoutItem') || 'null');
       if (checkoutItem) {
         setServices([checkoutItem]);
-        setTotalAmount(checkoutItem.price);
+        setValue('totalAmount', checkoutItem.price);
       }
     }
-  }, [mode, activeCart, selectedVehicle, isMounted]);
+  }, [mode, activeCart, selectedVehicle, setValue]);
 
   // Add a useEffect to log total amount changes
   useEffect(() => {
-    if (!isMounted) return;
-    console.log('Total Amount Updated:', totalAmount);
-  }, [totalAmount, isMounted]);
+    console.log('Total Amount Updated:', watch('totalAmount'));
+  }, [watch('totalAmount')]);
+
+  // Show loading state
+  if (isCartLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-[#FF5733] mx-auto" />
+          <p className="mt-2 text-gray-600">Loading cart information...</p>
+        </div>
+      </div>
+    );
+  }
 
   const onSubmit = async (formData: CheckoutFormData) => {
     try {
@@ -276,19 +263,11 @@ const Checkout = () => {
       console.log('Booking response:', response);
 
       if (response && response.reference) {
-        setBookingReference(response.reference);
+        setValue('bookingReference', response.reference);
         setShowSuccessModal(true);
 
         // Clear form data
-        setValue('name', '');
-        setValue('email', '');
-        setValue('phone', '');
-        setValue('address.street', '');
-        setValue('address.city', '');
-        setValue('address.state', '');
-        setValue('address.zipCode', '');
-        setValue('serviceDate', '');
-        setValue('serviceTime', '');
+        reset();
 
         // Navigate to repairs page after a short delay
         setTimeout(() => {
@@ -305,18 +284,10 @@ const Checkout = () => {
       console.error('Error submitting form:', error);
       console.error('Response data:', error?.response?.data);
       
-      let errorMessage = 'Unable to complete booking. Please try again.';
-      
-      if (error.message === 'Invalid vehicle type') {
-        errorMessage = 'Please select a valid vehicle type.';
-      } else if (error.message === 'service_id is required for buy now flow') {
-        errorMessage = 'Invalid checkout mode. Please try again from the services page.';
-      } else {
-        errorMessage = error?.response?.data?.error || 
-                      error?.response?.data?.message || 
-                      error?.response?.data?.detail ||
-                      errorMessage;
-      }
+      const errorMessage = error?.response?.data?.error || 
+                         error?.response?.data?.message || 
+                         error?.response?.data?.detail ||
+                         'Unable to complete booking. Please try again.';
                          
       notification.error({
         message: 'Booking Failed',
@@ -488,7 +459,7 @@ const Checkout = () => {
             <div className="text-right">
               <p className="text-sm text-gray-600">Total Amount</p>
               <p className="font-semibold text-xl text-[#FF5733]">
-                ₹{totalAmount || '0.00'}
+                ₹{watch('totalAmount') || '0.00'}
               </p>
             </div>
           </div>
@@ -646,7 +617,7 @@ const Checkout = () => {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">Subtotal</span>
-                      <span className="font-medium">₹{totalAmount}</span>
+                      <span className="font-medium">₹{watch('totalAmount')}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">Service Tax</span>
@@ -654,7 +625,7 @@ const Checkout = () => {
                     </div>
                     <div className="flex justify-between items-center pt-3 border-t border-gray-100">
                       <span className="font-semibold">Total</span>
-                      <span className="font-semibold text-lg">₹{totalAmount}</span>
+                      <span className="font-semibold text-lg">₹{watch('totalAmount')}</span>
                     </div>
                   </div>
 
@@ -694,7 +665,7 @@ const Checkout = () => {
           navigate('/profile/?tab=repairs');
         }}
         mode={mode || 'buy-now'}
-        bookingReference={bookingReference}
+        bookingReference={watch('bookingReference')}
       />
     </>
   );
