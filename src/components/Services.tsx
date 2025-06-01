@@ -5,12 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getIconForCategory } from '../data/services';
 import { 
   Bike, 
-  MessageCircle, 
-  CalendarCheck, 
-  Wrench, 
-  Truck, 
-  CreditCard,
-  CheckCircle2
+  MessageCircle
 } from 'lucide-react';
 
 interface ServiceCategory {
@@ -87,7 +82,7 @@ const Services: React.FC = () => {
         </div>
       </section>
 
-      Vehicle Services Section
+      {/* Vehicle Services Section */}
       <section className="py-16 bg-gray-50" id="vehicle-services">
         <div className="container mx-auto px-4">
           <motion.div 
