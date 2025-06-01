@@ -10,7 +10,6 @@ const VehicleList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [vehicleCount, setVehicleCount] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const fetchVehicles = async () => {
@@ -21,11 +20,36 @@ const VehicleList = () => {
           throw new Error('Failed to fetch vehicles');
         }
         const data = await response.json();
-        setVehicles(data);
-        setVehicleCount(data.length);
+        
+        // Validate the data before setting it
+        if (Array.isArray(data)) {
+          // Filter out any invalid vehicle objects
+          const validVehicles = data.filter((vehicle: unknown): vehicle is Vehicle => 
+            vehicle !== null &&
+            typeof vehicle === 'object' &&
+            'id' in vehicle
+          );
+          setVehicles(validVehicles);
+          setVehicleCount(validVehicles.length);
+        } else if (data && Array.isArray(data.results)) {
+          // Handle paginated response
+          const validVehicles = data.results.filter((vehicle: unknown): vehicle is Vehicle => 
+            vehicle !== null &&
+            typeof vehicle === 'object' &&
+            'id' in vehicle
+          );
+          setVehicles(validVehicles);
+          setVehicleCount(validVehicles.length);
+        } else {
+          console.error('Unexpected API response format:', data);
+          setVehicles([]);
+          setVehicleCount(0);
+        }
       } catch (error) {
         console.error('Error fetching vehicles:', error);
         setError(error instanceof Error ? error.message : 'Failed to load vehicles');
+        setVehicles([]);
+        setVehicleCount(0);
       } finally {
         setLoading(false);
       }
@@ -149,14 +173,14 @@ const VehicleList = () => {
               <p className="text-gray-500">No vehicles found matching your criteria.</p>
             </div>
           ) : (
-            vehicles.map(vehicle => (
+            vehicles?.map(vehicle => vehicle && (
               <motion.div
-                key={vehicle.id}
+                key={vehicle?.id || Math.random()}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 whileHover={{ scale: 1.02 }}
                 className="bg-white rounded-lg shadow-sm overflow-hidden cursor-pointer"
-                onClick={() => navigate(`/vehicles/${vehicle.id}`)}
+                onClick={() => vehicle?.id && navigate(`/vehicles/${vehicle.id}`)}
               >
                 <div className="aspect-[16/10] relative">
                   <img

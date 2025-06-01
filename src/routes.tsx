@@ -17,7 +17,6 @@ import Contact from './pages/Contact';
 import LoginSignupPage from './pages/LoginSignupPage';
 import Profile from './pages/Profile';
 import VerifyEmail from './pages/VerifyEmail';
-import ResendVerification from './pages/ResendVerification';
 import ResetPassword from './pages/ResetPassword';
 import PasswordResetConfirmation from './pages/PasswordResetConfirmation';
 import SellVehicle from './pages/SellVehicle';

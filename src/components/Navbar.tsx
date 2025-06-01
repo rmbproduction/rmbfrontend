@@ -2,8 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Wrench, Menu, X, ShoppingCart, User, ChevronDown, 
-  Bike, Clock, Settings, LogOut, UserCircle, Wallet,
-  Info
+  Bike, Clock, Settings, LogOut, UserCircle, Wallet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -71,27 +70,6 @@ const Navbar = () => {
     setIsVehicleMenuOpen(false);
   };
   
-  const CartIcon = () => (
-    <div 
-      className="relative cursor-pointer"
-      onClick={() => navigate('/cart')}
-    >
-      <ShoppingCart className="h-6 w-6 text-gray-700 hover:text-[#FF5733]" />
-      <AnimatePresence>
-        {cartCount > 0 && (
-          <motion.span
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            exit={{ scale: 0 }}
-            className="absolute -top-2 -right-2 bg-[#FF5733] text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"
-          >
-            {cartCount}
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-
   // Close user menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -125,6 +103,7 @@ const Navbar = () => {
     }
   };
 
+  // Cart icon with animation
   return (
     <nav className="bg-white shadow-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -204,9 +183,9 @@ const Navbar = () => {
 
           {/* Cart and User Menu */}
           <div className="flex items-center space-x-4">
-            <button 
+            <div 
+              className="relative cursor-pointer"
               onClick={() => navigate('/cart')}
-              className="relative p-2 hover:bg-gray-50 rounded-lg transition-colors"
             >
               <ShoppingCart className="h-6 w-6 text-gray-700 hover:text-[#FF5733]" />
               <AnimatePresence>
@@ -221,7 +200,7 @@ const Navbar = () => {
                   </motion.span>
                 )}
               </AnimatePresence>
-            </button>
+            </div>
             
             {isAuthenticated ? (
               <div className="relative" ref={userMenuRef}>
