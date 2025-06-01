@@ -60,6 +60,10 @@ const router = createBrowserRouter([
       {
         path: "subscription",
         element: <Pricing />
+      },
+      {
+        path: "*",
+        element: <NotFound />
       }
     ]
   }
