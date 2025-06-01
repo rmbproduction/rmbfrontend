@@ -13,7 +13,6 @@ import ScheduleVisitModal from './ScheduleVisitModal';
 import { format } from 'date-fns';
 import RescheduleVisitModal from './RescheduleVisitModal';
 import VisitHistoryAccordion from './VisitHistoryAccordion';
-import ForSaleVehicles from '../ForSaleVehicles';
 
 interface SubscriptionRequest {
   id: number;
@@ -784,17 +783,6 @@ const SubscriptionOverview: React.FC = () => {
           >
             Visits
           </Tab>
-          <Tab
-            className={({ selected }: { selected: boolean }) =>
-              `w-full rounded-lg py-2.5 text-sm font-medium leading-5 
-              ${selected 
-                ? 'bg-white text-orange-700 shadow'
-                : 'text-gray-600 hover:bg-white/[0.12] hover:text-orange-600'
-              } transition-all duration-200`
-            }
-          >
-            Vehicles For Sale
-          </Tab>
         </Tab.List>
 
         <Tab.Panels>
@@ -928,20 +916,6 @@ const SubscriptionOverview: React.FC = () => {
                 className="space-y-6"
               >
                 {renderUpcomingVisits()}
-              </motion.div>
-            </AnimatePresence>
-          </Tab.Panel>
-
-          <Tab.Panel>
-            <AnimatePresence mode="wait">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.2 }}
-                className="space-y-6"
-              >
-                <ForSaleVehicles />
               </motion.div>
             </AnimatePresence>
           </Tab.Panel>
