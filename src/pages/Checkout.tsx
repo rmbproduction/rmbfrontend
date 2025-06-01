@@ -10,10 +10,8 @@ import OrderSuccessModal from '../components/OrderSuccessModal';
 import { useCreateServiceBooking } from '../hooks/services/useServiceBooking';
 import { useAuth } from '../contexts/AuthContext';
 import { useVehicleSelection } from '../hooks/vehicle/useVehicleSelection';
-import { useActiveCart, useClearCartMutation } from '../hooks/cart/useCartQueries';
+import { useActiveCart, useClearCartMutation, CartItem as CartItemType } from '../hooks/cart/useCartQueries';
 import { useQueryClient } from '@tanstack/react-query';
-import { useVehicleTypes, getVehicleTypeId } from '../hooks/vehicle/useVehicleTypes';
-import userProfileDataService from '../services/userProfileDataService';
 import { useUserProfile } from '../hooks/useUserProfile';
 
 interface ServiceItem {
@@ -30,22 +28,6 @@ interface ServiceItem {
   price: string;
   quantity?: number;
   features: string[];
-}
-
-interface CartItem {
-  service_id: number;
-  package_id?: number;
-  service_name: string;
-  package_name?: string;
-  service_price: string;
-  quantity: number;
-  features?: string[];
-}
-
-interface Cart {
-  id: number;
-  items: CartItem[];
-  total_amount: string;
 }
 
 // Form validation schema
@@ -85,15 +67,7 @@ const Checkout = () => {
   const createServiceBooking = useCreateServiceBooking();
   const { selectedVehicle } = useVehicleSelection();
   const { activeCart, isLoading: isCartLoading } = useActiveCart();
-  const { data: vehicleTypes } = useVehicleTypes();
-  const { profile, isLoading: isProfileLoading, prefillFormData } = useUserProfile();
-  
-  // Show loading state while profile data is being fetched
-  useEffect(() => {
-    if (isProfileLoading) {
-      console.log('Loading profile data...');
-    }
-  }, [isProfileLoading]);
+  const { isLoading: isProfileLoading, prefillFormData } = useUserProfile();
   
   const {
     register,
@@ -137,17 +111,28 @@ const Checkout = () => {
     };
   }, []);
 
+  // Pre-fill form with user profile data
+  useEffect(() => {
+    if (!isProfileLoading) {
+      const formData = watch();
+      const prefilledData = prefillFormData(formData, 'checkout');
+      Object.entries(prefilledData).forEach(([key, value]) => {
+        setValue(key as keyof CheckoutFormData, value);
+      });
+    }
+  }, [isProfileLoading, prefillFormData, setValue, watch]);
+
   // Load cart data
   useEffect(() => {
     if (mode === 'cart' && activeCart?.items) {
-      const cartServices = activeCart.items.map((item: CartItem) => ({
-        serviceId: item.service_id.toString(),
-        packageId: item.package_id?.toString(),
-        serviceName: item.service_name,
-        packageName: item.package_name || '',
+      const cartServices = activeCart.items.map((item: CartItemType) => ({
+        serviceId: item.service.id,
+        packageId: item.package?.id,
+        serviceName: item.service_name || item.service.name,
+        packageName: item.package_name || item.package?.name || '',
         price: item.service_price,
         quantity: item.quantity,
-        features: item.features || [],
+        features: [],
         vehicle: selectedVehicle ? {
           manufacturerId: selectedVehicle.manufacturerId,
           modelId: selectedVehicle.modelId,
@@ -206,9 +191,6 @@ const Checkout = () => {
         return;
       }
 
-      // Get vehicle type ID
-      const vehicleTypeId = await getVehicleTypeId(selectedVehicle.vehicleType);
-
       // Save the profile data to cache
       prefillFormData({
         name: formData.name,
@@ -241,7 +223,7 @@ const Checkout = () => {
           postalCode: formData.address.zipCode
         },
         vehicle: {
-          vehicle_type: vehicleTypeId,
+          vehicle_type: selectedVehicle.vehicleType,
           manufacturer: selectedVehicle.manufacturerId.toString(),
           model: selectedVehicle.modelId.toString()
         },
