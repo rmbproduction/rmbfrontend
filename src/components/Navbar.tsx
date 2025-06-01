@@ -12,15 +12,15 @@ import { useCartCountStore } from '../hooks/cart/useCartQueries';
 // Define menu items to avoid duplication
 const MENU_ITEMS = [
   { label: 'Services', path: '/', section: 'services' },
+  { label: 'Subscription', path: '/subscription' },
+  { label: 'How It Works', path: '/how-it-works' },
+  { label: 'Contact Us', path: '/contact-us' }
 ];
 
 // Define vehicle menu items for dropdown
 const VEHICLE_MENU_ITEMS = [
   { label: 'Buy Vehicle', path: '/vehicles' },
   { label: 'Sell Vehicle', path: '/sell-vehicle' },
-  { label: 'Subscription', path: '/subscription' },
-  { label: 'How It Works', path: '/how-it-works' },
-  { label: 'Contact Us', path: '/contact-us' }
 ];
 
 // Define user menu items
