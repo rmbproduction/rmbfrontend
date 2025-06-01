@@ -17,7 +17,10 @@ const MENU_ITEMS = [
 // Define vehicle menu items for dropdown
 const VEHICLE_MENU_ITEMS = [
   { label: 'Buy Vehicle', path: '/vehicles' },
-  { label: 'Sell Vehicle', path: '/sell-vehicle' }
+  { label: 'Sell Vehicle', path: '/sell-vehicle' },
+  { label: 'Subscription', path: '/subscription' },
+  { label: 'How It Works', path: '/how-it-works' },
+  { label: 'Contact Us', path: '/contact-us' }
 ];
 
 // Define user menu items
