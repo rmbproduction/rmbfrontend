@@ -127,7 +127,8 @@ const isPublicRoute = (url: string): boolean => {
     '/',
     '/vehicles',
     '/service',
-    '/contact'
+    '/contact',
+    '/about-us'
   ];
   return publicRoutes.some(route => url.includes(route));
 };

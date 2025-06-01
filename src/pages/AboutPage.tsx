@@ -78,21 +78,20 @@ const AboutPage = () => {
             transition={{ duration: 0.5, delay: 0.2 }}
           >
             <h2 className="text-3xl font-bold mb-6">Our Story</h2>
-            <div className="prose prose-lg text-gray-600">
-              <p className="mb-4">
-                Founded in May 2025, RepairMyBike emerged from a father-son legacy of bike repair expertise. The story began with Rajesh Singh, a dedicated bike mechanic who built his reputation through decades of honest service and technical mastery. His passion for fixing bikes and helping people, even without a formal shop, laid the foundation for what would become RepairMyBike.
-              </p>
-              <p className="mb-4">
-                Following in his father's footsteps, Mohit Singh from Rewari, Haryana, understood the core values that made his father's work so impactful. Together with partners Mahir, Harish, and Vikash Bhatia, Mohit transformed his father's customer-first approach into RepairMyBike in 2025 - a service designed to eliminate all hassles associated with bike repairs.
-              </p>
-              <p className="mb-4">
-                Our mission reflects the values Rajesh Singh instilled: we aim to completely remove the stress and headache of bike repairs from our customers' lives. Through our door-to-door pickup and drop service, expert mechanics, and home service options, we ensure you never have to worry about your bike's maintenance or repairs again.
-              </p>
-              <p>
-                At RepairMyBike, we've modernized the traditional repair experience while maintaining the trust and personal touch that Rajesh Singh was known for. Just request a service, and let us handle everything else - that's our promise to you.
-              </p>
-            </div>
+            <p className="mb-4">
+              Founded in May 2025, RepairMyBike emerged from a father-son legacy of bike repair expertise. The story began with Rajesh Singh, a dedicated bike mechanic who built his reputation through decades of honest service and technical mastery. His passion for fixing bikes and helping people, even without a formal shop, laid the foundation for what would become RepairMyBike.
+            </p>
+            <p className="mb-4">
+              Following in his father's footsteps, Mohit Singh from Rewari, Haryana, understood the core values that made his father's work so impactful. Together with partners Mahir, Harish, and Vikash Bhatia, Mohit transformed his father's customer-first approach into RepairMyBike in 2025 - a service designed to eliminate all hassles associated with bike repairs.
+            </p>
+            <p className="mb-4">
+              Our mission reflects the values Rajesh Singh instilled: we aim to completely remove the stress and headache of bike repairs from our customers' lives. Through our door-to-door pickup and drop service, expert mechanics, and home service options, we ensure you never have to worry about your bike's maintenance or repairs again.
+            </p>
+            <p>
+              At RepairMyBike, we've modernized the traditional repair experience while maintaining the trust and personal touch that Rajesh Singh was known for. Just request a service, and let us handle everything else - that's our promise to you.
+            </p>
           </motion.div>
+          
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
