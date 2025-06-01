@@ -12,6 +12,7 @@ import EmailConfirmation from './pages/EmailConfirmation';
 import ResetPassword from './pages/ResetPassword';
 import PasswordResetConfirmation from './pages/PasswordResetConfirmation';
 import NotFound from './pages/NotFound';
+import VerifyEmail from './pages/VerifyEmail';
 
 // Temporary: Log the API URL to verify environment variable
 console.log('API URL:', import.meta.env.VITE_API_BASE_URL);
@@ -37,8 +38,8 @@ const router = createBrowserRouter([
     element: <EmailVerification />
   },
   {
-    path: "/verify-email/:key",
-    element: <EmailConfirmation />
+    path: "/verify-email/:token",
+    element: <VerifyEmail />
   },
   {
     path: "/reset-password/:token",

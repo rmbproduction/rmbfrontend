@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Loader } from 'lucide-react';
-import apiService from '../config/api.config';
+import { apiService } from '../config/api.config';
 
 const VerifyEmail = () => {
   const { token } = useParams<{ token: string }>();
@@ -19,42 +19,28 @@ const VerifyEmail = () => {
       }
 
       try {
-        // Clean the token (just trim whitespace)
-        const cleanToken = token.trim();
-        
-        if (cleanToken.length < 10) {
-          setError('Invalid verification token format');
-          setIsVerifying(false);
-          return;
-        }
-
-        console.log('Attempting to verify email with token:', cleanToken);
-        const response = await apiService.auth.verifyEmail(cleanToken);
+        console.log('Attempting to verify email with token:', token);
+        const response = await apiService.auth.verifyEmail(token);
         console.log('Verification response:', response);
 
-        // Check if we have a successful response
-        if (response.status === 200) {
-          const message = response.data.message || 'Email verified successfully!';
-          toast.success(message);
-          
-          // Always redirect to /login regardless of the backend's redirect_url
+        if (response.status === 200 || response.status === 204) {
+          toast.success('Email verified successfully!');
           setTimeout(() => {
             navigate('/login');
           }, 2000);
         } else {
-          // If we get here, something unexpected happened
-          throw new Error(response.data?.error || 'Verification failed');
+          throw new Error('Verification failed');
         }
       } catch (error: any) {
         console.error('Verification error:', error);
         
-        // Handle different error cases based on backend response
+        // Handle different error cases
         if (error.response?.status === 404) {
-          setError('User not found. Please sign up first.');
+          setError('Invalid verification link or link has expired');
         } else if (error.response?.status === 400) {
-          setError(error.response.data.error || 'Invalid or expired verification link');
+          setError(error.response.data?.error || 'Invalid verification link');
         } else {
-          setError(error.response?.data?.error || 'Failed to verify email');
+          setError('Failed to verify email. Please try again.');
         }
         
         toast.error('Email verification failed');
@@ -65,10 +51,6 @@ const VerifyEmail = () => {
 
     verifyEmail();
   }, [token, navigate]);
-
-  const handleResendVerification = () => {
-    navigate('/resend-verification');
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-white to-[#ffe4d4] p-6">
@@ -89,7 +71,7 @@ const VerifyEmail = () => {
             </div>
             <div className="mt-4 space-y-2">
               <button
-                onClick={handleResendVerification}
+                onClick={() => navigate('/resend-verification')}
                 className="w-full py-2 px-4 bg-[#FF5733] text-white rounded-md hover:bg-[#ff4019] transition-colors"
               >
                 Request New Verification Link
