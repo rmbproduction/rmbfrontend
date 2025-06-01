@@ -14,7 +14,7 @@ const MENU_ITEMS = [
   { label: 'Services', path: '/', section: 'services' },
   { label: 'How It Works', path: '/', section: 'how-it-works' },
   { label: 'Subscription', path: '/subscription' },
-  { label: 'About Us', path: '/about' },
+  { label: 'About Us', path: '/about-us' },
 ];
 
 // Define vehicle menu items for dropdown
