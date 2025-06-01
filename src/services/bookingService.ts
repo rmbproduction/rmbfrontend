@@ -1,4 +1,4 @@
-import { axiosInstance, API_CONFIG } from '../config/api.config';
+import { axiosInstance } from '../config/api.config';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { AxiosError } from 'axios';
@@ -53,7 +53,7 @@ const api = {
 
       // First check if the vehicle is available for booking
       const vehicleResponse = await axiosInstance.get(
-        `marketplace/vehicles/${bookingData.vehicle_id}/`
+        `/marketplace/vehicles/${bookingData.vehicle_id}/`
       );
       
       const vehicle = vehicleResponse.data;
@@ -63,7 +63,7 @@ const api = {
       
       // If validation passes, proceed with booking
       const response = await axiosInstance.post(
-        `marketplace/vehicles/${bookingData.vehicle_id}/book/`,
+        `/marketplace/vehicles/${bookingData.vehicle_id}/book/`,
         {
           contact_number: bookingData.contact_number,
           notes: bookingData.notes
@@ -84,7 +84,7 @@ const api = {
 
   getBooking: async (id: string): Promise<Booking> => {
     const response = await axiosInstance.get(
-      `marketplace/bookings/${id}/`
+      `/marketplace/bookings/${id}/`
     );
     return response.data;
   },
