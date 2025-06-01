@@ -1,54 +1,12 @@
 {
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/profile\\?tab=(profile|vehicles|repairs|bookings|subscriptions)",
-      "dest": "/index.html",
-      "status": 200
-    },
-    {
-      "src": "/service/[^/]+",
-      "dest": "/index.html",
-      "status": 200
-    },
-    {
-      "src": "/vehicles/[^/]+",
-      "dest": "/index.html",
-      "status": 200
-    },
-    {
-      "src": "/verify-email/[^/]+",
-      "dest": "/index.html",
-      "status": 200
-    },
-    {
-      "src": "/reset-password/[^/]+",
-      "dest": "/index.html",
-      "status": 200
-    },
-    {
-      "src": "/(login|signup|about-us|how-it-works|subscription|vehicles|profile|cart|checkout|sell-vehicle|contact)",
-      "dest": "/index.html",
-      "status": 200
-    },
-    {
-      "src": "/static/(.*)",
-      "headers": { "cache-control": "public, max-age=31536000, immutable" },
-      "continue": true
-    },
-    {
-      "src": "/assets/(.*)",
-      "headers": { "cache-control": "public, max-age=31536000, immutable" },
-      "continue": true
-    },
-    {
-      "handle": "filesystem"
-    }
+    { "source": "/profile", "destination": "/index.html" },
+    { "source": "/profile/:tab", "destination": "/index.html" },
+    { "source": "/service/:id", "destination": "/index.html" },
+    { "source": "/vehicles/:id", "destination": "/index.html" },
+    { "source": "/verify-email/:token", "destination": "/index.html" },
+    { "source": "/reset-password/:token", "destination": "/index.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -71,14 +29,20 @@
           "value": "strict-origin-when-cross-origin"
         }
       ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
     }
   ],
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "public": true,
-  "trailingSlash": false,
-  "github": {
-    "silent": true,
-    "autoAlias": true
-  }
+  "framework": "vite",
+  "cleanUrls": true,
+  "trailingSlash": false
 }
