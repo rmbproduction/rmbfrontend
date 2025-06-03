@@ -186,15 +186,119 @@ const Profile = () => {
     queryKey: QUERY_KEYS.profile,
     queryFn: async () => {
       const response = await apiService.profile.getDetails();
+      console.log('Fetched profile data:', response.data); // Debug log
       return response.data;
     },
     enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
   });
 
-  // Update local state when profile data changes
+  // Add a function to handle vehicle selection updates
+  const handleVehicleSelectionChange = (type: 'type' | 'manufacturer' | 'model', value: number | null) => {
+    console.log('Updating vehicle selection:', { type, value });
+    
+    switch (type) {
+      case 'type':
+        setSelectedVehicleType(value);
+        // Reset dependent fields
+        setSelectedManufacturer(null);
+        setSelectedVehicleModel(null);
+        break;
+      case 'manufacturer':
+        setSelectedManufacturer(value);
+        // Reset model when manufacturer changes
+        setSelectedVehicleModel(null);
+        break;
+      case 'model':
+        setSelectedVehicleModel(value);
+        break;
+    }
+  };
+
+  // Update the vehicle dropdowns JSX
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    {/* Vehicle Type Dropdown */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        Vehicle Type
+      </label>
+      <select
+        name="vehicle_type"
+        value={selectedVehicleType || ''}
+        onChange={(e) => {
+          const value = e.target.value ? parseInt(e.target.value) : null;
+          handleVehicleSelectionChange('type', value);
+        }}
+        disabled={!isEditing}
+        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+      >
+        <option value="">Select Vehicle Type</option>
+        {vehicleTypes.map((type) => (
+          <option key={type.id} value={type.id}>
+            {type.name}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    {/* Manufacturer Dropdown */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        Manufacturer
+      </label>
+      <select
+        name="manufacturer"
+        value={selectedManufacturer || ''}
+        onChange={(e) => {
+          const value = e.target.value ? parseInt(e.target.value) : null;
+          handleVehicleSelectionChange('manufacturer', value);
+        }}
+        disabled={!isEditing}
+        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+      >
+        <option value="">Select Manufacturer</option>
+        {manufacturers.map((manufacturer) => (
+          <option key={manufacturer.id} value={manufacturer.id}>
+            {manufacturer.name}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    {/* Vehicle Model Dropdown */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        Vehicle Model
+      </label>
+      <select
+        name="vehicle_model"
+        value={selectedVehicleModel || ''}
+        onChange={(e) => {
+          const value = e.target.value ? parseInt(e.target.value) : null;
+          handleVehicleSelectionChange('model', value);
+        }}
+        disabled={!isEditing || !selectedVehicleType || !selectedManufacturer}
+        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+      >
+        <option value="">Select Vehicle Model</option>
+        {filteredModels.map((model) => (
+          <option key={model.id} value={model.id}>
+            {model.name}
+          </option>
+        ))}
+      </select>
+      {isEditing && (!selectedVehicleType || !selectedManufacturer) && (
+        <p className="mt-1 text-sm text-gray-500">
+          Please select both Vehicle Type and Manufacturer first
+        </p>
+      )}
+    </div>
+  </div>
+
+  // Update the useEffect for profile data handling
   useEffect(() => {
     if (profileQueryData) {
+      console.log('Setting profile data from query:', profileQueryData);
       const formattedData = {
         ...profileQueryData,
         email: profileQueryData.email || '',
@@ -215,11 +319,22 @@ const Profile = () => {
       setIsNewProfile(false);
 
       // Restore vehicle selections from vehicle_details
+      console.log('Vehicle details from profile:', profileQueryData.vehicle_details);
       if (profileQueryData.vehicle_details) {
         const { vehicle_type, manufacturer, vehicle_model } = profileQueryData.vehicle_details;
-        setSelectedVehicleType(vehicle_type);
-        setSelectedManufacturer(manufacturer);
-        setSelectedVehicleModel(vehicle_model);
+        
+        // Set vehicle selections in the correct order
+        handleVehicleSelectionChange('type', vehicle_type);
+        
+        // Use setTimeout to ensure type is set before setting manufacturer
+        setTimeout(() => {
+          handleVehicleSelectionChange('manufacturer', manufacturer);
+          
+          // Use setTimeout again to ensure manufacturer is set before setting model
+          setTimeout(() => {
+            handleVehicleSelectionChange('model', vehicle_model);
+          }, 0);
+        }, 0);
       }
     } else {
       setIsNewProfile(true);
@@ -289,13 +404,15 @@ const Profile = () => {
   // Profile update mutation
   const updateProfileMutation = useMutation({
     mutationFn: async (data: Partial<UserProfile>) => {
+      console.log('Sending to backend:', data); // Debug log
       const response = isNewProfile
         ? await apiService.profile.create(data)
         : await apiService.profile.update(data);
+      console.log('Backend response:', response.data); // Debug log
       return response.data;
     },
-    onSuccess: () => {
-      // Invalidate and refetch profile data
+    onSuccess: (data) => {
+      console.log('Mutation success, updated profile:', data); // Debug log
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.profile });
       toast.success(`Profile ${isNewProfile ? 'created' : 'updated'} successfully!`);
       setIsEditing(false);
@@ -397,6 +514,12 @@ const Profile = () => {
         return;
       }
 
+      console.log('Current selections:', { // Debug log
+        selectedVehicleType,
+        selectedManufacturer,
+        selectedVehicleModel
+      });
+
       const profileData: Partial<UserProfile> = {
         email: formData.email,
         username: formData.username,
@@ -411,6 +534,7 @@ const Profile = () => {
         vehicle_model: selectedVehicleModel || null
       };
 
+      console.log('Saving profile data:', profileData); // Debug log
       await updateProfileMutation.mutateAsync(profileData);
     } catch (error) {
       console.error('Error in handleSave:', error);
@@ -605,8 +729,7 @@ const Profile = () => {
                       value={selectedVehicleType || ''}
                       onChange={(e) => {
                         const value = e.target.value ? parseInt(e.target.value) : null;
-                        setSelectedVehicleType(value);
-                        setSelectedVehicleModel(null);
+                        handleVehicleSelectionChange('type', value);
                       }}
                       disabled={!isEditing}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
@@ -630,8 +753,7 @@ const Profile = () => {
                       value={selectedManufacturer || ''}
                       onChange={(e) => {
                         const value = e.target.value ? parseInt(e.target.value) : null;
-                        setSelectedManufacturer(value);
-                        setSelectedVehicleModel(null);
+                        handleVehicleSelectionChange('manufacturer', value);
                       }}
                       disabled={!isEditing}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
@@ -655,37 +777,21 @@ const Profile = () => {
                       value={selectedVehicleModel || ''}
                       onChange={(e) => {
                         const value = e.target.value ? parseInt(e.target.value) : null;
-                        console.log('Selected vehicle model:', value);
-                        setSelectedVehicleModel(value);
-                        setFormData(prev => ({
-                          ...prev,
-                          vehicle_model: value || undefined
-                        }));
+                        handleVehicleSelectionChange('model', value);
                       }}
                       disabled={!isEditing || !selectedVehicleType || !selectedManufacturer}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
                     >
                       <option value="">Select Vehicle Model</option>
-                      {filteredModels.length > 0 ? (
-                        filteredModels.map((model) => (
-                          <option key={model.id} value={model.id}>
-                            {model.name}
-                          </option>
-                        ))
-                      ) : (
-                        <option value="" disabled>
-                          {isEditing ? 'No models available for selected criteria' : 'No models available'}
+                      {filteredModels.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name}
                         </option>
-                      )}
+                      ))}
                     </select>
                     {isEditing && (!selectedVehicleType || !selectedManufacturer) && (
                       <p className="mt-1 text-sm text-gray-500">
                         Please select both Vehicle Type and Manufacturer first
-                      </p>
-                    )}
-                    {isEditing && selectedVehicleType && selectedManufacturer && filteredModels.length === 0 && (
-                      <p className="mt-1 text-sm text-gray-500">
-                        No vehicle models found for the selected criteria
                       </p>
                     )}
                   </div>
