@@ -15,6 +15,7 @@ import MySubscription from '../components/subscription/MySubscription';
 import { apiService } from '../config/api.config.ts';
 import axios from 'axios';
 import { useUserProfile } from '../hooks/useUserProfile';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface VehicleType {
   id: number;
@@ -52,7 +53,7 @@ interface UserProfile {
   country: string;
   postal_code: string;
   preferred_location?: string;
-  vehicle_model?: number;
+  vehicle_model?: number | null;
   vehicle_details?: {
     vehicle_model: number;
     vehicle_type: number;
@@ -83,11 +84,30 @@ const defaultProfile: UserProfile = {
   preferred_location: ''
 };
 
+// Add type for API responses
+interface ApiResponse<T> {
+  data: T;
+}
+
+interface VehicleDetails {
+  vehicle_model: number;
+  vehicle_type: number;
+  manufacturer: number;
+  model_name: string;
+  type_name: string;
+  manufacturer_name: string;
+}
+
+interface ProfileResponse extends UserProfile {
+  vehicle_details?: VehicleDetails;
+}
+
 const Profile = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, isAuthenticated, isLoading } = useAuth();
   const { updateProfile, updateSharedFormData } = useUserProfile();
+  const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -152,84 +172,151 @@ const Profile = () => {
     }
   }, [location.search]);
 
-  // Fetch profile data
-  const fetchProfileData = async () => {
-    try {
-      console.log('Fetching profile data...');
+  // Query keys
+  const QUERY_KEYS = {
+    profile: ['profile'],
+    vehicleTypes: ['vehicleTypes'],
+    manufacturers: ['manufacturers'],
+    vehicleModels: (type: number | null | undefined, manufacturer: number | null | undefined) => 
+      ['vehicleModels', { type: type || undefined, manufacturer: manufacturer || undefined }]
+  } as const;
+
+  // Fetch profile data using React Query
+  const { data: profileQueryData, isLoading: isProfileLoading } = useQuery<ProfileResponse>({
+    queryKey: QUERY_KEYS.profile,
+    queryFn: async () => {
       const response = await apiService.profile.getDetails();
-      console.log('Fetched profile data:', response.data);
+      return response.data;
+    },
+    enabled: isAuthenticated,
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+  });
 
-      if (response.data) {
-        const profileData = {
-          ...response.data,
-          email: response.data.email || '',
-          username: response.data.username || '',
-          name: response.data.name || '',
-          phone: response.data.phone || '',
-          address: response.data.address || '',
-          city: response.data.city || '',
-          state: response.data.state || '',
-          country: response.data.country || '',
-          postal_code: response.data.postal_code || '',
-          profile_photo: response.data.profile_photo || null,
-          vehicle_model: response.data.vehicle_model
-        };
-
-        setProfileData(profileData);
-        setIsNewProfile(false);
-        setFormData(profileData);
-
-        // Restore vehicle selections from vehicle_details
-        if (response.data.vehicle_details) {
-          const { vehicle_type, manufacturer, vehicle_model } = response.data.vehicle_details;
-          
-          // Set vehicle type and manufacturer first
-          setSelectedVehicleType(vehicle_type);
-          setSelectedManufacturer(manufacturer);
-
-          // Fetch vehicle models for the selected type and manufacturer
-          try {
-            const queryParams: Record<string, string> = {
-              vehicle_type: vehicle_type.toString(),
-              manufacturer: manufacturer.toString()
-            };
-            
-            const modelResponse = await apiService.vehicle.getModels(queryParams);
-            const models = Array.isArray(modelResponse.data) 
-              ? modelResponse.data 
-              : modelResponse.data.vehicle_models || [];
-            
-            setVehicleModels(models);
-            
-            // Set the vehicle model last, after models are loaded
-            setSelectedVehicleModel(vehicle_model);
-          } catch (error) {
-            console.error('Error fetching vehicle model details:', error);
-          }
-        }
-
-        console.log('Updated form data:', {
-          before: formData,
-          after: profileData
-        });
-      } else {
-        setIsNewProfile(true);
-        console.log('No profile data found, using default form data');
-      }
-    } catch (error) {
-      console.error('Error fetching profile:', error);
-      toast.error('Failed to load profile data');
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        navigate('/login');
-      }
-    }
-  };
-
+  // Update local state when profile data changes
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchProfileData();
+    if (profileQueryData) {
+      const formattedData = {
+        ...profileQueryData,
+        email: profileQueryData.email || '',
+        username: profileQueryData.username || '',
+        name: profileQueryData.name || '',
+        phone: profileQueryData.phone || '',
+        address: profileQueryData.address || '',
+        city: profileQueryData.city || '',
+        state: profileQueryData.state || '',
+        country: profileQueryData.country || '',
+        postal_code: profileQueryData.postal_code || '',
+        profile_photo: profileQueryData.profile_photo || null,
+        vehicle_model: profileQueryData.vehicle_model
+      };
+
+      setFormData(formattedData);
+      setProfileData(formattedData);
+      setIsNewProfile(false);
+
+      // Restore vehicle selections from vehicle_details
+      if (profileQueryData.vehicle_details) {
+        const { vehicle_type, manufacturer, vehicle_model } = profileQueryData.vehicle_details;
+        setSelectedVehicleType(vehicle_type);
+        setSelectedManufacturer(manufacturer);
+        setSelectedVehicleModel(vehicle_model);
+      }
+    } else {
+      setIsNewProfile(true);
     }
-  }, [isAuthenticated]);
+  }, [profileQueryData]);
+
+  // Fetch vehicle types using React Query
+  const { data: vehicleTypesData } = useQuery<VehicleType[]>({
+    queryKey: QUERY_KEYS.vehicleTypes,
+    queryFn: async () => {
+      const response = await apiService.vehicle.getTypes();
+      return response.data;
+    },
+    enabled: isAuthenticated,
+    staleTime: 30 * 60 * 1000 // Consider data fresh for 30 minutes
+  });
+
+  // Update vehicle types when data changes
+  useEffect(() => {
+    if (vehicleTypesData) {
+      setVehicleTypes(vehicleTypesData);
+    }
+  }, [vehicleTypesData]);
+
+  // Fetch manufacturers using React Query
+  const { data: manufacturersData } = useQuery<Manufacturer[]>({
+    queryKey: QUERY_KEYS.manufacturers,
+    queryFn: async () => {
+      const response = await apiService.vehicle.getManufacturers();
+      return response.data;
+    },
+    enabled: isAuthenticated,
+    staleTime: 30 * 60 * 1000 // Consider data fresh for 30 minutes
+  });
+
+  // Update manufacturers when data changes
+  useEffect(() => {
+    if (manufacturersData) {
+      setManufacturers(manufacturersData);
+    }
+  }, [manufacturersData]);
+
+  // Fetch vehicle models using React Query
+  const { data: vehicleModelsData } = useQuery<VehicleModel[]>({
+    queryKey: QUERY_KEYS.vehicleModels(selectedVehicleType, selectedManufacturer),
+    queryFn: async () => {
+      if (!selectedVehicleType && !selectedManufacturer) return [];
+      
+      const queryParams: Record<string, string> = {};
+      if (selectedVehicleType) queryParams.vehicle_type = selectedVehicleType.toString();
+      if (selectedManufacturer) queryParams.manufacturer = selectedManufacturer.toString();
+      
+      const response = await apiService.vehicle.getModels(queryParams);
+      return Array.isArray(response.data) ? response.data : response.data.vehicle_models || [];
+    },
+    enabled: isAuthenticated && (!!selectedVehicleType || !!selectedManufacturer),
+    staleTime: 5 * 60 * 1000 // Consider data fresh for 5 minutes
+  });
+
+  // Update vehicle models when data changes
+  useEffect(() => {
+    if (vehicleModelsData) {
+      setVehicleModels(vehicleModelsData);
+    }
+  }, [vehicleModelsData]);
+
+  // Profile update mutation
+  const updateProfileMutation = useMutation({
+    mutationFn: async (data: Partial<UserProfile>) => {
+      const response = isNewProfile
+        ? await apiService.profile.create(data)
+        : await apiService.profile.update(data);
+      return response.data;
+    },
+    onSuccess: () => {
+      // Invalidate and refetch profile data
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.profile });
+      toast.success(`Profile ${isNewProfile ? 'created' : 'updated'} successfully!`);
+      setIsEditing(false);
+    },
+    onError: (error: unknown) => {
+      console.error('Profile update error:', error);
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast.error('Session expired. Please login again.');
+          navigate('/login');
+        } else {
+          const errorMessage = error.response?.data?.message || 
+            Object.values(error.response?.data || {}).flat().join(', ') ||
+            'Failed to update profile. Please try again.';
+          toast.error(errorMessage);
+        }
+      } else {
+        toast.error('Failed to update profile. Please try again.');
+      }
+    }
+  });
 
   const handleLogout = async () => {
     try {
@@ -280,10 +367,7 @@ const Profile = () => {
   const handleSave = async () => {
     try {
       setIsSaving(true);
-      
-      console.log('Current Form Data:', formData);
 
-      // Basic validation
       if (!formData.name?.trim()) {
         toast.error('Please enter your name');
         return;
@@ -313,8 +397,7 @@ const Profile = () => {
         return;
       }
 
-      // Prepare data for API - only send vehicle_model
-      const profileData = {
+      const profileData: Partial<UserProfile> = {
         email: formData.email,
         username: formData.username,
         name: formData.name,
@@ -325,53 +408,12 @@ const Profile = () => {
         state: formData.state,
         country: formData.country,
         postal_code: formData.postal_code,
-        vehicle_model: selectedVehicleModel || null // Only send vehicle_model
+        vehicle_model: selectedVehicleModel || null
       };
 
-      console.log('Sending Profile Data:', {
-        method: isNewProfile ? 'POST' : 'PATCH',
-        data: profileData
-      });
-
-      let response;
-      try {
-        if (isNewProfile) {
-          response = await apiService.profile.create(profileData);
-        } else {
-          response = await apiService.profile.update(profileData);
-        }
-
-        console.log('Profile API Response:', response.data);
-
-        if (!response.data || typeof response.data !== 'object') {
-          throw new Error('Invalid response from server');
-        }
-
-        // After successful save, fetch fresh data to get updated vehicle_details
-        await fetchProfileData();
-
-        toast.success(`Profile ${isNewProfile ? 'created' : 'updated'} successfully!`);
-        setIsEditing(false);
-      } catch (error) {
-        console.error('Profile API Error:', error);
-        throw error;
-      }
+      await updateProfileMutation.mutateAsync(profileData);
     } catch (error) {
-      console.error('Error saving profile:', error);
-      if (axios.isAxiosError(error)) {
-        console.error('API Error Response:', error.response?.data);
-        if (error.response?.status === 401) {
-          toast.error('Session expired. Please login again.');
-          navigate('/login');
-        } else {
-          const errorMessage = error.response?.data?.message || 
-            Object.values(error.response?.data || {}).flat().join(', ') ||
-            'Failed to update profile. Please try again.';
-          toast.error(errorMessage);
-        }
-      } else {
-        toast.error('Failed to update profile. Please try again.');
-      }
+      console.error('Error in handleSave:', error);
     } finally {
       setIsSaving(false);
     }
@@ -382,92 +424,16 @@ const Profile = () => {
     setFormData(profileData || defaultProfile);
   };
 
-  // Add new useEffect for fetching vehicle types and manufacturers
-  useEffect(() => {
-    const fetchVehicleData = async () => {
-      try {
-        const [typesResponse, manufacturersResponse] = await Promise.all([
-          apiService.vehicle.getTypes(),
-          apiService.vehicle.getManufacturers()
-        ]);
-        setVehicleTypes(typesResponse.data);
-        setManufacturers(manufacturersResponse.data);
-      } catch (error) {
-        console.error('Error fetching vehicle data:', error);
-        toast.error('Failed to load vehicle information');
-      }
-    };
-
-    if (isAuthenticated) {
-      fetchVehicleData();
-    }
-  }, [isAuthenticated]);
-
-  // Update effect for fetching vehicle models when type or manufacturer changes
-  useEffect(() => {
-    const fetchVehicleModels = async () => {
-      try {
-        if (selectedVehicleType || selectedManufacturer) {
-          console.log('Fetching vehicle models with params:', {
-            vehicle_type: selectedVehicleType,
-            manufacturer: selectedManufacturer
-          });
-
-          const queryParams: Record<string, string> = {};
-          if (selectedVehicleType) queryParams.vehicle_type = selectedVehicleType.toString();
-          if (selectedManufacturer) queryParams.manufacturer = selectedManufacturer.toString();
-          
-          const response = await apiService.vehicle.getModels(queryParams);
-          console.log('Vehicle models API response:', response.data);
-
-          if (Array.isArray(response.data)) {
-            setVehicleModels(response.data);
-          } else if (Array.isArray(response.data.vehicle_models)) {
-            setVehicleModels(response.data.vehicle_models);
-          } else {
-            console.error('Unexpected API response format:', response.data);
-            setVehicleModels([]);
-          }
-        } else {
-          // Reset vehicle models when no filters are selected
-          setVehicleModels([]);
-        }
-      } catch (error) {
-        console.error('Error fetching vehicle models:', error);
-        toast.error('Failed to load vehicle models');
-        setVehicleModels([]);
-      }
-    };
-
-    fetchVehicleModels();
-  }, [selectedVehicleType, selectedManufacturer]);
-
   // Update useEffect for filtering vehicle models
   useEffect(() => {
-    console.log('Filtering models with:', {
-      vehicleModels,
-      selectedVehicleType,
-      selectedManufacturer
-    });
+    const filtered = vehicleModelsData?.filter(model => {
+      const matchesType = !selectedVehicleType || model.vehicle_type === selectedVehicleType;
+      const matchesManufacturer = !selectedManufacturer || model.manufacturer === selectedManufacturer;
+      return matchesType && matchesManufacturer;
+    }) || [];
 
-    const filterModels = () => {
-      if (!selectedVehicleType && !selectedManufacturer) {
-        setFilteredModels([]);
-        return;
-      }
-
-      const filtered = vehicleModels.filter(model => {
-        const matchesType = !selectedVehicleType || model.vehicle_type === selectedVehicleType;
-        const matchesManufacturer = !selectedManufacturer || model.manufacturer === selectedManufacturer;
-        return matchesType && matchesManufacturer;
-      });
-
-      console.log('Filtered models:', filtered);
-      setFilteredModels(filtered);
-    };
-
-    filterModels();
-  }, [selectedVehicleType, selectedManufacturer, vehicleModels]);
+    setFilteredModels(filtered);
+  }, [selectedVehicleType, selectedManufacturer, vehicleModelsData]);
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -904,7 +870,12 @@ const Profile = () => {
             transition={{ duration: 0.5 }}
             className="lg:col-span-3"
           >
-            {renderTabContent()}
+            {isProfileLoading ? (
+              <div className="flex justify-center items-center p-4">
+                <Loader className="w-6 h-6 animate-spin" />
+                <span className="ml-2">Loading profile...</span>
+              </div>
+            ) : renderTabContent()}
           </motion.div>
         </div>
       </div>
