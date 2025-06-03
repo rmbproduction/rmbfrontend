@@ -375,19 +375,20 @@ export const apiService = {
         }
 
         // Extract data from response
-        const { message, user, access, refresh } = response.data;
+        const { message, user, tokens } = response.data;
 
         console.log('=== RESPONSE VALIDATION ===');
         console.log('Response contains:', {
           hasMessage: !!message,
           hasUser: !!user,
-          hasAccess: !!access,
-          hasRefresh: !!refresh,
+          hasTokens: !!tokens,
+          hasAccess: !!tokens?.access,
+          hasRefresh: !!tokens?.refresh,
           responseKeys: Object.keys(response.data)
         });
 
         // Validate tokens
-        if (!access || !refresh) {
+        if (!tokens?.access || !tokens?.refresh) {
           console.error('=== TOKEN VALIDATION FAILED ===');
           console.error('Response data:', response.data);
           throw new Error('Login failed: No tokens received');
@@ -400,8 +401,8 @@ export const apiService = {
             message: message || 'Login successful',
             user,
             tokens: {
-              access,
-              refresh
+              access: tokens.access,
+              refresh: tokens.refresh
             }
           }
         };
