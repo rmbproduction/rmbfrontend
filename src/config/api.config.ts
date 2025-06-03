@@ -385,7 +385,6 @@ export const apiService = {
           timezone_offset: 5.5  // IST offset
         };
 
-        // Set up request headers
         const headers = {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -406,7 +405,6 @@ export const apiService = {
           withCredentials: true
         });
         
-        // Log the complete response for debugging
         console.log('Complete login response:', {
           status: response.status,
           statusText: response.statusText,
@@ -419,7 +417,16 @@ export const apiService = {
           throw new Error('Empty response received');
         }
 
-        const { access, refresh, user, message } = response.data;
+        // Extract data from response, handling both nested and flat structures
+        const { user, tokens, message } = response.data;
+        const access = tokens?.access || response.data.access;
+        const refresh = tokens?.refresh || response.data.refresh;
+
+        console.log('Extracted login data:', {
+          hasUser: !!user,
+          hasTokens: !!(tokens || (access && refresh)),
+          tokenSource: tokens ? 'nested' : 'flat'
+        });
 
         if (!access || !refresh || !user) {
           console.error('Invalid response structure:', {
