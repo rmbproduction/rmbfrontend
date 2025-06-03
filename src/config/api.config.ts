@@ -186,15 +186,6 @@ export const axiosInstance = axios.create({
   withCredentials: true
 });
 
-// Add timezone headers to all requests
-axiosInstance.interceptors.request.use((config) => {
-  if (config.headers) {
-    config.headers['X-Timezone'] = 'Asia/Kolkata';
-    config.headers['X-Timezone-Offset'] = '5.5';  // IST offset
-  }
-  return config;
-});
-
 // Add request interceptor for adding auth token and normalizing URLs
 axiosInstance.interceptors.request.use(
   async (config) => {
@@ -723,7 +714,7 @@ export const apiService = {
   vehicle: {
     getTypes: () => axiosInstance.get(API_ENDPOINTS.vehicle.types),
     getManufacturers: () => axiosInstance.get(API_ENDPOINTS.vehicle.manufacturers),
-    getModels: () => axiosInstance.get(API_ENDPOINTS.vehicle.models),
+    getModels: (params?: Record<string, string>) => axiosInstance.get(API_ENDPOINTS.vehicle.models, { params }),
     getUserVehicles: () => axiosInstance.get(API_ENDPOINTS.vehicle.userVehicles),
     checkCloudinary: () => axiosInstance.get(API_ENDPOINTS.vehicle.checkCloudinary),
     getVehicleImages: (id: string) => axiosInstance.get(API_ENDPOINTS.vehicle.vehicleImages(id)),

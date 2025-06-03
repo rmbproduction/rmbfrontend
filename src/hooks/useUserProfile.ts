@@ -277,7 +277,7 @@ export const useUserProfile = () => {
   // Update prefillFormData to handle async data fetching
   const prefillFormData = async <T extends object>(defaultData: T, formType: 'profile' | 'checkout' | 'subscription'): Promise<T> => {
     const sharedData = await getSharedData();
-    console.log('Shared data for prefill:', sharedData);
+    console.log('Raw shared data received:', sharedData);
     
     // Map shared fields to form-specific fields
     const fieldMappings = {
@@ -312,14 +312,14 @@ export const useUserProfile = () => {
 
     const mapping = fieldMappings[formType];
     const prefilledData = { ...defaultData };
-    console.log('Initial form data:', prefilledData);
+    console.log(`Prefilling ${formType} form with initial data:`, prefilledData);
 
     // Apply mappings to prefill data
     Object.entries(mapping).forEach(([formField, sharedField]) => {
       const value = sharedData[sharedField as keyof SharedFormData];
       console.log(`Mapping ${sharedField} (${value}) to ${formField}`);
       
-      if (value) {
+      if (value !== undefined && value !== null && value !== '') {
         if (formField.includes('.')) {
           // Handle nested fields (e.g., address.street)
           const [parent, child] = formField.split('.');
@@ -333,7 +333,7 @@ export const useUserProfile = () => {
       }
     });
 
-    console.log('Final prefilled data:', prefilledData);
+    console.log(`Final prefilled data for ${formType} form:`, prefilledData);
     return prefilledData;
   };
 
