@@ -8,6 +8,16 @@ import { motion } from 'framer-motion';
 import { User, MapPin, CheckCircle2, Loader2 } from 'lucide-react';
 import { useUserProfile } from '../../hooks/useUserProfile';
 
+interface SharedFormData {
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  postalCode: string;
+}
+
 interface SubscriptionFormData {
   plan_variant: number;
   vehicle_type: number;
@@ -92,11 +102,20 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
 
   // Pre-fill form data when component mounts
   useEffect(() => {
+    console.log('Initial form data:', formData);
     const prefilledData = prefillFormData(formData, 'subscription');
-    setFormData(prev => ({
-      ...prev,
-      ...prefilledData
-    }));
+    console.log('Prefilled data:', prefilledData);
+    
+    // Update form data with prefilled values
+    setFormData(prev => {
+      const newData = {
+        ...prev,
+        ...prefilledData,
+        plan_variant: planVariantId // Preserve the plan variant ID
+      };
+      console.log('Updated form data:', newData);
+      return newData;
+    });
   }, []);
 
   // Fetch vehicle types
@@ -192,19 +211,23 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
         ...prev,
         [name]: value
       }));
-    }
 
-    // Update shared form data
-    if (['customer_name', 'customer_email', 'customer_phone', 'address', 'city', 'state', 'postal_code'].includes(name)) {
-      updateSharedFormData({
-        name: name === 'customer_name' ? value : formData.customer_name,
-        email: name === 'customer_email' ? value : formData.customer_email,
-        phone: name === 'customer_phone' ? value : formData.customer_phone,
-        address: name === 'address' ? value : formData.address,
-        city: name === 'city' ? value : formData.city,
-        state: name === 'state' ? value : formData.state,
-        postalCode: name === 'postal_code' ? value : formData.postal_code
-      });
+      // Update shared form data for common fields
+      const sharedFieldMappings: { [key: string]: keyof SharedFormData } = {
+        customer_name: 'name',
+        customer_email: 'email',
+        customer_phone: 'phone',
+        address: 'address',
+        city: 'city',
+        state: 'state',
+        postal_code: 'postalCode'
+      };
+
+      if (name in sharedFieldMappings) {
+        updateSharedFormData({
+          [sharedFieldMappings[name]]: value
+        });
+      }
     }
     
     if (submitAttempted) {
