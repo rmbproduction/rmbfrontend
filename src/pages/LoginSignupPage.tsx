@@ -10,6 +10,29 @@ import { toast } from "react-toastify";
 import { useAuth } from "../contexts/AuthContext";
 import { useSignup, useForgotPassword, useGoogleLogin } from "../hooks/auth/useAuth";
 
+interface LoginResponseUser {
+  email: string;
+  username: string;
+  is_admin: boolean;
+  is_staff_member: boolean;
+  is_field_staff: boolean;
+  is_customer: boolean;
+  email_verified: boolean;
+}
+
+interface LoginResponseData {
+  user: LoginResponseUser;
+  tokens: {
+    access: string;
+    refresh: string;
+  };
+}
+
+interface LoginResponse {
+  data: LoginResponseData;
+  status: number;
+}
+
 interface FormData {
   username: string;
   email: string;
@@ -204,11 +227,23 @@ const LoginSignupPage = () => {
           timezone_offset: formData.timezone_offset
         });
         
-        await login(
+        const loginResult = await login(
           formData.email,
           formData.password,
           formData.rememberMe
-        );
+        ) as unknown as LoginResponse;
+
+        console.log("Login response received:", {
+          success: !!loginResult,
+          hasTokens: !!(loginResult?.data?.tokens?.access && loginResult?.data?.tokens?.refresh),
+          hasUser: !!loginResult?.data?.user,
+          status: loginResult?.status
+        });
+
+        if (!loginResult?.data?.tokens?.access || !loginResult?.data?.tokens?.refresh) {
+          console.error("Invalid login response:", loginResult?.data);
+          throw new Error("Login failed: No tokens received");
+        }
         
         // Reset attempts on successful login
         setLoginAttempts(0);

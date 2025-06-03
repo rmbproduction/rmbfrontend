@@ -416,35 +416,26 @@ export const apiService = {
         console.log('Raw login response:', {
           status: response.status,
           data: response.data,
-          hasTokens: !!(response.data?.tokens?.access || response.data?.access)
+          hasTokens: !!(response.data?.access && response.data?.refresh)
         });
 
-        // Check for tokens in the response (either at root level or in tokens object)
-        const tokens = response.data?.tokens || {
-          access: response.data?.access,
-          refresh: response.data?.refresh
-        };
-
-        if (!tokens.access || !tokens.refresh) {
+        // Check for tokens directly in the response
+        if (!response.data?.access || !response.data?.refresh) {
           console.error('No tokens in login response:', response.data);
           throw new Error('Invalid login response: No tokens received');
         }
 
-        // Transform the response to match our expected format
-        const transformedResponse = {
+        // Return the response in the expected format
+        return {
           ...response,
           data: {
-            user: response.data.user || response.data,
-            tokens: tokens
+            user: response.data.user,
+            tokens: {
+              access: response.data.access,
+              refresh: response.data.refresh
+            }
           }
         };
-
-        console.log('Transformed login response:', {
-          hasTokens: !!transformedResponse.data.tokens,
-          hasUser: !!transformedResponse.data.user
-        });
-        
-        return transformedResponse;
       } catch (error: any) {
         console.error('Login error:', {
           message: error.message,
