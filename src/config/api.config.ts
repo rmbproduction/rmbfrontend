@@ -340,6 +340,21 @@ axiosInstance.interceptors.response.use(
   }
 );
 
+interface LoginResponse {
+  message: string;
+  is_first_login: boolean;
+  tokens: {
+    access: string;
+    refresh: string;
+  };
+  user: {
+    id: number;
+    username: string;
+    email: string;
+    email_verified: boolean;
+  };
+}
+
 // API service functions
 export const apiService = {
   // Auth services
@@ -360,12 +375,16 @@ export const apiService = {
 
         console.log('Making API request to:', `${API_BASE_URL}/${API_ENDPOINTS.auth.login}`);
 
-        const response = await axiosInstance.post(API_ENDPOINTS.auth.login, loginData, {
-          headers: { 
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
+        const response = await axiosInstance.post<LoginResponse>(
+          API_ENDPOINTS.auth.login,
+          loginData,
+          {
+            headers: { 
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            }
           }
-        });
+        );
         
         console.log('=== RAW API RESPONSE ===');
         console.log('Response data:', JSON.stringify(response.data, null, 2));
@@ -374,31 +393,57 @@ export const apiService = {
           throw new Error('Empty response received');
         }
 
-        // Extract data from response
-        const { message, user, tokens } = response.data;
+        // Extract and validate data from response
+        const { message, user, tokens, is_first_login } = response.data;
 
-        console.log('=== RESPONSE VALIDATION ===');
-        console.log('Response contains:', {
+        // Detailed validation logging
+        const validationDetails = {
           hasMessage: !!message,
           hasUser: !!user,
           hasTokens: !!tokens,
-          hasAccess: !!tokens?.access,
-          hasRefresh: !!tokens?.refresh,
-          responseKeys: Object.keys(response.data)
-        });
+          hasTokensObject: typeof tokens === 'object',
+          tokensContent: tokens ? Object.keys(tokens) : [],
+          accessToken: tokens?.access?.substring(0, 20) + '...',
+          refreshToken: tokens?.refresh?.substring(0, 20) + '...',
+          userFields: user ? Object.keys(user) : [],
+          isFirstLogin: is_first_login
+        };
 
-        // Validate tokens
-        if (!tokens?.access || !tokens?.refresh) {
-          console.error('=== TOKEN VALIDATION FAILED ===');
-          console.error('Response data:', response.data);
-          throw new Error('Login failed: No tokens received');
+        console.log('=== DETAILED VALIDATION ===');
+        console.log('Validation details:', validationDetails);
+
+        // Comprehensive token validation
+        if (!tokens) {
+          throw new Error('No tokens object in response');
         }
 
-        // Return the response in the expected format
+        if (typeof tokens !== 'object') {
+          throw new Error('Tokens is not an object');
+        }
+
+        if (!tokens.access || typeof tokens.access !== 'string') {
+          throw new Error('Invalid or missing access token');
+        }
+
+        if (!tokens.refresh || typeof tokens.refresh !== 'string') {
+          throw new Error('Invalid or missing refresh token');
+        }
+
+        // Validate user object
+        if (!user || typeof user !== 'object') {
+          throw new Error('Invalid or missing user data');
+        }
+
+        if (!user.email || !user.id || !user.username) {
+          throw new Error('Incomplete user data');
+        }
+
+        // Return the validated response
         return {
           status: response.status,
           data: {
             message: message || 'Login successful',
+            is_first_login: !!is_first_login,
             user,
             tokens: {
               access: tokens.access,
@@ -409,7 +454,22 @@ export const apiService = {
       } catch (error: any) {
         console.error('=== LOGIN ERROR ===');
         console.error('Error details:', error);
-        throw error;
+
+        // Enhanced error handling
+        if (error.response) {
+          // Server responded with an error
+          const errorMessage = error.response.data?.message || 'Server error occurred';
+          throw new Error(`Login failed: ${errorMessage}`);
+        } else if (error.request) {
+          // Request was made but no response received
+          throw new Error('Login failed: No response from server');
+        } else if (error.message) {
+          // Error in request setup
+          throw new Error(`Login failed: ${error.message}`);
+        } else {
+          // Fallback error
+          throw new Error('Login failed: An unexpected error occurred');
+        }
       }
     },
     signup: async (data: { username: string; email: string; password: string }) => {
