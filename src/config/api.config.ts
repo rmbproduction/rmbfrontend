@@ -390,52 +390,69 @@ export const apiService = {
         console.log('Response data:', JSON.stringify(response.data, null, 2));
 
         if (!response.data) {
+          console.error('Empty response received');
           throw new Error('Empty response received');
         }
 
         // Extract and validate data from response
         const { message, user, tokens, is_first_login } = response.data;
 
-        // Detailed validation logging
-        const validationDetails = {
-          hasMessage: !!message,
-          hasUser: !!user,
-          hasTokens: !!tokens,
-          hasTokensObject: typeof tokens === 'object',
-          tokensContent: tokens ? Object.keys(tokens) : [],
-          accessToken: tokens?.access?.substring(0, 20) + '...',
-          refreshToken: tokens?.refresh?.substring(0, 20) + '...',
-          userFields: user ? Object.keys(user) : [],
-          isFirstLogin: is_first_login
-        };
+        // Debug: Log the exact structure of tokens
+        console.log('=== TOKEN DEBUG ===');
+        console.log('Raw tokens object:', tokens);
+        console.log('Access token exists:', !!tokens?.access);
+        console.log('Refresh token exists:', !!tokens?.refresh);
+        console.log('Tokens structure:', {
+          isObject: typeof tokens === 'object',
+          hasAccess: 'access' in (tokens || {}),
+          hasRefresh: 'refresh' in (tokens || {}),
+          accessType: typeof tokens?.access,
+          refreshType: typeof tokens?.refresh
+        });
 
-        console.log('=== DETAILED VALIDATION ===');
-        console.log('Validation details:', validationDetails);
-
-        // Comprehensive token validation
-        if (!tokens) {
-          throw new Error('No tokens object in response');
+        // Simplified but effective token validation
+        if (!tokens || !tokens.access || !tokens.refresh) {
+          console.error('Token validation failed:', {
+            hasTokens: !!tokens,
+            hasAccess: !!tokens?.access,
+            hasRefresh: !!tokens?.refresh
+          });
+          throw new Error('Invalid or missing tokens in response');
         }
 
-        if (typeof tokens !== 'object') {
-          throw new Error('Tokens is not an object');
-        }
+        // Debug: Log token lengths and partial values (safely)
+        console.log('=== TOKEN VALIDATION SUCCESS ===');
+        console.log('Token lengths:', {
+          access: tokens.access.length,
+          refresh: tokens.refresh.length
+        });
+        console.log('Token previews:', {
+          access: `${tokens.access.substring(0, 15)}...`,
+          refresh: `${tokens.refresh.substring(0, 15)}...`
+        });
 
-        if (!tokens.access || typeof tokens.access !== 'string') {
-          throw new Error('Invalid or missing access token');
-        }
+        // Debug: Log localStorage operations
+        console.log('=== TOKEN STORAGE ===');
+        console.log('Attempting to store tokens in localStorage...');
 
-        if (!tokens.refresh || typeof tokens.refresh !== 'string') {
-          throw new Error('Invalid or missing refresh token');
-        }
-
-        // Validate user object
-        if (!user || typeof user !== 'object') {
-          throw new Error('Invalid or missing user data');
-        }
-
-        if (!user.email || !user.id || !user.username) {
-          throw new Error('Incomplete user data');
+        // Store tokens
+        try {
+          localStorage.setItem('accessToken', tokens.access);
+          localStorage.setItem('refreshToken', tokens.refresh);
+          console.log('Tokens successfully stored in localStorage');
+          
+          // Verify storage
+          const storedAccess = localStorage.getItem('accessToken');
+          const storedRefresh = localStorage.getItem('refreshToken');
+          console.log('Storage verification:', {
+            accessStored: !!storedAccess,
+            refreshStored: !!storedRefresh,
+            accessLength: storedAccess?.length,
+            refreshLength: storedRefresh?.length
+          });
+        } catch (storageError) {
+          console.error('Failed to store tokens:', storageError);
+          // Continue execution as this is not critical
         }
 
         // Return the validated response
@@ -453,22 +470,23 @@ export const apiService = {
         };
       } catch (error: any) {
         console.error('=== LOGIN ERROR ===');
-        console.error('Error details:', error);
+        console.error('Error details:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status
+        });
 
-        // Enhanced error handling
-        if (error.response) {
-          // Server responded with an error
-          const errorMessage = error.response.data?.message || 'Server error occurred';
-          throw new Error(`Login failed: ${errorMessage}`);
+        // Enhanced error handling with specific messages
+        if (error.response?.status === 401) {
+          throw new Error('Invalid credentials');
+        } else if (error.response?.status === 400) {
+          throw new Error(error.response.data.message || 'Invalid request data');
+        } else if (error.response) {
+          throw new Error(error.response.data.message || 'Server error occurred');
         } else if (error.request) {
-          // Request was made but no response received
-          throw new Error('Login failed: No response from server');
-        } else if (error.message) {
-          // Error in request setup
-          throw new Error(`Login failed: ${error.message}`);
+          throw new Error('No response from server');
         } else {
-          // Fallback error
-          throw new Error('Login failed: An unexpected error occurred');
+          throw new Error(error.message || 'An unexpected error occurred');
         }
       }
     },
