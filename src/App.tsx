@@ -13,6 +13,7 @@ import ResetPassword from './pages/ResetPassword';
 import PasswordResetConfirmation from './pages/PasswordResetConfirmation';
 import NotFound from './pages/NotFound';
 import VerifyEmail from './pages/VerifyEmail';
+import { GoogleCallback } from './components/auth/GoogleCallback';
 
 // Temporary: Log the API URL to verify environment variable
 console.log('API URL:', import.meta.env.VITE_API_BASE_URL);
@@ -60,6 +61,10 @@ const router = createBrowserRouter([
       {
         path: "subscription",
         element: <Pricing />
+      },
+      {
+        path: "api/accounts/google/callback/",
+        element: <GoogleCallback />
       },
       {
         path: "*",
