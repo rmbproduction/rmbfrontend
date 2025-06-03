@@ -1,5 +1,30 @@
 import axios from 'axios';
 import TokenManager from '../services/tokenManager';
+import { QueryClient, QueryKey } from '@tanstack/react-query';
+
+// Create a new QueryClient instance with basic configuration
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      enabled: false,
+      gcTime: 10 * 60 * 1000, // 10 minutes
+    },
+  },
+});
+
+// Add error handler to query client
+queryClient.setDefaultOptions({
+  queries: {
+    onError: (error: any) => {
+      if (error?.response?.status === 401) {
+        TokenManager.clearTokens();
+        queryClient.clear();
+      }
+    },
+  },
+});
 
 // Add this utility function at the top of the file after imports
 const normalizeUrl = (url: string): string => {
@@ -519,31 +544,47 @@ export const apiService = {
     resetPasswordConfirm: (token: string, data: { password: string; confirmPassword: string }) =>
       axiosInstance.post(API_ENDPOINTS.auth.passwordResetConfirm(token), data),
     logout: async () => {
+      console.log('=== LOGOUT STARTED ===');
       try {
         const refreshToken = TokenManager.getRefreshToken();
         if (!refreshToken) {
-          throw new Error('No refresh token found');
+          console.log('No refresh token found during logout');
+          await handleLogoutCleanup();
+          return { status: 200, message: 'Logged out successfully' };
         }
 
         const response = await axiosInstance.post(API_ENDPOINTS.auth.logout, {
           refresh: refreshToken
         });
 
-        // Clear tokens on successful logout
-        if (response.status === 200) {
-          TokenManager.clearTokens();
-        }
-
+        console.log('Logout API response:', response.status);
+        await handleLogoutCleanup();
         return response;
       } catch (error) {
         console.error('Logout error:', error);
-        // Clear tokens even if logout fails
-        TokenManager.clearTokens();
+        await handleLogoutCleanup();
         throw error;
       }
     },
     getProfile: async () => {
-      return axiosInstance.get(API_ENDPOINTS.auth.profile);
+      // Check if we have tokens before making the request
+      const accessToken = TokenManager.getAccessToken();
+      if (!accessToken) {
+        console.log('No access token found, skipping profile fetch');
+        return { data: null };
+      }
+
+      try {
+        const response = await axiosInstance.get(API_ENDPOINTS.auth.profile);
+        return response;
+      } catch (error: any) {
+        if (error?.response?.status === 401) {
+          console.log('Unauthorized profile fetch, cleaning up...');
+          await handleLogoutCleanup();
+          return { data: null };
+        }
+        throw error;
+      }
     },
     updateProfile: async (data: any) => {
       return axiosInstance.patch(API_ENDPOINTS.auth.profile, data);
@@ -800,5 +841,82 @@ export const apiService = {
     getUploadParams: (id: string) => axiosInstance.get(API_ENDPOINTS.vehicle.uploadParams(id)),
   },
 };
+
+// Utility function to handle all cleanup during logout
+async function handleLogoutCleanup() {
+  console.log('=== STARTING LOGOUT CLEANUP ===');
+  
+  try {
+    // 1. Clear all tokens
+    TokenManager.clearTokens();
+    console.log('Tokens cleared');
+
+    // 2. Clear all React Query cache
+    queryClient.clear();
+    console.log('Query cache cleared');
+
+    // 3. Cancel any ongoing queries
+    await queryClient.cancelQueries();
+    console.log('Ongoing queries cancelled');
+
+    // 4. Remove any other auth-related storage
+    localStorage.removeItem('user');
+    sessionStorage.clear();
+    console.log('Additional storage cleared');
+
+    // 5. Reset auth-related queries
+    await Promise.all([
+      queryClient.resetQueries({ queryKey: ['profile'] }),
+      queryClient.resetQueries({ queryKey: ['auth'] })
+    ]);
+    console.log('Auth queries reset');
+
+    console.log('=== LOGOUT CLEANUP COMPLETED ===');
+  } catch (error) {
+    console.error('Error during logout cleanup:', error);
+    // Still clear tokens even if other cleanup fails
+    TokenManager.clearTokens();
+  }
+}
+
+// Add axios interceptor to handle 401s globally
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error?.response?.status === 401 && !error.config._retry) {
+      // If we get a 401 and haven't tried to refresh the token yet
+      try {
+        const refreshToken = TokenManager.getRefreshToken();
+        if (!refreshToken) {
+          // No refresh token, clean up and reject
+          await handleLogoutCleanup();
+          return Promise.reject(error);
+        }
+
+        // Try to refresh the token
+        const response = await axios.post(`${API_BASE_URL}/accounts/token/refresh/`, {
+          refresh: refreshToken
+        });
+
+        if (response.data?.access) {
+          // Update the token
+          TokenManager.setTokens({
+            access: response.data.access,
+            refresh: refreshToken
+          });
+
+          // Retry the original request
+          error.config._retry = true;
+          error.config.headers.Authorization = `Bearer ${response.data.access}`;
+          return axiosInstance(error.config);
+        }
+      } catch (refreshError) {
+        // If refresh fails, clean up everything
+        await handleLogoutCleanup();
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default apiService;
