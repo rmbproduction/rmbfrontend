@@ -1,6 +1,12 @@
 import axios from 'axios';
 import TokenManager from '../services/tokenManager';
 
+// Add this utility function at the top of the file after imports
+const normalizeUrl = (url: string): string => {
+  // Remove multiple consecutive slashes, except after protocol (e.g., http://)
+  return url.replace(/([^:]\/)\/+/g, '$1');
+};
+
 // Base configuration
 const API_BASE_URL = 'https://repairmybike.up.railway.app/api';
 const FRONTEND_URL = import.meta.env.VITE_FRONTEND_URL || 'https://repairmybike.in';
@@ -30,7 +36,8 @@ export const API_CONFIG = {
       return API_BASE_URL;
     }
 
-    return `${API_BASE_URL}/${cleanEndpoint}`;
+    // Normalize the final URL to prevent double slashes
+    return normalizeUrl(`${API_BASE_URL}/${cleanEndpoint}`);
   }
 };
 
@@ -67,12 +74,17 @@ axiosInstance.interceptors.request.use((config) => {
   return config;
 });
 
-// Add request interceptor for adding auth token
+// Add request interceptor for adding auth token and normalizing URLs
 axiosInstance.interceptors.request.use(
   async (config) => {
     // Ensure trailing slash for Django URLs
     if (config.url && !config.url.endsWith('/')) {
       config.url = `${config.url}/`;
+    }
+
+    // Normalize URL to prevent double slashes
+    if (config.url) {
+      config.url = config.url.replace(/\/+/g, '/');
     }
 
     // Ensure headers are set for every request
@@ -85,7 +97,7 @@ axiosInstance.interceptors.request.use(
     console.log('Making request:', {
       url: config.url,
       baseURL: config.baseURL,
-      fullUrl: `${config.baseURL}/${config.url}`,
+      fullUrl: normalizeUrl(`${config.baseURL}/${config.url}`),
       method: config.method,
       headers: config.headers,
       data: config.data
