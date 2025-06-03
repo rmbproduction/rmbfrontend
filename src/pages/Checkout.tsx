@@ -120,32 +120,56 @@ const Checkout = () => {
 
   // Pre-fill form data when component mounts
   useEffect(() => {
-    const prefilledData = prefillFormData({
-      name: '',
-      email: '',
-      phone: '',
-      address: {
-        street: '',
-        city: '',
-        state: '',
-        zipCode: ''
-      },
-      serviceDate: '',
-      serviceTime: '',
-      totalAmount: '',
-    }, 'checkout');
+    const loadProfileData = async () => {
+      try {
+        console.log('Loading profile data for checkout...');
+        const defaultData = {
+          name: '',
+          email: '',
+          phone: '',
+          address: {
+            street: '',
+            city: '',
+            state: '',
+            zipCode: ''
+          },
+          serviceDate: '',
+          serviceTime: '',
+          totalAmount: '',
+        };
 
-    // Set the pre-filled values
-    Object.entries(prefilledData).forEach(([key, value]) => {
-      if (key === 'address' && typeof value === 'object') {
-        Object.entries(value).forEach(([addressKey, addressValue]) => {
-          setValue(`address.${addressKey as 'street' | 'city' | 'state' | 'zipCode'}`, addressValue);
-        });
-      } else {
-        setValue(key as keyof CheckoutFormData, value);
+        const prefilledData = await prefillFormData(defaultData, 'checkout');
+        console.log('Received prefilled data:', prefilledData);
+
+        // Set the pre-filled values
+        if (prefilledData) {
+          // Handle flat fields
+          setValue('name', prefilledData.name || '');
+          setValue('email', prefilledData.email || '');
+          setValue('phone', prefilledData.phone || '');
+          
+          // Handle nested address fields
+          if (prefilledData.address) {
+            setValue('address.street', prefilledData.address.street || '');
+            setValue('address.city', prefilledData.address.city || '');
+            setValue('address.state', prefilledData.address.state || '');
+            setValue('address.zipCode', prefilledData.address.zipCode || '');
+          }
+          
+          console.log('Form values after prefill:', {
+            name: watch('name'),
+            email: watch('email'),
+            phone: watch('phone'),
+            address: watch('address')
+          });
+        }
+      } catch (error) {
+        console.error('Error prefilling checkout form:', error);
       }
-    });
-  }, [setValue]);
+    };
+
+    loadProfileData();
+  }, [setValue, watch]);
 
   // Update shared data when form fields change
   const handleFieldChange = (name: string, value: string) => {
