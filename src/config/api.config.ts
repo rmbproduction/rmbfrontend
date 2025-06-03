@@ -15,30 +15,7 @@ const FRONTEND_URL = import.meta.env.VITE_FRONTEND_URL || 'https://repairmybike.
 export const API_CONFIG = {
   baseURL: API_BASE_URL,
   frontendURL: FRONTEND_URL,
-  withCredentials: true, // Enable sending cookies in cross-origin requests
-  getApiUrl: (endpoint?: string) => {
-    if (!endpoint || typeof endpoint !== 'string') {
-      console.error('[getApiUrl] Invalid or missing endpoint:', endpoint);
-      return API_BASE_URL;
-    }
-
-    // Remove leading slash to avoid double slashes
-    let cleanEndpoint = endpoint.trim().startsWith('/') ? endpoint.trim().slice(1) : endpoint.trim();
-
-    // Remove "undefined", "null", or double slashes in path
-    cleanEndpoint = cleanEndpoint
-      .split('/')
-      .filter(segment => !!segment && segment !== 'undefined' && segment !== 'null')
-      .join('/');
-
-    if (!cleanEndpoint) {
-      console.warn('[getApiUrl] Endpoint was cleaned to empty, using base URL');
-      return API_BASE_URL;
-    }
-
-    // Normalize the final URL to prevent double slashes
-    return normalizeUrl(`${API_BASE_URL}/${cleanEndpoint}`);
-  }
+  withCredentials: true,
 };
 
 // CDN Configuration
@@ -55,14 +32,158 @@ export const CDN_CONFIG = {
   }
 };
 
+// Export API endpoints
+export const API_ENDPOINTS = {
+  auth: {
+    signup: 'accounts/signup/',
+    login: 'accounts/login/',  // Changed from '/accounts/login/'
+    logout: 'accounts/logout/',
+    refreshToken: 'accounts/token/refresh/',
+    passwordReset: 'accounts/password-reset/',
+    passwordResetConfirm: (token: string) => `accounts/password-reset/${token}/`,
+    verifyEmail: (token: string) => `accounts/verify-email/${token}/`,
+    resendVerification: '/accounts/resend-verification/',
+    googleLogin: 'accounts/google/login/',
+    googleCallback: 'accounts/google/callback/',
+    profile: 'accounts/profile/',
+    contact: 'accounts/contact/',
+  },
+
+  // Vehicle marketplace endpoints
+  marketplace: {
+    vehicles: '/marketplace/vehicles/',
+    vehicle: (id: string) => `/marketplace/vehicles/${id}/`,
+    sellRequests: '/marketplace/sell-requests/',
+    sellRequest: (id: string) => `/marketplace/sell-requests/${id}/`,
+    inspections: '/marketplace/inspections/',
+    inspection: (id: string) => `/marketplace/inspections/${id}/`,
+    offers: '/marketplace/offers/',
+    offer: (id: string) => `/marketplace/offers/${id}/`,
+    purchases: '/marketplace/purchases/',
+    purchase: (id: string) => `/marketplace/purchases/${id}/`,
+    bookings: '/marketplace/bookings/',
+    booking: (id: string) => `/marketplace/bookings/${id}/`,
+    emailVehicleSummary: '/marketplace/email-vehicle-summary/',
+  },
+
+  // Repair service endpoints
+  services: {
+    // Categories and services
+    categories: '/repairing-service/service-categories/',
+    services: '/repairing-service/services/',
+    servicePrice: (id: string) => `/repairing-service/service-price/${id}/`,
+    manufacturers: '/repairing-service/manufacturers/',
+    vehicleModels: '/repairing-service/vehicle-models/',
+    
+    // Cart related
+    createCart: '/repairing-service/cart/create/',
+    listCarts: '/repairing-service/cart/list/',
+    cartDetail: (id: number) => `/repairing-service/cart/${id}/`,
+    addToCart: (id: number) => `/repairing-service/cart/${id}/add/`,
+    updateCartItem: (cartId: number) => `/repairing-service/cart/${cartId}/update-item/`,
+    removeCartItem: (id: number) => `/repairing-service/cart/items/${id}/`,
+    clearCart: (id: number) => `/repairing-service/cart/${id}/clear/`,
+    
+    // Bookings
+    myRepairs: '/repairing-service/bookings/',
+    createBooking: '/repairing-service/bookings/create/',
+    serviceNow: '/repairing-service/service-now/',
+    cancelServiceNow: (id: string) => `/repairing-service/service-now/${id}/cancel/`,
+    calculateDistanceFee: '/repairing-service/calculate-distance-fee/',
+  },
+
+  // Chatbot endpoints
+  chatbot: {
+    message: '/services/chatbot/message/',
+    intent: '/services/chatbot/intent/',
+    history: '/services/chatbot/history/',
+  },
+
+  // Admin dashboard endpoints
+  admin: {
+    statistics: '/services/admin/dashboard/statistics/',
+    notifications: '/services/admin/notifications/',
+    requests: '/services/admin/requests/',
+    updateRequestStatus: (id: string) => `/services/admin/requests/${id}/status/`,
+  },
+
+  // Subscription endpoints
+  subscription: {
+    // Plan Management
+    plans: '/subscription/plans/',
+    planDetails: (id: string) => `/subscription/plans/${id}/`,
+    planVariants: '/subscription/plan-variants/',
+    getPlanVariants: (planId: string) => `/subscription/plans/${planId}/variants/`,
+
+    // Subscription Requests
+    requests: '/subscription/subscription-requests/',
+    requestStatus: (id: string) => `/subscription/subscription-requests/${id}/status/`,
+    approveRequest: (id: string) => `/subscription/subscription-requests/${id}/approve/`,
+    rejectRequest: (id: string) => `/subscription/subscription-requests/${id}/reject/`,
+
+    // Active Subscription
+    subscriptions: '/subscription/subscriptions/',
+    activeSubscription: '/subscription/subscriptions/active/',
+    subscriptionStatus: (id: string) => `/subscription/subscriptions/${id}/status/`,
+    cancelSubscription: (id: string) => `/subscription/subscriptions/${id}/cancel/`,
+    renewSubscription: (id: string) => `/subscription/subscriptions/${id}/renew/`,
+
+    // Visit Management
+    visits: {
+      upcoming: '/subscription/visits/upcoming/',
+      schedule: '/subscription/visits/schedule_preferred_date/',
+      cancel: (id: number) => `/subscription/visits/${id}/cancel/`,
+      reschedule: (id: number) => `/subscription/visits/${id}/update_schedule/`
+    },
+    visitHistory: '/subscription/visits/visit_history/',
+    visitSummary: '/subscription/visits/subscription_visit_summary/',
+    checkVisitAvailability: '/subscription/visits/check_availability/',
+    availableDates: '/subscription/visits/available_dates/',
+    availableTimes: '/subscription/visits/available_times/',
+    scheduleVisit: '/subscription/visits/schedule_preferred_date/',
+    cancelVisit: (id: string) => `/subscription/visits/${id}/cancel/`,
+    rescheduleVisit: (id: string) => `/subscription/visits/${id}/reschedule/`,
+    completeVisit: (id: string) => `/subscription/visits/${id}/complete/`,
+  },
+
+  // CDN endpoints
+  cdn: {
+    baseUrl: `https://res.cloudinary.com/${CDN_CONFIG.cloudName}`,
+    upload: `${CDN_CONFIG.baseURL}/${CDN_CONFIG.cloudName}/upload`,
+    imageTransform: (transformation: string, publicId: string) => 
+      `https://res.cloudinary.com/${CDN_CONFIG.cloudName}/image/upload/${transformation}/${publicId}`,
+    document: (publicId: string) => 
+      `https://res.cloudinary.com/${CDN_CONFIG.cloudName}/raw/upload/${publicId}`,
+  },
+
+  // Profile endpoints
+  profile: {
+    details: '/accounts/profile/',
+    update: '/accounts/profile/update/',
+    changePassword: '/accounts/profile/change-password/',
+  },
+
+  // Vehicle endpoints
+  vehicle: {
+    types: '/vehicle/vehicle-types/',
+    manufacturers: '/vehicle/manufacturers/',
+    models: '/vehicle/vehicle-models/',
+    userVehicles: '/vehicle/user-vehicles/',
+    checkCloudinary: '/vehicle/check-cloudinary/',
+    vehicleImages: (id: string) => `/vehicle/vehicles/${id}/images/`,
+    uploadParams: (id: string) => `/vehicle/vehicles/${id}/upload-params/`,
+    checkRegistration: '/marketplace/vehicles/check-registration-number/',
+  },
+};
+
 // Create axios instance with default config
 export const axiosInstance = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_BASE_URL.replace(/\/+$/, ''),  // Remove trailing slashes
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  withCredentials: true // Enable sending cookies in cross-origin requests
+  withCredentials: true
 });
 
 // Add timezone headers to all requests
@@ -77,27 +198,27 @@ axiosInstance.interceptors.request.use((config) => {
 // Add request interceptor for adding auth token and normalizing URLs
 axiosInstance.interceptors.request.use(
   async (config) => {
-    // Ensure trailing slash for Django URLs
-    if (config.url && !config.url.endsWith('/')) {
-      config.url = `${config.url}/`;
+    // Clean up the URL parts
+    const baseUrl = (config.baseURL || '').replace(/\/+$/, '');  // Remove trailing slashes
+    let url = (config.url || '').replace(/^\/+/, '');  // Remove leading slashes
+
+    // Ensure trailing slash for Django URLs (only if url is not empty)
+    if (url && !url.endsWith('/')) {
+      url = `${url}/`;
     }
 
-    // Normalize URL to prevent double slashes
-    if (config.url) {
-      config.url = config.url.replace(/\/+/g, '/');
-    }
+    // Set the cleaned url
+    config.url = url;
+    config.baseURL = baseUrl;
 
-    // Ensure headers are set for every request
-    if (config.headers) {
-      config.headers['Content-Type'] = 'application/json';
-      config.headers['Accept'] = 'application/json';
-    }
+    // Calculate and log the full URL
+    const fullUrl = `${baseUrl}/${url}`;
 
     // Log the request details
     console.log('Making request:', {
       url: config.url,
       baseURL: config.baseURL,
-      fullUrl: normalizeUrl(`${config.baseURL}/${config.url}`),
+      fullUrl,
       method: config.method,
       headers: config.headers,
       data: config.data
@@ -107,7 +228,7 @@ axiosInstance.interceptors.request.use(
     config.withCredentials = true;
 
     const token = TokenManager.getAccessToken();
-    if (token && !config.url?.includes('/login') && !config.url?.includes('/verify-email/')) {
+    if (token && !url.includes('login') && !url.includes('verify-email')) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     
@@ -243,150 +364,6 @@ axiosInstance.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-export const API_ENDPOINTS = {
-  // Auth endpoints
-  auth: {
-    signup: '/accounts/signup/',
-    login: '/accounts/login/',
-    logout: '/accounts/logout/',
-    refreshToken: '/accounts/token/refresh/',
-    passwordReset: '/accounts/password-reset/',
-    passwordResetConfirm: (token: string) => `/accounts/password-reset/${token}/`,
-    verifyEmail: (token: string) => `/accounts/verify-email/${token}/`,
-    resendVerification: '/accounts/resend-verification/',
-    googleLogin: '/accounts/google/login/',
-    googleCallback: '/accounts/google/callback/',
-    profile: '/accounts/profile/',
-    contact: '/accounts/contact/',
-  },
-
-  // Vehicle marketplace endpoints
-  marketplace: {
-    vehicles: '/marketplace/vehicles/',
-    vehicle: (id: string) => `/marketplace/vehicles/${id}/`,
-    sellRequests: '/marketplace/sell-requests/',
-    sellRequest: (id: string) => `/marketplace/sell-requests/${id}/`,
-    inspections: '/marketplace/inspections/',
-    inspection: (id: string) => `/marketplace/inspections/${id}/`,
-    offers: '/marketplace/offers/',
-    offer: (id: string) => `/marketplace/offers/${id}/`,
-    purchases: '/marketplace/purchases/',
-    purchase: (id: string) => `/marketplace/purchases/${id}/`,
-    bookings: '/marketplace/bookings/',
-    booking: (id: string) => `/marketplace/bookings/${id}/`,
-    emailVehicleSummary: '/marketplace/email-vehicle-summary/',
-  },
-
-  // Repair service endpoints
-  services: {
-    // Categories and services
-    categories: '/repairing-service/service-categories/',
-    services: '/repairing-service/services/',
-    servicePrice: (id: string) => `/repairing-service/service-price/${id}/`,
-    manufacturers: '/repairing-service/manufacturers/',
-    vehicleModels: '/repairing-service/vehicle-models/',
-    
-    // Cart related
-    createCart: '/repairing-service/cart/create/',
-    listCarts: '/repairing-service/cart/list/',
-    cartDetail: (id: number) => `/repairing-service/cart/${id}/`,
-    addToCart: (id: number) => `/repairing-service/cart/${id}/add/`,
-    updateCartItem: (cartId: number) => `/repairing-service/cart/${cartId}/update-item/`,
-    removeCartItem: (id: number) => `/repairing-service/cart/items/${id}/`,
-    clearCart: (id: number) => `/repairing-service/cart/${id}/clear/`,
-    
-    // Bookings
-    myRepairs: '/repairing-service/bookings/',
-    createBooking: '/repairing-service/bookings/create/',
-    serviceNow: '/repairing-service/service-now/',
-    cancelServiceNow: (id: string) => `/repairing-service/service-now/${id}/cancel/`,
-    calculateDistanceFee: '/repairing-service/calculate-distance-fee/',
-  },
-
-  // Chatbot endpoints
-  chatbot: {
-    message: '/services/chatbot/message/',
-    intent: '/services/chatbot/intent/',
-    history: '/services/chatbot/history/',
-  },
-
-  // Admin dashboard endpoints
-  admin: {
-    statistics: '/services/admin/dashboard/statistics/',
-    notifications: '/services/admin/notifications/',
-    requests: '/services/admin/requests/',
-    updateRequestStatus: (id: string) => `/services/admin/requests/${id}/status/`,
-  },
-
-  // Subscription endpoints
-  subscription: {
-    // Plan Management
-    plans: '/subscription/plans/',
-    planDetails: (id: string) => `/subscription/plans/${id}/`,
-    planVariants: '/subscription/plan-variants/',
-    getPlanVariants: (planId: string) => `/subscription/plans/${planId}/variants/`,
-
-    // Subscription Requests
-    requests: '/subscription/subscription-requests/',
-    requestStatus: (id: string) => `/subscription/subscription-requests/${id}/status/`,
-    approveRequest: (id: string) => `/subscription/subscription-requests/${id}/approve/`,
-    rejectRequest: (id: string) => `/subscription/subscription-requests/${id}/reject/`,
-
-    // Active Subscription
-    subscriptions: '/subscription/subscriptions/',
-    activeSubscription: '/subscription/subscriptions/active/',
-    subscriptionStatus: (id: string) => `/subscription/subscriptions/${id}/status/`,
-    cancelSubscription: (id: string) => `/subscription/subscriptions/${id}/cancel/`,
-    renewSubscription: (id: string) => `/subscription/subscriptions/${id}/renew/`,
-
-    // Visit Management
-    visits: {
-      upcoming: '/subscription/visits/upcoming/',
-      schedule: '/subscription/visits/schedule_preferred_date/',
-      cancel: (id: number) => `/subscription/visits/${id}/cancel/`,
-      reschedule: (id: number) => `/subscription/visits/${id}/update_schedule/`
-    },
-    visitHistory: '/subscription/visits/visit_history/',
-    visitSummary: '/subscription/visits/subscription_visit_summary/',
-    checkVisitAvailability: '/subscription/visits/check_availability/',
-    availableDates: '/subscription/visits/available_dates/',
-    availableTimes: '/subscription/visits/available_times/',
-    scheduleVisit: '/subscription/visits/schedule_preferred_date/',
-    cancelVisit: (id: string) => `/subscription/visits/${id}/cancel/`,
-    rescheduleVisit: (id: string) => `/subscription/visits/${id}/reschedule/`,
-    completeVisit: (id: string) => `/subscription/visits/${id}/complete/`,
-  },
-
-  // CDN endpoints
-  cdn: {
-    baseUrl: `https://res.cloudinary.com/${CDN_CONFIG.cloudName}`,
-    upload: `${CDN_CONFIG.baseURL}/${CDN_CONFIG.cloudName}/upload`,
-    imageTransform: (transformation: string, publicId: string) => 
-      `https://res.cloudinary.com/${CDN_CONFIG.cloudName}/image/upload/${transformation}/${publicId}`,
-    document: (publicId: string) => 
-      `https://res.cloudinary.com/${CDN_CONFIG.cloudName}/raw/upload/${publicId}`,
-  },
-
-  // Profile endpoints
-  profile: {
-    details: '/accounts/profile/',
-    update: '/accounts/profile/update/',
-    changePassword: '/accounts/profile/change-password/',
-  },
-
-  // Vehicle endpoints
-  vehicle: {
-    types: '/vehicle/vehicle-types/',
-    manufacturers: '/vehicle/manufacturers/',
-    models: '/vehicle/vehicle-models/',
-    userVehicles: '/vehicle/user-vehicles/',
-    checkCloudinary: '/vehicle/check-cloudinary/',
-    vehicleImages: (id: string) => `/vehicle/vehicles/${id}/images/`,
-    uploadParams: (id: string) => `/vehicle/vehicles/${id}/upload-params/`,
-    checkRegistration: '/marketplace/vehicles/check-registration-number/',
-  },
-};
 
 // API service functions
 export const apiService = {

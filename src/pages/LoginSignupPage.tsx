@@ -21,11 +21,10 @@ interface LoginResponseUser {
 }
 
 interface LoginResponseData {
+  message: string;
   user: LoginResponseUser;
-  tokens: {
-    access: string;
-    refresh: string;
-  };
+  access: string;
+  refresh: string;
 }
 
 interface LoginResponse {
@@ -235,12 +234,12 @@ const LoginSignupPage = () => {
 
         console.log("Login response received:", {
           success: !!loginResult,
-          hasTokens: !!(loginResult?.data?.tokens?.access && loginResult?.data?.tokens?.refresh),
+          hasTokens: !!(loginResult?.data?.access && loginResult?.data?.refresh),
           hasUser: !!loginResult?.data?.user,
           status: loginResult?.status
         });
 
-        if (!loginResult?.data?.tokens?.access || !loginResult?.data?.tokens?.refresh) {
+        if (!loginResult?.data?.access || !loginResult?.data?.refresh) {
           console.error("Invalid login response:", loginResult?.data);
           throw new Error("Login failed: No tokens received");
         }
@@ -248,7 +247,7 @@ const LoginSignupPage = () => {
         // Reset attempts on successful login
         setLoginAttempts(0);
         localStorage.removeItem('loginLockoutUntil');
-        toast.success("Successfully logged in!");
+        toast.success(loginResult.data.message || "Successfully logged in!");
         
         // Navigate after successful login
         navigate(from || '/', { replace: true });
