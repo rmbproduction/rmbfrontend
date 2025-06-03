@@ -13,8 +13,12 @@ import { useSignup, useForgotPassword, useGoogleLogin } from "../hooks/auth/useA
 // Define interfaces based on actual backend response
 interface LoginResponseData {
   message?: string;
-  access: string;
-  refresh: string;
+  tokens?: {
+    access: string;
+    refresh: string;
+  };
+  access?: string;  // For backward compatibility
+  refresh?: string; // For backward compatibility
   user: {
     email: string;
     username: string;

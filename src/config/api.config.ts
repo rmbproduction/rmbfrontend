@@ -381,7 +381,6 @@ export const apiService = {
           password: data.password
         };
 
-        // Log the exact request being made
         console.log('Making request to:', `${API_BASE_URL}/${API_ENDPOINTS.auth.login}`);
 
         const response = await axiosInstance.post(API_ENDPOINTS.auth.login, loginData, {
@@ -391,39 +390,31 @@ export const apiService = {
           }
         });
         
-        // Log the complete raw response
         console.log('Raw response:', {
           status: response.status,
           data: response.data,
           headers: response.headers
         });
 
-        // Validate response data exists
         if (!response.data) {
           console.error('Empty response received');
           throw new Error('Empty response received');
         }
 
-        // Log the response data structure
-        console.log('Response data structure:', {
-          hasMessage: 'message' in response.data,
-          hasAccess: 'access' in response.data,
-          hasRefresh: 'refresh' in response.data,
-          hasUser: 'user' in response.data,
-          dataKeys: Object.keys(response.data)
-        });
+        // Extract data, handling both nested and flat token structures
+        const { message, user } = response.data;
+        const tokens = response.data.tokens || {
+          access: response.data.access,
+          refresh: response.data.refresh
+        };
 
-        const { message, access, refresh, user } = response.data;
-
-        // Log the extracted values
-        console.log('Extracted values:', {
+        console.log('Extracted data:', {
           hasMessage: !!message,
-          hasAccess: !!access,
-          hasRefresh: !!refresh,
-          hasUser: !!user
+          hasUser: !!user,
+          hasTokens: !!(tokens?.access && tokens?.refresh)
         });
 
-        if (!access || !refresh) {
+        if (!tokens?.access || !tokens?.refresh) {
           console.error('Missing tokens in response:', response.data);
           throw new Error('Login failed: Missing tokens');
         }
@@ -433,13 +424,12 @@ export const apiService = {
           status: response.status,
           data: {
             message: message || 'Login successful',
-            access,
-            refresh,
+            access: tokens.access,
+            refresh: tokens.refresh,
             user
           }
         };
 
-        // Log the final result being returned
         console.log('Returning result:', {
           status: result.status,
           hasTokens: !!(result.data.access && result.data.refresh),
@@ -449,7 +439,6 @@ export const apiService = {
         return result;
 
       } catch (error: any) {
-        // Enhanced error logging
         console.error('Login error details:', {
           message: error.message,
           responseStatus: error.response?.status,
