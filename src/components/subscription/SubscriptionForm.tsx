@@ -105,17 +105,23 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
     const loadProfileData = async () => {
       try {
         console.log('Loading profile data...');
-        const prefilledData = await prefillFormData(formData, 'subscription');
-        console.log('Prefilled data:', prefilledData);
+        const sharedData = await prefillFormData(formData, 'subscription');
+        console.log('Prefilled shared data:', sharedData);
         
-        // Update form data with prefilled values
+        // Update form data with prefilled values, ensuring all fields are mapped
         setFormData(prev => {
           const newData = {
             ...prev,
-            ...prefilledData,
+            customer_name: sharedData.customer_name || '',
+            customer_email: sharedData.customer_email || '',
+            customer_phone: sharedData.customer_phone || '',
+            address: sharedData.address || '',
+            city: sharedData.city || '',
+            state: sharedData.state || '',
+            postal_code: sharedData.postal_code || '',
             plan_variant: planVariantId // Preserve the plan variant ID
           };
-          console.log('Updated form data:', newData);
+          console.log('Updated subscription form data:', newData);
           return newData;
         });
       } catch (error) {

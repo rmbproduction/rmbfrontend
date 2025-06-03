@@ -205,23 +205,28 @@ export const useUserProfile = () => {
       
       if (response?.data) {
         const profileData = response.data;
-        console.log('Fetched profile data:', profileData);
+        console.log('Raw profile data:', profileData);
         
+        // Explicitly map each field from the API response
         const formattedData: SharedFormData = {
           name: profileData.name || '',
           email: profileData.email || '',
-          phone: profileData.phone || '',
-          address: profileData.address || '',
-          city: profileData.city || '',
-          state: profileData.state || '',
-          postalCode: profileData.postal_code || ''
+          phone: profileData.phone || '',  // Make sure we map the phone
+          address: profileData.address || '',  // Make sure we map the address
+          city: profileData.city || '',  // Make sure we map the city
+          state: profileData.state || '',  // Make sure we map the state
+          postalCode: profileData.postal_code || ''  // Make sure we map the postal_code
         };
 
-        console.log('Formatted shared data:', formattedData);
+        console.log('Formatted shared data before storage:', formattedData);
 
         // Update both cache and localStorage
         queryClient.setQueryData(['sharedFormData'], formattedData);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(formattedData));
+        
+        // Log what we're actually storing
+        console.log('Data being stored in localStorage:', formattedData);
+        console.log('Data being stored in queryClient:', queryClient.getQueryData(['sharedFormData']));
         
         return formattedData;
       }
@@ -246,8 +251,7 @@ export const useUserProfile = () => {
     }
 
     // Return empty data if nothing found
-    console.log('No data found, returning empty data');
-    return {
+    const emptyData = {
       name: '',
       email: '',
       phone: '',
@@ -256,6 +260,8 @@ export const useUserProfile = () => {
       state: '',
       postalCode: ''
     };
+    console.log('No data found, returning empty data:', emptyData);
+    return emptyData;
   };
 
   // Update shared data
@@ -271,6 +277,7 @@ export const useUserProfile = () => {
   // Update prefillFormData to handle async data fetching
   const prefillFormData = async <T extends object>(defaultData: T, formType: 'profile' | 'checkout' | 'subscription'): Promise<T> => {
     const sharedData = await getSharedData();
+    console.log('Shared data for prefill:', sharedData);
     
     // Map shared fields to form-specific fields
     const fieldMappings = {
@@ -305,10 +312,13 @@ export const useUserProfile = () => {
 
     const mapping = fieldMappings[formType];
     const prefilledData = { ...defaultData };
+    console.log('Initial form data:', prefilledData);
 
     // Apply mappings to prefill data
     Object.entries(mapping).forEach(([formField, sharedField]) => {
       const value = sharedData[sharedField as keyof SharedFormData];
+      console.log(`Mapping ${sharedField} (${value}) to ${formField}`);
+      
       if (value) {
         if (formField.includes('.')) {
           // Handle nested fields (e.g., address.street)
@@ -323,6 +333,7 @@ export const useUserProfile = () => {
       }
     });
 
+    console.log('Final prefilled data:', prefilledData);
     return prefilledData;
   };
 
