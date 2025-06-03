@@ -53,8 +53,14 @@ interface UserProfile {
   postal_code: string;
   preferred_location?: string;
   vehicle_model?: number;
-  vehicle_type?: number;
-  manufacturer?: number;
+  vehicle_details?: {
+    vehicle_model: number;
+    vehicle_type: number;
+    manufacturer: number;
+    model_name: string;
+    type_name: string;
+    manufacturer_name: string;
+  };
 }
 
 interface SidebarProps {
@@ -166,40 +172,37 @@ const Profile = () => {
           country: response.data.country || '',
           postal_code: response.data.postal_code || '',
           profile_photo: response.data.profile_photo || null,
-          vehicle_model: response.data.vehicle_model,
-          vehicle_type: response.data.vehicle_type,
-          manufacturer: response.data.manufacturer
+          vehicle_model: response.data.vehicle_model
         };
 
         setProfileData(profileData);
         setIsNewProfile(false);
         setFormData(profileData);
 
-        // Restore vehicle selections
-        if (profileData.vehicle_type) {
-          setSelectedVehicleType(profileData.vehicle_type);
-        }
-        if (profileData.manufacturer) {
-          setSelectedManufacturer(profileData.manufacturer);
-        }
-        if (profileData.vehicle_model) {
-          setSelectedVehicleModel(profileData.vehicle_model);
-        }
+        // Restore vehicle selections from vehicle_details
+        if (response.data.vehicle_details) {
+          const { vehicle_type, manufacturer, vehicle_model } = response.data.vehicle_details;
+          
+          // Set vehicle type and manufacturer first
+          setSelectedVehicleType(vehicle_type);
+          setSelectedManufacturer(manufacturer);
 
-        // Fetch vehicle models if both type and manufacturer are present
-        if (profileData.vehicle_type && profileData.manufacturer) {
+          // Fetch vehicle models for the selected type and manufacturer
           try {
             const queryParams: Record<string, string> = {
-              vehicle_type: profileData.vehicle_type.toString(),
-              manufacturer: profileData.manufacturer.toString()
+              vehicle_type: vehicle_type.toString(),
+              manufacturer: manufacturer.toString()
             };
             
             const modelResponse = await apiService.vehicle.getModels(queryParams);
-            if (Array.isArray(modelResponse.data)) {
-              setVehicleModels(modelResponse.data);
-            } else if (Array.isArray(modelResponse.data.vehicle_models)) {
-              setVehicleModels(modelResponse.data.vehicle_models);
-            }
+            const models = Array.isArray(modelResponse.data) 
+              ? modelResponse.data 
+              : modelResponse.data.vehicle_models || [];
+            
+            setVehicleModels(models);
+            
+            // Set the vehicle model last, after models are loaded
+            setSelectedVehicleModel(vehicle_model);
           } catch (error) {
             console.error('Error fetching vehicle model details:', error);
           }
@@ -310,7 +313,7 @@ const Profile = () => {
         return;
       }
 
-      // Prepare data for API - include vehicle information
+      // Prepare data for API - only send vehicle_model
       const profileData = {
         email: formData.email,
         username: formData.username,
@@ -322,9 +325,7 @@ const Profile = () => {
         state: formData.state,
         country: formData.country,
         postal_code: formData.postal_code,
-        vehicle_model: selectedVehicleModel || undefined,
-        vehicle_type: selectedVehicleType || undefined,
-        manufacturer: selectedManufacturer || undefined
+        vehicle_model: selectedVehicleModel || null // Only send vehicle_model
       };
 
       console.log('Sending Profile Data:', {
@@ -342,53 +343,15 @@ const Profile = () => {
 
         console.log('Profile API Response:', response.data);
 
-        // Validate response data
         if (!response.data || typeof response.data !== 'object') {
           throw new Error('Invalid response from server');
         }
 
-        // Update local state with response data
-        const updatedProfile = {
-          ...response.data,
-          email: response.data.email || formData.email,
-          username: response.data.username || formData.username,
-          name: response.data.name || formData.name,
-          phone: response.data.phone || formData.phone,
-          address: response.data.address || formData.address,
-          city: response.data.city || formData.city,
-          state: response.data.state || formData.state,
-          country: response.data.country || formData.country,
-          postal_code: response.data.postal_code || formData.postal_code,
-          profile_photo: response.data.profile_photo,
-          vehicle_model: response.data.vehicle_model,
-          vehicle_type: response.data.vehicle_type,
-          manufacturer: response.data.manufacturer
-        };
-
-        setFormData(updatedProfile);
-        setProfileData(updatedProfile);
-        updateProfile(updatedProfile);
-
-        // Update vehicle selections
-        if (updatedProfile.vehicle_type) {
-          setSelectedVehicleType(updatedProfile.vehicle_type);
-        }
-        if (updatedProfile.manufacturer) {
-          setSelectedManufacturer(updatedProfile.manufacturer);
-        }
-        if (updatedProfile.vehicle_model) {
-          setSelectedVehicleModel(updatedProfile.vehicle_model);
-        }
-
-        console.log('Form data after save:', {
-          before: formData,
-          after: updatedProfile
-        });
+        // After successful save, fetch fresh data to get updated vehicle_details
+        await fetchProfileData();
 
         toast.success(`Profile ${isNewProfile ? 'created' : 'updated'} successfully!`);
         setIsEditing(false);
-        
-        await fetchProfileData();
       } catch (error) {
         console.error('Profile API Error:', error);
         throw error;
