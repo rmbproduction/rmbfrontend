@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import userProfileDataService from '../services/userProfileDataService';
 import { toast } from 'react-toastify';
 
-export interface UserProfileData {
+interface UserProfileData {
   username?: string;
   email?: string;
   name?: string;
@@ -10,14 +10,14 @@ export interface UserProfileData {
   address?: string;
   city?: string;
   state?: string;
-  postal_code?: string;
-  zipCode?: string;
   country?: string;
+  postal_code?: string;
   profile_photo?: string | null;
   vehicle_name?: number | null;
   vehicle_type?: number | null;
   manufacturer?: number | null;
-  created_at?: string;
+  vehicle_model?: number | null;
+  registration_number?: string;
 }
 
 export interface FormattedProfileData {
@@ -38,6 +38,8 @@ export interface FormattedProfileData {
   vehicleName: number | null;
   vehicleType: number | null;
   manufacturer: number | null;
+  vehicleModel: number | null;
+  registrationNumber: string;
   
   // Combined Fields
   fullAddress: string;
@@ -107,6 +109,8 @@ export const useUserProfile = () => {
       vehicleName: null,
       vehicleType: null,
       manufacturer: null,
+      vehicleModel: null,
+      registrationNumber: '',
       fullAddress: '',
       contactInfo: {
         name: '',
@@ -125,16 +129,18 @@ export const useUserProfile = () => {
       address: profile.address || '',
       city: profile.city || '',
       state: profile.state || '',
-      postalCode: profile.postal_code || profile.zipCode || '',
+      postalCode: profile.postal_code || '',
       country: profile.country || '',
       vehicleName: profile.vehicle_name || null,
       vehicleType: profile.vehicle_type || null,
       manufacturer: profile.manufacturer || null,
+      vehicleModel: profile.vehicle_model || null,
+      registrationNumber: profile.registration_number || '',
       fullAddress: combineAddress({
         address: profile.address,
         city: profile.city,
         state: profile.state,
-        postal_code: profile.postal_code || profile.zipCode
+        postal_code: profile.postal_code
       }),
       contactInfo: {
         name: profile.name || '',
@@ -185,12 +191,22 @@ export const useUserProfile = () => {
     const formatted = getFormattedProfile();
     const updates: Partial<T> = {};
 
+    // Common fields that should be shared across all forms
+    const commonFields = {
+      name: formatted.name,
+      email: formatted.email,
+      phone: formatted.phone,
+      address: formatted.address,
+      city: formatted.city,
+      state: formatted.state,
+      postal_code: formatted.postalCode,
+      country: formatted.country
+    };
+
     switch (formType) {
       case 'checkout':
         Object.assign(updates, {
-          name: formatted.name,
-          email: formatted.email,
-          phone: formatted.phone,
+          ...commonFields,
           address: {
             street: formatted.address,
             city: formatted.city,
@@ -202,28 +218,31 @@ export const useUserProfile = () => {
 
       case 'vehicle':
         Object.assign(updates, {
+          ...commonFields,
           contactNumber: formatted.phone,
-          pickupAddress: formatted.fullAddress
+          pickupAddress: formatted.fullAddress,
+          vehicleType: formatted.vehicleType,
+          manufacturer: formatted.manufacturer,
+          vehicleModel: formatted.vehicleModel,
+          registrationNumber: formatted.registrationNumber
         });
         break;
 
       case 'subscription':
         Object.assign(updates, {
+          ...commonFields,
           customer_name: formatted.name,
           customer_email: formatted.email,
           customer_phone: formatted.phone,
-          address: formatted.address,
-          city: formatted.city,
-          state: formatted.state,
-          postal_code: formatted.postalCode,
           vehicle_type: formatted.vehicleType,
           manufacturer: formatted.manufacturer,
-          vehicle_model: formatted.vehicleName
+          vehicle_model: formatted.vehicleModel
         });
         break;
 
       case 'booking':
         Object.assign(updates, {
+          ...commonFields,
           contact_number: formatted.phone,
           customer_name: formatted.name,
           customer_email: formatted.email
@@ -232,6 +251,25 @@ export const useUserProfile = () => {
     }
 
     return { ...currentFormData, ...updates };
+  };
+
+  // Update shared form data
+  const updateSharedFormData = (formData: Partial<FormattedProfileData>) => {
+    updateProfile({
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone,
+      address: formData.address,
+      city: formData.city,
+      state: formData.state,
+      postal_code: formData.postalCode,
+      country: formData.country,
+      vehicle_name: formData.vehicleName,
+      vehicle_type: formData.vehicleType,
+      manufacturer: formData.manufacturer,
+      vehicle_model: formData.vehicleModel,
+      registration_number: formData.registrationNumber
+    });
   };
 
   return {
@@ -244,6 +282,7 @@ export const useUserProfile = () => {
     parseAddress,
     combineAddress,
     prefillFormData,
+    updateSharedFormData,
     // Helper functions to get specific fields with type safety
     getUsername: () => profile?.username || '',
     getEmail: () => profile?.email || '',

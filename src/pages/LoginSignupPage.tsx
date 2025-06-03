@@ -217,37 +217,44 @@ const LoginSignupPage = () => {
           rememberMe: formData.rememberMe
         });
 
-        const result = await login(
-          formData.email,
-          formData.password,
-          formData.rememberMe
-        ) as unknown as LoginResult;
+        try {
+          const result = await login(
+            formData.email,
+            formData.password,
+            formData.rememberMe
+          ) as unknown as LoginResult;
 
-        console.log('=== LOGIN RESPONSE VALIDATION ===');
-        console.log('Response structure:', {
-          status: result?.status,
-          hasData: !!result?.data,
-          dataKeys: result?.data ? Object.keys(result.data) : [],
-          hasAccess: !!result?.data?.access,
-          hasRefresh: !!result?.data?.refresh,
-          hasUser: !!result?.data?.user
-        });
+          console.log('=== LOGIN RESPONSE VALIDATION ===');
+          console.log('Response structure:', {
+            status: result?.status,
+            hasData: !!result?.data,
+            dataKeys: result?.data ? Object.keys(result.data) : [],
+            hasAccess: !!result?.data?.access,
+            hasRefresh: !!result?.data?.refresh,
+            hasUser: !!result?.data?.user
+          });
 
-        // Validate response structure
-        if (!result?.data?.access || !result?.data?.refresh) {
-          console.error('=== LOGIN VALIDATION FAILED ===');
-          console.error('Invalid response:', result);
-          throw new Error('Login failed: Invalid response format');
+          // Validate response structure
+          if (!result?.data?.access || !result?.data?.refresh) {
+            console.error('=== LOGIN VALIDATION FAILED ===');
+            console.error('Response data:', result?.data);
+            throw new Error('Login failed: No tokens received');
+          }
+
+          // Success path
+          console.log('=== LOGIN SUCCESSFUL ===');
+          setLoginAttempts(0);
+          localStorage.removeItem('loginLockoutUntil');
+          toast.success(result.data.message || "Login successful");
+          
+          console.log('Redirecting to:', from);
+          navigate(from, { replace: true });
+        } catch (error: any) {
+          console.error('=== LOGIN ERROR ===');
+          console.error('Error details:', error);
+          handleLoginFailure();
+          handleApiError(error);
         }
-
-        // Success path
-        console.log('=== LOGIN SUCCESSFUL ===');
-        setLoginAttempts(0);
-        localStorage.removeItem('loginLockoutUntil');
-        toast.success(result.data.message || "Login successful");
-        
-        console.log('Redirecting to:', from);
-        navigate(from, { replace: true });
 
       } else if (mode === "signup") {
         const response = await signupMutation.mutateAsync({

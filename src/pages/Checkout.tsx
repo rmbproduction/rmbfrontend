@@ -14,6 +14,7 @@ import { useCreateServiceBooking } from '../hooks/services/useServiceBooking';
 import { useAuth } from '../contexts/AuthContext';
 import { useVehicleSelection } from '../hooks/vehicle/useVehicleSelection';
 import { useActiveCart } from '../hooks/cart/useCartQueries';
+import { useUserProfile } from '../hooks/useUserProfile';
 
 interface ServiceItem {
   serviceId: string;
@@ -103,6 +104,7 @@ const Checkout = () => {
   const createServiceBooking = useCreateServiceBooking();
   const { selectedVehicle } = useVehicleSelection();
   const { activeCart, isLoading: isCartLoading } = useActiveCart();
+  const { prefillFormData, updateSharedFormData } = useUserProfile();
   
   const {
     register,
@@ -115,6 +117,51 @@ const Checkout = () => {
     resolver: zodResolver(checkoutFormSchema),
     mode: 'onChange'
   });
+
+  // Pre-fill form data when component mounts
+  useEffect(() => {
+    const prefilledData = prefillFormData({
+      name: '',
+      email: '',
+      phone: '',
+      address: {
+        street: '',
+        city: '',
+        state: '',
+        zipCode: ''
+      },
+      serviceDate: '',
+      serviceTime: '',
+      totalAmount: '',
+    }, 'checkout');
+
+    // Set the pre-filled values
+    Object.entries(prefilledData).forEach(([key, value]) => {
+      if (key === 'address' && typeof value === 'object') {
+        Object.entries(value).forEach(([addressKey, addressValue]) => {
+          setValue(`address.${addressKey as 'street' | 'city' | 'state' | 'zipCode'}`, addressValue);
+        });
+      } else {
+        setValue(key as keyof CheckoutFormData, value);
+      }
+    });
+  }, [setValue]);
+
+  // Update shared data when form fields change
+  const handleFieldChange = (name: string, value: string) => {
+    if (['name', 'email', 'phone'].includes(name) || name.startsWith('address.')) {
+      const addressKey = name.startsWith('address.') ? name.split('.')[1] : null;
+      updateSharedFormData({
+        name: name === 'name' ? value : watch('name'),
+        email: name === 'email' ? value : watch('email'),
+        phone: name === 'phone' ? value : watch('phone'),
+        address: addressKey === 'street' ? value : watch('address.street'),
+        city: addressKey === 'city' ? value : watch('address.city'),
+        state: addressKey === 'state' ? value : watch('address.state'),
+        postalCode: addressKey === 'zipCode' ? value : watch('address.zipCode')
+      });
+    }
+  };
 
   // Check authentication
   useEffect(() => {
@@ -348,6 +395,10 @@ const Checkout = () => {
                           type="text"
                           placeholder="Full Name *"
                           {...register('name')}
+                          onChange={(e) => {
+                            register('name').onChange(e);
+                            handleFieldChange('name', e.target.value);
+                          }}
                           className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
                             errors.name ? 'border-red-500' : 'border-gray-300'
                           }`}
@@ -361,6 +412,10 @@ const Checkout = () => {
                           type="email"
                           placeholder="Email Address *"
                           {...register('email')}
+                          onChange={(e) => {
+                            register('email').onChange(e);
+                            handleFieldChange('email', e.target.value);
+                          }}
                           className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
                             errors.email ? 'border-red-500' : 'border-gray-300'
                           }`}
@@ -375,6 +430,10 @@ const Checkout = () => {
                         type="tel"
                         placeholder="Phone Number *"
                         {...register('phone')}
+                        onChange={(e) => {
+                          register('phone').onChange(e);
+                          handleFieldChange('phone', e.target.value);
+                        }}
                         className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
                           errors.phone ? 'border-red-500' : 'border-gray-300'
                         }`}
@@ -405,6 +464,10 @@ const Checkout = () => {
                         placeholder="Street Address *"
                         rows={3}
                         {...register('address.street')}
+                        onChange={(e) => {
+                          register('address.street').onChange(e);
+                          handleFieldChange('address.street', e.target.value);
+                        }}
                         className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] ${
                           errors.address?.street ? 'border-red-500' : 'border-gray-300'
                         }`}

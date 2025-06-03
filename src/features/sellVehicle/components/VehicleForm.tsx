@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import LocationInput from '../../../components/LocationInput';
 import { VehicleFormData, FormErrors, vehicleTypes, popularBrands, colorOptions, vehicleConditions, fuelTypes } from '../types';
@@ -29,48 +29,32 @@ const VehicleForm: React.FC<VehicleFormProps> = ({
   setFormData,
   onNextStep
 }) => {
-  // Track new feature and highlight
   const [newFeature, setNewFeature] = React.useState('');
   const [newHighlight, setNewHighlight] = React.useState('');
-  const { profile, prefillFormData, updateProfile, parseAddress } = useUserProfile();
+  const { prefillFormData, updateSharedFormData } = useUserProfile();
 
-  // Pre-fill contact info from cache when component mounts
-  React.useEffect(() => {
-    if (profile) {
-      console.log('Pre-filling vehicle form with profile data');
-      const prefilledData = prefillFormData(formData, 'vehicle');
-      setFormData(prev => ({
-        ...prev,
-        ...prefilledData
-      }));
-    }
-  }, [profile, setFormData, prefillFormData]);
+  // Pre-fill form data when component mounts
+  useEffect(() => {
+    const prefilledData = prefillFormData(formData, 'vehicle');
+    setFormData(prev => ({
+      ...prev,
+      ...prefilledData
+    }));
+  }, []);
 
-  // Wrap handleInputChange to update cache
+  // Wrap handleInputChange to update shared data
   const handleInputWithCache = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     handleInputChange(e);
     
     const { name, value } = e.target;
-    if (name === 'contactNumber') {
-      updateProfile({ phone: value });
+    // Update shared data for common fields
+    if (['contactNumber', 'pickupAddress', 'registrationNumber'].includes(name)) {
+      updateSharedFormData({
+        phone: name === 'contactNumber' ? value : formData.contactNumber,
+        address: name === 'pickupAddress' ? value : formData.pickupAddress,
+        registrationNumber: name === 'registrationNumber' ? value : formData.registrationNumber
+      });
     }
-  };
-
-  // Handle address change with cache update
-  const handleAddressChange = (value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      pickupAddress: value
-    }));
-
-    // Try to parse address components and update cache
-    const { address, city, state, postal_code } = parseAddress(value);
-    updateProfile({
-      address,
-      city,
-      state,
-      postal_code
-    });
   };
 
   // Handle feature submission

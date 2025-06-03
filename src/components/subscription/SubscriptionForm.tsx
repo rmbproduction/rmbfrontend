@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { axiosInstance, API_ENDPOINTS } from '../../config/api.config';
 import OrderSuccessModal from '../OrderSuccessModal';
@@ -6,6 +6,7 @@ import ErrorModal from '../ErrorModal';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { User, MapPin, CheckCircle2, Loader2 } from 'lucide-react';
+import { useUserProfile } from '../../hooks/useUserProfile';
 
 interface SubscriptionFormData {
   plan_variant: number;
@@ -65,6 +66,7 @@ const validatePostalCode = (postalCode: string): boolean => {
 
 const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onClose, onError }) => {
   const navigate = useNavigate();
+  const { prefillFormData, updateSharedFormData } = useUserProfile();
   const [formData, setFormData] = useState<SubscriptionFormData>({
     plan_variant: planVariantId,
     vehicle_type: 0,
@@ -87,6 +89,15 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorModalMessage, setErrorModalMessage] = useState('');
+
+  // Pre-fill form data when component mounts
+  useEffect(() => {
+    const prefilledData = prefillFormData(formData, 'subscription');
+    setFormData(prev => ({
+      ...prev,
+      ...prefilledData
+    }));
+  }, []);
 
   // Fetch vehicle types
   const { data: vehicleTypes } = useQuery<VehicleType[]>({
@@ -176,25 +187,31 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
           [name]: numValue
         }));
       }
-      
-      if (submitAttempted) {
-        setFieldErrors(prev => ({
-          ...prev,
-          [name]: validateField(name, numValue)
-        }));
-      }
     } else {
       setFormData(prev => ({
         ...prev,
         [name]: value
       }));
-      
-      if (submitAttempted) {
-        setFieldErrors(prev => ({
-          ...prev,
-          [name]: validateField(name, value)
-        }));
-      }
+    }
+
+    // Update shared form data
+    if (['customer_name', 'customer_email', 'customer_phone', 'address', 'city', 'state', 'postal_code'].includes(name)) {
+      updateSharedFormData({
+        name: name === 'customer_name' ? value : formData.customer_name,
+        email: name === 'customer_email' ? value : formData.customer_email,
+        phone: name === 'customer_phone' ? value : formData.customer_phone,
+        address: name === 'address' ? value : formData.address,
+        city: name === 'city' ? value : formData.city,
+        state: name === 'state' ? value : formData.state,
+        postalCode: name === 'postal_code' ? value : formData.postal_code
+      });
+    }
+    
+    if (submitAttempted) {
+      setFieldErrors(prev => ({
+        ...prev,
+        [name]: validateField(name, value)
+      }));
     }
   };
 
