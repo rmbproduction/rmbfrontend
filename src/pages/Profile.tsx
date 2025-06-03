@@ -383,23 +383,39 @@ const Profile = () => {
     }
   }, [isAuthenticated]);
 
-  // Add effect for fetching vehicle models when type or manufacturer changes
+  // Update effect for fetching vehicle models when type or manufacturer changes
   useEffect(() => {
     const fetchVehicleModels = async () => {
       try {
         if (selectedVehicleType || selectedManufacturer) {
+          console.log('Fetching vehicle models with params:', {
+            vehicle_type: selectedVehicleType,
+            manufacturer: selectedManufacturer
+          });
+
           const queryParams: Record<string, string> = {};
           if (selectedVehicleType) queryParams.vehicle_type = selectedVehicleType.toString();
           if (selectedManufacturer) queryParams.manufacturer = selectedManufacturer.toString();
           
           const response = await apiService.vehicle.getModels(queryParams);
-          setVehicleModels(response.data.vehicle_models || []);
+          console.log('Vehicle models API response:', response.data);
+
+          if (Array.isArray(response.data)) {
+            setVehicleModels(response.data);
+          } else if (Array.isArray(response.data.vehicle_models)) {
+            setVehicleModels(response.data.vehicle_models);
+          } else {
+            console.error('Unexpected API response format:', response.data);
+            setVehicleModels([]);
+          }
         } else {
+          // Reset vehicle models when no filters are selected
           setVehicleModels([]);
         }
       } catch (error) {
         console.error('Error fetching vehicle models:', error);
         toast.error('Failed to load vehicle models');
+        setVehicleModels([]);
       }
     };
 
@@ -408,6 +424,12 @@ const Profile = () => {
 
   // Update useEffect for filtering vehicle models
   useEffect(() => {
+    console.log('Filtering models with:', {
+      vehicleModels,
+      selectedVehicleType,
+      selectedManufacturer
+    });
+
     const filterModels = () => {
       if (!selectedVehicleType && !selectedManufacturer) {
         setFilteredModels([]);
@@ -420,6 +442,7 @@ const Profile = () => {
         return matchesType && matchesManufacturer;
       });
 
+      console.log('Filtered models:', filtered);
       setFilteredModels(filtered);
     };
 
@@ -646,6 +669,7 @@ const Profile = () => {
                       value={selectedVehicleModel || ''}
                       onChange={(e) => {
                         const value = e.target.value ? parseInt(e.target.value) : null;
+                        console.log('Selected vehicle model:', value);
                         setSelectedVehicleModel(value);
                         setFormData(prev => ({
                           ...prev,
@@ -656,15 +680,26 @@ const Profile = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
                     >
                       <option value="">Select Vehicle Model</option>
-                      {filteredModels.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.name}
+                      {filteredModels.length > 0 ? (
+                        filteredModels.map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.name}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="" disabled>
+                          {isEditing ? 'No models available for selected criteria' : 'No models available'}
                         </option>
-                      ))}
+                      )}
                     </select>
                     {isEditing && (!selectedVehicleType || !selectedManufacturer) && (
                       <p className="mt-1 text-sm text-gray-500">
                         Please select both Vehicle Type and Manufacturer first
+                      </p>
+                    )}
+                    {isEditing && selectedVehicleType && selectedManufacturer && filteredModels.length === 0 && (
+                      <p className="mt-1 text-sm text-gray-500">
+                        No vehicle models found for the selected criteria
                       </p>
                     )}
                   </div>
