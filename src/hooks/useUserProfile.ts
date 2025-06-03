@@ -195,11 +195,38 @@ export const useUserProfile = () => {
     return `${address}, ${city}, ${state} ${postal_code || ''}`.trim();
   };
 
-  // Get data from localStorage or cache
-  const getSharedData = (): SharedFormData => {
+  // Get data from database first, then localStorage as fallback
+  const getSharedData = async (): Promise<SharedFormData> => {
+    try {
+      // First try to get fresh data from database
+      const profileData = await userProfileDataService.getProfileData();
+      
+      if (profileData) {
+        const formattedData: SharedFormData = {
+          name: profileData.name || '',
+          email: profileData.email || '',
+          phone: profileData.phone || '',
+          address: profileData.address || '',
+          city: profileData.city || '',
+          state: profileData.state || '',
+          postalCode: profileData.postal_code || ''
+        };
+
+        // Update cache and localStorage with fresh data
+        queryClient.setQueryData(['sharedFormData'], formattedData);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(formattedData));
+        
+        return formattedData;
+      }
+    } catch (error) {
+      console.error('Error fetching profile data:', error);
+    }
+
+    // If database fetch fails, try cache
     const cached = queryClient.getQueryData<SharedFormData>(['sharedFormData']);
     if (cached) return cached;
 
+    // Finally, try localStorage
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const data = JSON.parse(stored);
@@ -207,6 +234,7 @@ export const useUserProfile = () => {
       return data;
     }
 
+    // Return empty data if nothing found
     return {
       name: '',
       email: '',
@@ -228,9 +256,9 @@ export const useUserProfile = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newData));
   };
 
-  // Prefill form data based on form type
-  const prefillFormData = <T extends object>(defaultData: T, formType: 'profile' | 'checkout' | 'subscription'): T => {
-    const sharedData = getSharedData();
+  // Update prefillFormData to handle async data fetching
+  const prefillFormData = async <T extends object>(defaultData: T, formType: 'profile' | 'checkout' | 'subscription'): Promise<T> => {
+    const sharedData = await getSharedData();
     
     // Map shared fields to form-specific fields
     const fieldMappings = {

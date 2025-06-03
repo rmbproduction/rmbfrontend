@@ -102,20 +102,29 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
 
   // Pre-fill form data when component mounts
   useEffect(() => {
-    console.log('Initial form data:', formData);
-    const prefilledData = prefillFormData(formData, 'subscription');
-    console.log('Prefilled data:', prefilledData);
-    
-    // Update form data with prefilled values
-    setFormData(prev => {
-      const newData = {
-        ...prev,
-        ...prefilledData,
-        plan_variant: planVariantId // Preserve the plan variant ID
-      };
-      console.log('Updated form data:', newData);
-      return newData;
-    });
+    const loadProfileData = async () => {
+      try {
+        console.log('Loading profile data...');
+        const prefilledData = await prefillFormData(formData, 'subscription');
+        console.log('Prefilled data:', prefilledData);
+        
+        // Update form data with prefilled values
+        setFormData(prev => {
+          const newData = {
+            ...prev,
+            ...prefilledData,
+            plan_variant: planVariantId // Preserve the plan variant ID
+          };
+          console.log('Updated form data:', newData);
+          return newData;
+        });
+      } catch (error) {
+        console.error('Error loading profile data:', error);
+        // Handle error if needed
+      }
+    };
+
+    loadProfileData();
   }, []);
 
   // Fetch vehicle types
