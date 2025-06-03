@@ -401,14 +401,14 @@ export const apiService = {
           throw new Error('Empty response received');
         }
 
-        // Extract data from the root level as shown in the working example
-        const { message, access, refresh, user } = response.data;
+        // Validate the response matches the expected format
+        const { message, user, refresh, access } = response.data;
 
         console.log('Extracted data:', {
           hasMessage: !!message,
-          hasAccess: !!access,
+          hasUser: !!user,
           hasRefresh: !!refresh,
-          hasUser: !!user
+          hasAccess: !!access
         });
 
         if (!access || !refresh) {
@@ -416,14 +416,14 @@ export const apiService = {
           throw new Error('Login failed: Missing tokens');
         }
 
-        // Return the response in the format expected by the auth context
+        // Return the response in the exact format from the API
         const result = {
           status: response.status,
           data: {
-            message: message || 'Login successful',
-            access,
+            message,
+            user,
             refresh,
-            user
+            access
           }
         };
 

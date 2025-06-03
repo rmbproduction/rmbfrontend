@@ -12,9 +12,7 @@ import { useSignup, useForgotPassword, useGoogleLogin } from "../hooks/auth/useA
 
 // Define interfaces based on actual backend response
 interface LoginResponseData {
-  message?: string;
-  access: string;
-  refresh: string;
+  message: string;
   user: {
     email: string;
     username: string;
@@ -24,6 +22,8 @@ interface LoginResponseData {
     is_customer: boolean;
     email_verified: boolean;
   };
+  refresh: string;
+  access: string;
 }
 
 interface LoginResult {
