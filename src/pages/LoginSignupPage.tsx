@@ -12,7 +12,7 @@ import { useSignup, useForgotPassword, useGoogleLogin } from "../hooks/auth/useA
 
 // Define interfaces based on actual backend response
 interface LoginResponseData {
-  message: string;
+  message?: string;
   user: {
     email: string;
     username: string;
@@ -22,8 +22,10 @@ interface LoginResponseData {
     is_customer: boolean;
     email_verified: boolean;
   };
-  refresh: string;
-  access: string;
+  tokens: {
+    access: string;
+    refresh: string;
+  };
 }
 
 interface LoginResult {
@@ -230,7 +232,7 @@ const LoginSignupPage = () => {
         });
 
         // Validate response structure
-        if (!result?.data?.access || !result?.data?.refresh) {
+        if (!result?.data?.tokens?.access || !result?.data?.tokens?.refresh) {
           console.error('Invalid login response:', result);
           throw new Error('Login failed: Invalid response format');
         }

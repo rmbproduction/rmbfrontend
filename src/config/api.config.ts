@@ -401,35 +401,38 @@ export const apiService = {
           throw new Error('Empty response received');
         }
 
-        // Validate the response matches the expected format
-        const { message, user, refresh, access } = response.data;
+        // Extract and validate the nested tokens structure
+        const { message, user, tokens } = response.data;
 
         console.log('Extracted data:', {
           hasMessage: !!message,
           hasUser: !!user,
-          hasRefresh: !!refresh,
-          hasAccess: !!access
+          hasTokens: !!tokens,
+          hasAccess: !!tokens?.access,
+          hasRefresh: !!tokens?.refresh
         });
 
-        if (!access || !refresh) {
+        if (!tokens?.access || !tokens?.refresh) {
           console.error('Missing tokens in response:', response.data);
           throw new Error('Login failed: Missing tokens');
         }
 
-        // Return the response in the exact format from the API
+        // Return the response with the nested tokens structure
         const result = {
           status: response.status,
           data: {
-            message,
+            message: message || 'Login successful',
             user,
-            refresh,
-            access
+            tokens: {
+              access: tokens.access,
+              refresh: tokens.refresh
+            }
           }
         };
 
         console.log('Returning result:', {
           status: result.status,
-          hasTokens: !!(result.data.access && result.data.refresh),
+          hasTokens: !!(result.data.tokens?.access && result.data.tokens?.refresh),
           hasUser: !!result.data.user
         });
 
