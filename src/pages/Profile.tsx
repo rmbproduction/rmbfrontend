@@ -295,7 +295,7 @@ const Profile = () => {
     </div>
   </div>
 
-  // Update the useEffect for profile data handling
+  // Update useEffect for profile data handling
   useEffect(() => {
     if (profileQueryData) {
       console.log('Setting profile data from query:', profileQueryData);
@@ -318,28 +318,59 @@ const Profile = () => {
       setProfileData(formattedData);
       setIsNewProfile(false);
 
-      // Restore vehicle selections from vehicle_details
+      // Enhanced vehicle details restoration
       console.log('Vehicle details from profile:', profileQueryData.vehicle_details);
       if (profileQueryData.vehicle_details) {
         const { vehicle_type, manufacturer, vehicle_model } = profileQueryData.vehicle_details;
         
-        // Set vehicle selections in the correct order
-        handleVehicleSelectionChange('type', vehicle_type);
-        
-        // Use setTimeout to ensure type is set before setting manufacturer
+        console.log('Restoring vehicle selections:', {
+          type: vehicle_type,
+          manufacturer,
+          model: vehicle_model
+        });
+
+        // First set the vehicle type
+        setSelectedVehicleType(vehicle_type);
+
+        // Then set manufacturer after a small delay to ensure type is set
         setTimeout(() => {
-          handleVehicleSelectionChange('manufacturer', manufacturer);
-          
-          // Use setTimeout again to ensure manufacturer is set before setting model
+          setSelectedManufacturer(manufacturer);
+
+          // Finally set the vehicle model after manufacturer is set
           setTimeout(() => {
-            handleVehicleSelectionChange('model', vehicle_model);
-          }, 0);
-        }, 0);
+            setSelectedVehicleModel(vehicle_model);
+            console.log('Vehicle selections restored:', {
+              type: vehicle_type,
+              manufacturer,
+              model: vehicle_model
+            });
+          }, 100);
+        }, 100);
+      } else {
+        console.log('No vehicle details found in profile data');
+        // Reset selections if no vehicle details
+        setSelectedVehicleType(null);
+        setSelectedManufacturer(null);
+        setSelectedVehicleModel(null);
       }
     } else {
+      console.log('No profile data received, setting as new profile');
       setIsNewProfile(true);
+      // Reset vehicle selections for new profile
+      setSelectedVehicleType(null);
+      setSelectedManufacturer(null);
+      setSelectedVehicleModel(null);
     }
   }, [profileQueryData]);
+
+  // Add a debug effect for vehicle selections
+  useEffect(() => {
+    console.log('Current vehicle selections:', {
+      type: selectedVehicleType,
+      manufacturer: selectedManufacturer,
+      model: selectedVehicleModel
+    });
+  }, [selectedVehicleType, selectedManufacturer, selectedVehicleModel]);
 
   // Fetch vehicle types using React Query
   const { data: vehicleTypesData } = useQuery<VehicleType[]>({
