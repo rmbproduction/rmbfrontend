@@ -23,9 +23,17 @@ const handleQueryError = (error: unknown) => {
   }
 };
 
+// Get the base URL based on environment
+const getBaseUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://repairmybike.up.railway.app/api';
+  }
+  return 'http://localhost:8000/api';
+};
+
 // Base configuration
-const API_BASE_URL = 'https://repairmybike.up.railway.app/api';
-const FRONTEND_URL = import.meta.env.VITE_FRONTEND_URL || 'https://repairmybike.in';
+const API_BASE_URL = getBaseUrl();
+const FRONTEND_URL = import.meta.env.VITE_FRONTEND_URL || 'https://repairmybike.up.railway.app';
 
 // Export API configuration for components that need it
 export const API_CONFIG = {
@@ -52,7 +60,7 @@ export const CDN_CONFIG = {
 export const API_ENDPOINTS = {
   auth: {
     signup: 'accounts/signup/',
-    login: 'accounts/login/',  // Changed from '/accounts/login/'
+    login: 'accounts/login/',
     logout: 'accounts/logout/',
     refreshToken: 'accounts/token/refresh/',
     passwordReset: 'accounts/password-reset/',

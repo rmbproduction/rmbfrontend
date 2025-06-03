@@ -18,7 +18,7 @@ interface LoginResponseData {
 interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
-  login: (email: string, password: string, rememberMe?: boolean) => Promise<LoginResponseData>;
+  login: (emailOrTokens: string | { access: string; refresh: string }, password?: string, rememberMe?: boolean) => Promise<LoginResponseData>;
   logout: () => Promise<void>;
   isLoading: boolean;
 }
@@ -91,43 +91,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = useCallback(async (email: string, password: string, rememberMe: boolean = false) => {
-    console.log('Login attempt started:', { email, rememberMe });
-    try {
-      console.log('Making login request...');
-      const response = await loginMutation.mutateAsync({ email, password, rememberMe });
-      console.log('Login response received:', {
-        hasTokens: !!response.data?.tokens,
-        hasUser: !!response.data?.user,
-        status: response.status
-      });
+  const login = useCallback(async (emailOrTokens: string | { access: string; refresh: string }, password?: string, rememberMe: boolean = false) => {
+    console.log('Login attempt started:', { 
+      isOAuth: typeof emailOrTokens === 'object',
+      rememberMe 
+    });
 
-      if (!response.data?.tokens?.access || !response.data?.tokens?.refresh) {
-        console.error('Invalid login response:', response.data);
-        throw new Error('Login failed: No tokens received');
-      }
-      
-      console.log('Setting tokens in TokenManager...');
-      const tokensStored = verifyTokenStorage(response.data.tokens, rememberMe);
-      
-      if (!tokensStored) {
-        throw new Error('Login failed: Unable to store authentication tokens');
-      }
-      
-      console.log('Tokens set successfully');
-      
-      // Set user data if available
-      if (response.data.user) {
-        console.log('User data received, fetching profile...');
-        try {
-          await refetchProfile();
-          console.log('Profile fetched successfully');
-        } catch (error) {
-          console.error('Profile fetch failed:', error);
-          // Don't throw here - we still want to complete login even if profile fetch fails
+    try {
+      let response;
+
+      if (typeof emailOrTokens === 'object') {
+        // OAuth login - tokens provided directly
+        console.log('OAuth login with provided tokens');
+        const tokensStored = verifyTokenStorage(emailOrTokens, rememberMe);
+        
+        if (!tokensStored) {
+          throw new Error('Login failed: Unable to store authentication tokens');
         }
+
+        // Fetch user profile
+        const profileResponse = await refetchProfile();
+        const user = profileResponse?.data;
+
+        if (!user) {
+          throw new Error('Failed to fetch user profile after OAuth login');
+        }
+
+        response = {
+          data: {
+            message: 'OAuth login successful',
+            tokens: emailOrTokens,
+            is_first_login: false,
+            user
+          }
+        };
       } else {
-        console.log('No user data in response');
+        // Regular email/password login
+        if (!password) {
+          throw new Error('Password is required for email login');
+        }
+
+        console.log('Making login request...');
+        response = await loginMutation.mutateAsync({ email: emailOrTokens, password, rememberMe });
+        console.log('Login response received:', {
+          hasTokens: !!response.data?.tokens,
+          hasUser: !!response.data?.user,
+          status: response.status
+        });
+
+        if (!response.data?.tokens?.access || !response.data?.tokens?.refresh) {
+          console.error('Invalid login response:', response.data);
+          throw new Error('Login failed: No tokens received');
+        }
+        
+        console.log('Setting tokens in TokenManager...');
+        const tokensStored = verifyTokenStorage(response.data.tokens, rememberMe);
+        
+        if (!tokensStored) {
+          throw new Error('Login failed: Unable to store authentication tokens');
+        }
       }
       
       console.log('Login process completed successfully');
