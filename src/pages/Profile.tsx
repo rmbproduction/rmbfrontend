@@ -90,6 +90,7 @@ const Profile = () => {
   const [selectedVehicleType, setSelectedVehicleType] = useState<number | null>(null);
   const [selectedManufacturer, setSelectedManufacturer] = useState<number | null>(null);
   const [selectedVehicleModel, setSelectedVehicleModel] = useState<number | null>(null);
+  const [filteredModels, setFilteredModels] = useState<VehicleModel[]>([]);
 
   // Get active tab from URL query parameter
   const queryParams = new URLSearchParams(location.search);
@@ -405,6 +406,26 @@ const Profile = () => {
     fetchVehicleModels();
   }, [selectedVehicleType, selectedManufacturer]);
 
+  // Update useEffect for filtering vehicle models
+  useEffect(() => {
+    const filterModels = () => {
+      if (!selectedVehicleType && !selectedManufacturer) {
+        setFilteredModels([]);
+        return;
+      }
+
+      const filtered = vehicleModels.filter(model => {
+        const matchesType = !selectedVehicleType || model.vehicle_type === selectedVehicleType;
+        const matchesManufacturer = !selectedManufacturer || model.manufacturer === selectedManufacturer;
+        return matchesType && matchesManufacturer;
+      });
+
+      setFilteredModels(filtered);
+    };
+
+    filterModels();
+  }, [selectedVehicleType, selectedManufacturer, vehicleModels]);
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'profile':
@@ -631,16 +652,21 @@ const Profile = () => {
                           vehicle_model: value || undefined
                         }));
                       }}
-                      disabled={!isEditing || (!selectedVehicleType && !selectedManufacturer)}
+                      disabled={!isEditing || !selectedVehicleType || !selectedManufacturer}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
                     >
                       <option value="">Select Vehicle Model</option>
-                      {vehicleModels.map((model) => (
+                      {filteredModels.map((model) => (
                         <option key={model.id} value={model.id}>
                           {model.name}
                         </option>
                       ))}
                     </select>
+                    {isEditing && (!selectedVehicleType || !selectedManufacturer) && (
+                      <p className="mt-1 text-sm text-gray-500">
+                        Please select both Vehicle Type and Manufacturer first
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
