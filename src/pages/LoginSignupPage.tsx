@@ -13,9 +13,9 @@ import { useSignup, useForgotPassword, useGoogleLogin } from "../hooks/auth/useA
 // Define interfaces based on actual backend response
 interface LoginResponseData {
   message?: string;
-  access?: string;
-  refresh?: string;
-  user?: {
+  access: string;
+  refresh: string;
+  user: {
     email: string;
     username: string;
     is_admin: boolean;
@@ -26,7 +26,7 @@ interface LoginResponseData {
   };
 }
 
-interface ApiResponse {
+interface LoginResult {
   status: number;
   data: LoginResponseData;
 }
@@ -210,7 +210,8 @@ const LoginSignupPage = () => {
 
     try {
       if (mode === "login") {
-        console.log("Login attempt:", {
+        // Log the attempt
+        console.log("Attempting login:", {
           email: formData.email,
           hasPassword: !!formData.password
         });
@@ -219,23 +220,34 @@ const LoginSignupPage = () => {
           formData.email,
           formData.password,
           formData.rememberMe
-        );
+        ) as unknown as LoginResult;
 
-        // Type assertion after checking response structure
-        if (!result || typeof result !== 'object' || !('data' in result)) {
-          throw new Error('Invalid response format');
+        // Log the raw result
+        console.log('Login result:', {
+          status: result?.status,
+          hasData: !!result?.data,
+          dataKeys: result?.data ? Object.keys(result.data) : []
+        });
+
+        // Validate response structure
+        if (!result?.data?.access || !result?.data?.refresh) {
+          console.error('Invalid login response:', result);
+          throw new Error('Login failed: Invalid response format');
         }
 
-        const loginResponse = result.data as LoginResponseData;
+        // Success path
+        setLoginAttempts(0);
+        localStorage.removeItem('loginLockoutUntil');
+        toast.success(result.data.message || "Login successful");
+        
+        // Log successful login
+        console.log('Login successful:', {
+          hasTokens: true,
+          hasUser: !!result.data.user,
+          redirectingTo: from
+        });
 
-        if (loginResponse.access && loginResponse.refresh) {
-          setLoginAttempts(0);
-          localStorage.removeItem('loginLockoutUntil');
-          toast.success(loginResponse.message || "Login successful");
-          navigate(from, { replace: true });
-        } else {
-          throw new Error(loginResponse.message || "Invalid credentials");
-        }
+        navigate(from, { replace: true });
 
       } else if (mode === "signup") {
         const response = await signupMutation.mutateAsync({
@@ -262,11 +274,24 @@ const LoginSignupPage = () => {
         toast.success("Password reset link sent to your email!");
       }
     } catch (error: any) {
-      console.error('Form submission error:', error);
+      // Enhanced error logging
+      console.error('Login error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+
       if (mode === "login") {
         handleLoginFailure();
       }
-      const errorMessage = error.response?.data?.detail || error.message || "An error occurred";
+
+      // Get the most appropriate error message
+      const errorMessage = 
+        error.response?.data?.detail || 
+        error.response?.data?.message || 
+        error.message || 
+        "An error occurred during login";
+
       setError(errorMessage);
       toast.error(errorMessage);
     }
