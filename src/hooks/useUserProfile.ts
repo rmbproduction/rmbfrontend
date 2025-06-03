@@ -200,6 +200,7 @@ export const useUserProfile = () => {
     try {
       // First try to get fresh data from database
       const profileData = await userProfileDataService.getProfileData();
+      console.log('Fetched profile data:', profileData);
       
       if (profileData) {
         const formattedData: SharedFormData = {
@@ -211,6 +212,8 @@ export const useUserProfile = () => {
           state: profileData.state || '',
           postalCode: profileData.postal_code || ''
         };
+
+        console.log('Formatted shared data:', formattedData);
 
         // Update cache and localStorage with fresh data
         queryClient.setQueryData(['sharedFormData'], formattedData);
@@ -224,17 +227,22 @@ export const useUserProfile = () => {
 
     // If database fetch fails, try cache
     const cached = queryClient.getQueryData<SharedFormData>(['sharedFormData']);
-    if (cached) return cached;
+    if (cached) {
+      console.log('Using cached data:', cached);
+      return cached;
+    }
 
     // Finally, try localStorage
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const data = JSON.parse(stored);
+      console.log('Using localStorage data:', data);
       queryClient.setQueryData(['sharedFormData'], data);
       return data;
     }
 
     // Return empty data if nothing found
+    console.log('No data found, returning empty data');
     return {
       name: '',
       email: '',
@@ -269,7 +277,7 @@ export const useUserProfile = () => {
         address: 'address',
         city: 'city',
         state: 'state',
-        postalCode: 'postal_code'
+        postal_code: 'postalCode'
       },
       checkout: {
         name: 'name',

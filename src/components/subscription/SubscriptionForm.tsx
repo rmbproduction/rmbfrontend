@@ -120,7 +120,6 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
         });
       } catch (error) {
         console.error('Error loading profile data:', error);
-        // Handle error if needed
       }
     };
 
