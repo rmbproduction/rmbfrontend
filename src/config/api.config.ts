@@ -1,6 +1,6 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import TokenManager from '../services/tokenManager';
-import { QueryClient, QueryKey } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 
 // Create a new QueryClient instance with basic configuration
 export const queryClient = new QueryClient({
@@ -14,22 +14,13 @@ export const queryClient = new QueryClient({
   },
 });
 
-// Add error handler to query client
-queryClient.setDefaultOptions({
-  queries: {
-    onError: (error: any) => {
-      if (error?.response?.status === 401) {
-        TokenManager.clearTokens();
-        queryClient.clear();
-      }
-    },
-  },
-});
-
-// Add this utility function at the top of the file after imports
-const normalizeUrl = (url: string): string => {
-  // Remove multiple consecutive slashes, except after protocol (e.g., http://)
-  return url.replace(/([^:]\/)\/+/g, '$1');
+// Global query error handler
+const handleQueryError = (error: unknown) => {
+  if (error instanceof AxiosError && error.response?.status === 401) {
+    console.log('Unauthorized request detected, cleaning up...');
+    TokenManager.clearTokens();
+    queryClient.clear();
+  }
 };
 
 // Base configuration
