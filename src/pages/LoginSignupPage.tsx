@@ -10,6 +10,7 @@ import { toast } from "react-toastify";
 import { useAuth } from "../contexts/AuthContext";
 import { useSignup, useForgotPassword, useGoogleLogin } from "../hooks/auth/useAuth";
 
+// Define interfaces based on actual backend response
 interface LoginResponseUser {
   email: string;
   username: string;
@@ -23,22 +24,28 @@ interface LoginResponseUser {
 interface LoginResponseData {
   message: string;
   user: LoginResponseUser;
-  access: string;
-  refresh: string;
+  tokens: {
+    access: string;
+    refresh: string;
+  };
 }
 
-interface LoginResponse {
-  data: LoginResponseData;
+interface ApiResponse<T> {
   status: number;
+  statusText: string;
+  headers: any;
+  data: T;
 }
+
+type LoginResponse = ApiResponse<LoginResponseData>;
 
 interface FormData {
   username: string;
   email: string;
   password: string;
   rememberMe: boolean;
-  timezone?: string;
-  timezone_offset?: number;
+  timezone: string;
+  timezone_offset: number;
 }
 
 interface PasswordCriteria {
@@ -138,9 +145,7 @@ const LoginSignupPage = () => {
       const lockoutTime = Date.now() + 15 * 60 * 1000; // 15 minutes
       setLockoutUntil(lockoutTime);
       localStorage.setItem('loginLockoutUntil', lockoutTime.toString());
-      toast.error("Too many failed attempts. Please try again in 15 minutes.", {
-        autoClose: 10000 // Show for 10 seconds
-      });
+      toast.error("Too many failed attempts. Please try again in 15 minutes.");
       setError("Account is temporarily locked. Please try again in 15 minutes.");
     }
   };
@@ -171,13 +176,13 @@ const LoginSignupPage = () => {
   };
 
   const handleApiError = (error: any) => {
+    console.error('API Error:', error);
+
     if (error.response?.status === 429) {
       const retryAfter = error.response.headers['retry-after'];
-      const waitTime = retryAfter ? parseInt(retryAfter) : 15 * 60; // Default to 15 minutes
+      const waitTime = retryAfter ? parseInt(retryAfter) : 15 * 60;
       const minutesLeft = Math.ceil(waitTime / 60);
-      toast.error(`Too many attempts. Please try again in ${minutesLeft} minutes.`, {
-        autoClose: 10000 // Show for 10 seconds
-      });
+      toast.error(`Too many attempts. Please try again in ${minutesLeft} minutes.`);
       setError(`Account is temporarily locked. Please try again in ${minutesLeft} minutes.`);
       return;
     }
@@ -189,9 +194,9 @@ const LoginSignupPage = () => {
       } else if (data.non_field_errors) {
         setError(data.non_field_errors[0]);
       } else {
-        const firstError = Object.entries(data)[0] as [string, string[]];
+        const firstError = Object.entries(data)[0];
         if (firstError) {
-          setError(`${firstError[0]}: ${firstError[1][0]}`);
+          setError(`${firstError[0]}: ${firstError[1]}`);
         }
       }
     } else if (error.message) {
@@ -205,57 +210,58 @@ const LoginSignupPage = () => {
     e.preventDefault();
     setError("");
     
-    // Check for lockout
     if (lockoutUntil && Date.now() < lockoutUntil) {
       const minutesLeft = Math.ceil((lockoutUntil - Date.now()) / (60 * 1000));
-      toast.error(`Account is temporarily locked. Please try again in ${minutesLeft} minutes.`, {
-        autoClose: 5000
-      });
-      setError(`Account is temporarily locked. Please try again in ${minutesLeft} minutes.`);
+      toast.error(`Account is temporarily locked. Please try again in ${minutesLeft} minutes.`);
       return;
     }
-    
+
     try {
       if (mode === "login") {
-        // Log the login attempt data for debugging
-        console.log("Login attempt data:", {
+        console.log("Login attempt:", {
           email: formData.email,
-          password: formData.password ? "PROVIDED" : "MISSING",
-          rememberMe: formData.rememberMe,
-          timezone: formData.timezone,
-          timezone_offset: formData.timezone_offset
+          hasPassword: !!formData.password,
+          rememberMe: formData.rememberMe
         });
-        
+
         const loginResult = await login(
           formData.email,
           formData.password,
           formData.rememberMe
-        ) as unknown as LoginResponse;
+        ) as unknown as LoginResponse;  // Safe type assertion with unknown intermediate
 
-        console.log("Login response received:", {
-          success: !!loginResult,
-          hasTokens: !!(loginResult?.data?.access && loginResult?.data?.refresh),
-          hasUser: !!loginResult?.data?.user,
-          status: loginResult?.status
+        if (!loginResult?.data) {
+          throw new Error("Login failed: No response data");
+        }
+
+        console.log("Login response:", {
+          success: true,
+          hasTokens: !!(loginResult.data.tokens?.access && loginResult.data.tokens?.refresh),
+          hasUser: !!loginResult.data.user
         });
 
-        if (!loginResult?.data?.access || !loginResult?.data?.refresh) {
-          console.error("Invalid login response:", loginResult?.data);
-          throw new Error("Login failed: No tokens received");
+        if (!loginResult.data.tokens?.access || !loginResult.data.tokens?.refresh) {
+          throw new Error("Login failed: Invalid response format");
         }
-        
-        // Reset attempts on successful login
+
         setLoginAttempts(0);
         localStorage.removeItem('loginLockoutUntil');
         toast.success(loginResult.data.message || "Successfully logged in!");
-        
-        // Navigate after successful login
-        navigate(from || '/', { replace: true });
+        navigate(from, { replace: true });
+
       } else if (mode === "signup") {
+        const response = await signupMutation.mutateAsync({
+          username: formData.username,
+          email: formData.email,
+          password: formData.password
+        });
+
+        if (response.data?.message) {
+          toast.success(response.data.message);
+        } else {
+          toast.success("Account created! Please verify your email.");
+        }
         
-        toast.success("Account created! Please verify your email.");
-        
-        // Always navigate to verify-email with email parameter
         navigate(`/verify-email?email=${encodeURIComponent(formData.email)}`);
       } else if (mode === "forgot") {
         await forgotPasswordMutation.mutateAsync({
@@ -266,6 +272,7 @@ const LoginSignupPage = () => {
         toast.success("Password reset link sent to your email!");
       }
     } catch (error: any) {
+      console.error('Form submission error:', error);
       if (mode === "login") {
         handleLoginFailure();
       }
