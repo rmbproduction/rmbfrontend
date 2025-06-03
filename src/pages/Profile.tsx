@@ -16,6 +16,28 @@ import { apiService } from '../config/api.config.ts';
 import axios from 'axios';
 import { useUserProfile } from '../hooks/useUserProfile';
 
+interface VehicleType {
+  id: number;
+  name: string;
+  image?: string;
+}
+
+interface Manufacturer {
+  id: number;
+  name: string;
+  image?: string;
+}
+
+interface VehicleModel {
+  id: number;
+  name: string;
+  manufacturer: number;
+  manufacturer_name: string;
+  vehicle_type: number;
+  vehicle_type_name: string;
+  image?: string;
+}
+
 interface UserProfile {
   email: string;
   username: string;
@@ -28,6 +50,7 @@ interface UserProfile {
   country: string;
   postal_code: string;
   preferred_location?: string;
+  vehicle_model?: number;
 }
 
 interface SidebarProps {
@@ -61,6 +84,12 @@ const Profile = () => {
   const [profileData, setProfileData] = useState<UserProfile | null>(null);
   const [formData, setFormData] = useState<UserProfile>(defaultProfile);
   const [isNewProfile, setIsNewProfile] = useState(true);
+  const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
+  const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
+  const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([]);
+  const [selectedVehicleType, setSelectedVehicleType] = useState<number | null>(null);
+  const [selectedManufacturer, setSelectedManufacturer] = useState<number | null>(null);
+  const [selectedVehicleModel, setSelectedVehicleModel] = useState<number | null>(null);
 
   // Get active tab from URL query parameter
   const queryParams = new URLSearchParams(location.search);
@@ -135,8 +164,26 @@ const Profile = () => {
           state: profileData.state || '',
           country: profileData.country || '',
           postal_code: profileData.postal_code || '',
-          profile_photo: profileData.profile_photo || null
+          profile_photo: profileData.profile_photo || null,
+          vehicle_model: profileData.vehicle_model
         });
+
+        // If there's a vehicle model, fetch its details and update the dropdowns
+        if (profileData.vehicle_model) {
+          try {
+            const modelResponse = await apiService.vehicle.getModels();
+            const models = modelResponse.data.vehicle_models || [];
+            const selectedModel = models.find((model: VehicleModel) => model.id === profileData.vehicle_model);
+            
+            if (selectedModel) {
+              setSelectedVehicleType(selectedModel.vehicle_type);
+              setSelectedManufacturer(selectedModel.manufacturer);
+              setSelectedVehicleModel(selectedModel.id);
+            }
+          } catch (error) {
+            console.error('Error fetching vehicle model details:', error);
+          }
+        }
 
         console.log('Updated form data:', {
           before: formData,
@@ -314,6 +361,50 @@ const Profile = () => {
     setFormData(profileData || defaultProfile);
   };
 
+  // Add new useEffect for fetching vehicle types and manufacturers
+  useEffect(() => {
+    const fetchVehicleData = async () => {
+      try {
+        const [typesResponse, manufacturersResponse] = await Promise.all([
+          apiService.vehicle.getTypes(),
+          apiService.vehicle.getManufacturers()
+        ]);
+        setVehicleTypes(typesResponse.data);
+        setManufacturers(manufacturersResponse.data);
+      } catch (error) {
+        console.error('Error fetching vehicle data:', error);
+        toast.error('Failed to load vehicle information');
+      }
+    };
+
+    if (isAuthenticated) {
+      fetchVehicleData();
+    }
+  }, [isAuthenticated]);
+
+  // Add effect for fetching vehicle models when type or manufacturer changes
+  useEffect(() => {
+    const fetchVehicleModels = async () => {
+      try {
+        if (selectedVehicleType || selectedManufacturer) {
+          const queryParams: Record<string, string> = {};
+          if (selectedVehicleType) queryParams.vehicle_type = selectedVehicleType.toString();
+          if (selectedManufacturer) queryParams.manufacturer = selectedManufacturer.toString();
+          
+          const response = await apiService.vehicle.getModels(queryParams);
+          setVehicleModels(response.data.vehicle_models || []);
+        } else {
+          setVehicleModels([]);
+        }
+      } catch (error) {
+        console.error('Error fetching vehicle models:', error);
+        toast.error('Failed to load vehicle models');
+      }
+    };
+
+    fetchVehicleModels();
+  }, [selectedVehicleType, selectedManufacturer]);
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'profile':
@@ -467,8 +558,92 @@ const Profile = () => {
                   disabled={!isEditing}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
                   placeholder={isEditing ? "Enter your country" : ""}
-                    />
+                />
+              </div>
+
+              {/* Vehicle Information Section */}
+              <div className="border-t pt-6 mt-6">
+                <h4 className="text-lg font-medium text-gray-900 mb-4">Vehicle Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Vehicle Type Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Vehicle Type
+                    </label>
+                    <select
+                      name="vehicle_type"
+                      value={selectedVehicleType || ''}
+                      onChange={(e) => {
+                        const value = e.target.value ? parseInt(e.target.value) : null;
+                        setSelectedVehicleType(value);
+                        setSelectedVehicleModel(null);
+                      }}
+                      disabled={!isEditing}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+                    >
+                      <option value="">Select Vehicle Type</option>
+                      {vehicleTypes.map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
+
+                  {/* Manufacturer Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Manufacturer
+                    </label>
+                    <select
+                      name="manufacturer"
+                      value={selectedManufacturer || ''}
+                      onChange={(e) => {
+                        const value = e.target.value ? parseInt(e.target.value) : null;
+                        setSelectedManufacturer(value);
+                        setSelectedVehicleModel(null);
+                      }}
+                      disabled={!isEditing}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+                    >
+                      <option value="">Select Manufacturer</option>
+                      {manufacturers.map((manufacturer) => (
+                        <option key={manufacturer.id} value={manufacturer.id}>
+                          {manufacturer.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Vehicle Model Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Vehicle Model
+                    </label>
+                    <select
+                      name="vehicle_model"
+                      value={selectedVehicleModel || ''}
+                      onChange={(e) => {
+                        const value = e.target.value ? parseInt(e.target.value) : null;
+                        setSelectedVehicleModel(value);
+                        setFormData(prev => ({
+                          ...prev,
+                          vehicle_model: value || undefined
+                        }));
+                      }}
+                      disabled={!isEditing || (!selectedVehicleType && !selectedManufacturer)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
+                    >
+                      <option value="">Select Vehicle Model</option>
+                      {vehicleModels.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
 
               {/* Save Button */}
               {isEditing && (
