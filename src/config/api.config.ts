@@ -385,43 +385,61 @@ export const apiService = {
           timezone_offset: 5.5  // IST offset
         };
 
-        console.log('Making login request with data:', {
-          ...requestData,
-          password: requestData.password ? 'PROVIDED' : 'MISSING',
-          timezone_info: {
-            offset: requestData.timezone_offset,
-            timezone: requestData.timezone
+        // Set up request headers
+        const headers = {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        };
+
+        console.log('Making login request with:', {
+          url: `${API_BASE_URL}/${API_ENDPOINTS.auth.login}`,
+          headers,
+          data: {
+            ...requestData,
+            password: 'PROVIDED'
           }
         });
 
         const response = await axiosInstance.post(API_ENDPOINTS.auth.login, requestData, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
+          headers,
           withCredentials: true
         });
         
-        console.log('Raw login response:', {
+        // Log the complete response for debugging
+        console.log('Complete login response:', {
           status: response.status,
-          data: response.data,
-          hasTokens: !!(response.data?.access && response.data?.refresh)
+          statusText: response.statusText,
+          headers: response.headers,
+          data: response.data
         });
 
-        // Check for tokens directly in the response
-        if (!response.data?.access || !response.data?.refresh) {
-          console.error('No tokens in login response:', response.data);
-          throw new Error('Invalid login response: No tokens received');
+        // Validate response data
+        if (!response.data) {
+          throw new Error('Empty response received');
+        }
+
+        const { access, refresh, user, message } = response.data;
+
+        if (!access || !refresh || !user) {
+          console.error('Invalid response structure:', {
+            hasAccess: !!access,
+            hasRefresh: !!refresh,
+            hasUser: !!user,
+            responseData: response.data
+          });
+          throw new Error('Invalid login response: Missing required fields');
         }
 
         // Return the response in the expected format
         return {
           ...response,
           data: {
-            user: response.data.user,
+            message: message || 'Login successful',
+            user,
             tokens: {
-              access: response.data.access,
-              refresh: response.data.refresh
+              access,
+              refresh
             }
           }
         };
