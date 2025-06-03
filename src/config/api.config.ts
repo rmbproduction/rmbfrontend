@@ -197,19 +197,19 @@ export const axiosInstance = axios.create({
   baseURL: API_BASE_URL.replace(/\/+$/, ''),  // Remove trailing slashes
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    'Accept': 'application/json'
   },
   withCredentials: true
 });
 
-// Add request interceptor for adding auth token and normalizing URLs
+// Add request interceptor for adding auth token
 axiosInstance.interceptors.request.use(
   async (config) => {
     // Clean up the URL parts
-    const baseUrl = (config.baseURL || '').replace(/\/+$/, '');  // Remove trailing slashes
-    let url = (config.url || '').replace(/^\/+/, '');  // Remove leading slashes
+    const baseUrl = (config.baseURL || '').replace(/\/+$/, '');
+    let url = (config.url || '').replace(/^\/+/, '');
 
-    // Ensure trailing slash for Django URLs (only if url is not empty)
+    // Ensure trailing slash for Django URLs
     if (url && !url.endsWith('/')) {
       url = `${url}/`;
     }
@@ -218,31 +218,35 @@ axiosInstance.interceptors.request.use(
     config.url = url;
     config.baseURL = baseUrl;
 
-    // Calculate and log the full URL
+    // Calculate and log the full URL for debugging
     const fullUrl = `${baseUrl}/${url}`;
-
-    // Log the request details
     console.log('Making request:', {
       url: config.url,
       baseURL: config.baseURL,
       fullUrl,
       method: config.method,
-      headers: config.headers,
-      data: config.data
+      hasAuthHeader: !!config.headers.Authorization
     });
 
-    // Ensure CORS headers for all requests
-    config.withCredentials = true;
-
+    // Get the access token
     const token = TokenManager.getAccessToken();
-    if (token && !url.includes('login') && !url.includes('verify-email')) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
     
+    // Only add token if we have one and it's not a login/verify request
+    if (token && !url.includes('login') && !url.includes('verify-email')) {
+      console.log('Adding auth token to request');
+      config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      console.log('No token added to request:', {
+        hasToken: !!token,
+        isLoginRequest: url.includes('login'),
+        isVerifyRequest: url.includes('verify-email')
+      });
+    }
+
     return config;
   },
   (error) => {
-    console.error('Request error:', error);
+    console.error('Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
@@ -266,90 +270,55 @@ const isPublicRoute = (url: string): boolean => {
 
 // Add response interceptor for handling auth errors and token refresh
 axiosInstance.interceptors.response.use(
-  (response) => {
-    // For login responses, check if we have tokens
-    if (response.config.url?.includes('/login')) {
-      console.log('Processing login response:', {
-        hasTokens: !!response.data?.tokens,
-        hasUser: !!response.data?.user
-      });
-    }
-    return response;
-  },
+  (response) => response,
   async (error) => {
-    // Log detailed error information
-    console.error('API Error:', {
-      status: error.response?.status,
-      data: error.response?.data,
-      url: error.config?.url,
-      method: error.config?.method,
-      headers: error.config?.headers,
-      requestData: error.config?.data
-    });
-
-    // If it's a 500 error, provide more helpful error message
-    if (error.response?.status === 500) {
-      error.message = 'Server error occurred. Please try again later.';
-    }
-
     const originalRequest = error.config;
 
-    // Handle rate limiting
-    if (error.response?.status === 429) {
-      const retryAfter = error.response.headers['retry-after'];
-      const waitTime = retryAfter ? parseInt(retryAfter) : 15 * 60; // Default to 15 minutes
-      const lockoutTime = Date.now() + waitTime * 1000;
-      localStorage.setItem('loginLockoutUntil', lockoutTime.toString());
-      throw new Error(`Too many attempts. Please try again in ${Math.ceil(waitTime / 60)} minutes.`);
-    }
+    console.log('Response error:', {
+      status: error.response?.status,
+      url: originalRequest?.url,
+      hasRetried: !!originalRequest?._retry
+    });
 
-    // If the error is 401 and we haven't tried to refresh the token yet
+    // Handle 401 errors (unauthorized)
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
         const refreshToken = TokenManager.getRefreshToken();
         if (!refreshToken) {
-          console.warn('No refresh token found during response interceptor');
-          TokenManager.clearTokens();
-          if (!isPublicRoute(originalRequest.url || '')) {
-            window.location.href = '/login';
-          }
-          return Promise.reject(new Error('No refresh token available'));
+          console.log('No refresh token available');
+          await handleLogoutCleanup();
+          return Promise.reject(error);
         }
 
-        console.log('Attempting token refresh after 401...');
-        const response = await axios.post(`${API_BASE_URL}/accounts/token/refresh/`, {
-          refresh: refreshToken
-        }, {
-          withCredentials: true
-        });
+        console.log('Attempting to refresh token');
+        const response = await axios.post(
+          `${API_BASE_URL}/accounts/token/refresh/`,
+          { refresh: refreshToken },
+          { withCredentials: true }
+        );
 
-        if (!response.data?.access || !response.data?.refresh) {
-          throw new Error('Invalid refresh response');
+        if (response.data?.access) {
+          console.log('Token refresh successful');
+          
+          // Update tokens
+          TokenManager.setTokens({
+            access: response.data.access,
+            refresh: refreshToken
+          });
+
+          // Update auth header and retry original request
+          originalRequest.headers.Authorization = `Bearer ${response.data.access}`;
+          return axiosInstance(originalRequest);
+        } else {
+          console.error('Token refresh failed - no access token in response');
+          await handleLogoutCleanup();
         }
-
-        const { access, refresh } = response.data;
-        TokenManager.setTokens({ access, refresh }, true);
-
-        // Update the original request with new token
-        originalRequest.headers.Authorization = `Bearer ${access}`;
-        console.log('Token refresh successful, retrying original request');
-        return axiosInstance(originalRequest);
       } catch (refreshError) {
-        console.error('Token refresh failed after 401:', refreshError);
-        // If refresh fails, clear tokens and only redirect if not on a public route
-        TokenManager.clearTokens();
-        if (!isPublicRoute(originalRequest.url || '')) {
-          window.location.href = '/login';
-        }
-        return Promise.reject(refreshError);
+        console.error('Token refresh failed:', refreshError);
+        await handleLogoutCleanup();
       }
-    }
-
-    // If it's a 500 error on the profile endpoint, handle it gracefully
-    if (error.response?.status === 500 && error.config.url?.includes('/accounts/profile/')) {
-      return Promise.resolve({ data: null });
     }
 
     return Promise.reject(error);
@@ -558,19 +527,24 @@ export const apiService = {
       }
     },
     getProfile: async () => {
-      // Check if we have tokens before making the request
       const accessToken = TokenManager.getAccessToken();
       if (!accessToken) {
-        console.log('No access token found, skipping profile fetch');
+        console.log('No access token available for profile fetch');
         return { data: null };
       }
 
       try {
+        console.log('Fetching profile with token');
         const response = await axiosInstance.get(API_ENDPOINTS.auth.profile);
+        console.log('Profile fetch successful');
         return response;
       } catch (error: any) {
-        if (error?.response?.status === 401) {
-          console.log('Unauthorized profile fetch, cleaning up...');
+        console.error('Profile fetch failed:', {
+          status: error.response?.status,
+          data: error.response?.data
+        });
+        
+        if (error.response?.status === 401) {
           await handleLogoutCleanup();
           return { data: null };
         }
@@ -869,45 +843,5 @@ async function handleLogoutCleanup() {
     TokenManager.clearTokens();
   }
 }
-
-// Add axios interceptor to handle 401s globally
-axiosInstance.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    if (error?.response?.status === 401 && !error.config._retry) {
-      // If we get a 401 and haven't tried to refresh the token yet
-      try {
-        const refreshToken = TokenManager.getRefreshToken();
-        if (!refreshToken) {
-          // No refresh token, clean up and reject
-          await handleLogoutCleanup();
-          return Promise.reject(error);
-        }
-
-        // Try to refresh the token
-        const response = await axios.post(`${API_BASE_URL}/accounts/token/refresh/`, {
-          refresh: refreshToken
-        });
-
-        if (response.data?.access) {
-          // Update the token
-          TokenManager.setTokens({
-            access: response.data.access,
-            refresh: refreshToken
-          });
-
-          // Retry the original request
-          error.config._retry = true;
-          error.config.headers.Authorization = `Bearer ${response.data.access}`;
-          return axiosInstance(error.config);
-        }
-      } catch (refreshError) {
-        // If refresh fails, clean up everything
-        await handleLogoutCleanup();
-      }
-    }
-    return Promise.reject(error);
-  }
-);
 
 export default apiService;
