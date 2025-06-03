@@ -22,10 +22,8 @@ interface LoginResponseData {
     is_customer: boolean;
     email_verified: boolean;
   };
-  tokens: {
-    access: string;
-    refresh: string;
-  };
+  access: string;    // Tokens at root level
+  refresh: string;   // Tokens at root level
 }
 
 interface LoginResult {
@@ -212,10 +210,11 @@ const LoginSignupPage = () => {
 
     try {
       if (mode === "login") {
-        // Log the attempt
-        console.log("Attempting login:", {
+        console.log("=== LOGIN FORM SUBMISSION ===");
+        console.log("Form data:", {
           email: formData.email,
-          hasPassword: !!formData.password
+          hasPassword: !!formData.password,
+          rememberMe: formData.rememberMe
         });
 
         const result = await login(
@@ -224,31 +223,30 @@ const LoginSignupPage = () => {
           formData.rememberMe
         ) as unknown as LoginResult;
 
-        // Log the raw result
-        console.log('Login result:', {
+        console.log('=== LOGIN RESPONSE VALIDATION ===');
+        console.log('Response structure:', {
           status: result?.status,
           hasData: !!result?.data,
-          dataKeys: result?.data ? Object.keys(result.data) : []
+          dataKeys: result?.data ? Object.keys(result.data) : [],
+          hasAccess: !!result?.data?.access,
+          hasRefresh: !!result?.data?.refresh,
+          hasUser: !!result?.data?.user
         });
 
         // Validate response structure
-        if (!result?.data?.tokens?.access || !result?.data?.tokens?.refresh) {
-          console.error('Invalid login response:', result);
+        if (!result?.data?.access || !result?.data?.refresh) {
+          console.error('=== LOGIN VALIDATION FAILED ===');
+          console.error('Invalid response:', result);
           throw new Error('Login failed: Invalid response format');
         }
 
         // Success path
+        console.log('=== LOGIN SUCCESSFUL ===');
         setLoginAttempts(0);
         localStorage.removeItem('loginLockoutUntil');
         toast.success(result.data.message || "Login successful");
         
-        // Log successful login
-        console.log('Login successful:', {
-          hasTokens: true,
-          hasUser: !!result.data.user,
-          redirectingTo: from
-        });
-
+        console.log('Redirecting to:', from);
         navigate(from, { replace: true });
 
       } else if (mode === "signup") {

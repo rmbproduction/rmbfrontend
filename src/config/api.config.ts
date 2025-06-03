@@ -370,9 +370,11 @@ export const apiService = {
   // Auth services
   auth: {
     login: async (data: { email: string; password: string; rememberMe?: boolean }) => {
-      console.log('Login request:', {
+      console.log('=== LOGIN ATTEMPT START ===');
+      console.log('Login request data:', {
         email: data.email,
-        hasPassword: !!data.password
+        hasPassword: !!data.password,
+        rememberMe: data.rememberMe
       });
       
       try {
@@ -381,7 +383,8 @@ export const apiService = {
           password: data.password
         };
 
-        console.log('Making request to:', `${API_BASE_URL}/${API_ENDPOINTS.auth.login}`);
+        console.log('Making API request to:', `${API_BASE_URL}/${API_ENDPOINTS.auth.login}`);
+        console.log('Request data:', loginData);
 
         const response = await axiosInstance.post(API_ENDPOINTS.auth.login, loginData, {
           headers: { 
@@ -390,62 +393,78 @@ export const apiService = {
           }
         });
         
-        console.log('Raw response:', {
-          status: response.status,
-          data: response.data,
-          headers: response.headers
-        });
+        console.log('=== RAW API RESPONSE ===');
+        console.log('Status:', response.status);
+        console.log('Headers:', response.headers);
+        console.log('Raw response data:', JSON.stringify(response.data, null, 2));
 
         if (!response.data) {
-          console.error('Empty response received');
           throw new Error('Empty response received');
         }
 
-        // Extract and validate the nested tokens structure
-        const { message, user, tokens } = response.data;
+        // Log the exact structure we received
+        console.log('=== RESPONSE DATA ANALYSIS ===');
+        console.log('Response keys:', Object.keys(response.data));
+        console.log('Has tokens object:', 'tokens' in response.data);
+        console.log('Has direct access token:', 'access' in response.data);
+        console.log('Has direct refresh token:', 'refresh' in response.data);
+        console.log('Response data:', response.data);
 
-        console.log('Extracted data:', {
-          hasMessage: !!message,
-          hasUser: !!user,
-          hasTokens: !!tokens,
-          hasAccess: !!tokens?.access,
-          hasRefresh: !!tokens?.refresh
-        });
+        // Try both nested and direct token access
+        const tokens = response.data.tokens || {
+          access: response.data.access,
+          refresh: response.data.refresh
+        };
+
+        console.log('=== EXTRACTED TOKENS ===');
+        console.log('Tokens object:', tokens);
+        console.log('Access token present:', !!tokens?.access);
+        console.log('Refresh token present:', !!tokens?.refresh);
 
         if (!tokens?.access || !tokens?.refresh) {
-          console.error('Missing tokens in response:', response.data);
+          console.error('=== TOKEN VALIDATION FAILED ===');
+          console.error('Available data:', {
+            hasTokensObject: !!response.data.tokens,
+            hasDirectAccess: !!response.data.access,
+            hasDirectRefresh: !!response.data.refresh,
+            extractedTokens: tokens
+          });
           throw new Error('Login failed: Missing tokens');
         }
 
-        // Return the response with the nested tokens structure
+        // Return the response with the tokens in the correct structure
         const result = {
           status: response.status,
           data: {
-            message: message || 'Login successful',
-            user,
-            tokens: {
-              access: tokens.access,
-              refresh: tokens.refresh
-            }
+            message: response.data.message || 'Login successful',
+            user: response.data.user,
+            access: tokens.access,    // Put tokens at root level
+            refresh: tokens.refresh   // Put tokens at root level
           }
         };
 
-        console.log('Returning result:', {
+        console.log('=== FINAL RESULT ===');
+        console.log('Result structure:', {
           status: result.status,
-          hasTokens: !!(result.data.tokens?.access && result.data.tokens?.refresh),
-          hasUser: !!result.data.user
+          hasMessage: !!result.data.message,
+          hasUser: !!result.data.user,
+          hasAccess: !!result.data.access,
+          hasRefresh: !!result.data.refresh
         });
 
         return result;
 
       } catch (error: any) {
-        console.error('Login error details:', {
+        console.error('=== LOGIN ERROR ===');
+        console.error('Error details:', {
           message: error.message,
-          responseStatus: error.response?.status,
+          status: error.response?.status,
           responseData: error.response?.data,
-          responseHeaders: error.response?.headers
+          stack: error.stack
         });
         throw error;
+      } finally {
+        console.log('=== LOGIN ATTEMPT END ===');
       }
     },
     signup: async (data: { username: string; email: string; password: string }) => {
