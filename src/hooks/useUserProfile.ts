@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import userProfileDataService from '../services/userProfileDataService';
 import { toast } from 'react-toastify';
 import { useQueryClient } from '@tanstack/react-query';
+import { apiService } from '../config/api.config';
 
 interface UserProfileData {
   username?: string;
@@ -199,10 +200,13 @@ export const useUserProfile = () => {
   const getSharedData = async (): Promise<SharedFormData> => {
     try {
       // First try to get fresh data from database
-      const profileData = await userProfileDataService.getProfileData();
-      console.log('Fetched profile data:', profileData);
+      const response = await apiService.profile.getDetails();
+      console.log('API Response:', response);
       
-      if (profileData) {
+      if (response?.data) {
+        const profileData = response.data;
+        console.log('Fetched profile data:', profileData);
+        
         const formattedData: SharedFormData = {
           name: profileData.name || '',
           email: profileData.email || '',
@@ -215,7 +219,7 @@ export const useUserProfile = () => {
 
         console.log('Formatted shared data:', formattedData);
 
-        // Update cache and localStorage with fresh data
+        // Update both cache and localStorage
         queryClient.setQueryData(['sharedFormData'], formattedData);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(formattedData));
         
