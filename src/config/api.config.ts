@@ -401,20 +401,17 @@ export const apiService = {
           throw new Error('Empty response received');
         }
 
-        // Extract data, handling both nested and flat token structures
-        const { message, user } = response.data;
-        const tokens = response.data.tokens || {
-          access: response.data.access,
-          refresh: response.data.refresh
-        };
+        // Extract data from the root level as shown in the working example
+        const { message, access, refresh, user } = response.data;
 
         console.log('Extracted data:', {
           hasMessage: !!message,
-          hasUser: !!user,
-          hasTokens: !!(tokens?.access && tokens?.refresh)
+          hasAccess: !!access,
+          hasRefresh: !!refresh,
+          hasUser: !!user
         });
 
-        if (!tokens?.access || !tokens?.refresh) {
+        if (!access || !refresh) {
           console.error('Missing tokens in response:', response.data);
           throw new Error('Login failed: Missing tokens');
         }
@@ -424,8 +421,8 @@ export const apiService = {
           status: response.status,
           data: {
             message: message || 'Login successful',
-            access: tokens.access,
-            refresh: tokens.refresh,
+            access,
+            refresh,
             user
           }
         };
