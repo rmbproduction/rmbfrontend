@@ -54,7 +54,7 @@ const Profile = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, isAuthenticated, isLoading } = useAuth();
-  const { updateProfile } = useUserProfile();
+  const { updateProfile, updateSharedFormData } = useUserProfile();
   const [isEditing, setIsEditing] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -188,6 +188,23 @@ const Profile = () => {
       ...prev,
       [name]: value
     }));
+
+    // Update shared form data when common fields change
+    const sharedFields = {
+      name: 'name',
+      email: 'email',
+      phone: 'phone',
+      address: 'address',
+      city: 'city',
+      state: 'state',
+      postal_code: 'postalCode'
+    };
+
+    if (name in sharedFields) {
+      updateSharedFormData({
+        [sharedFields[name as keyof typeof sharedFields]]: value
+      });
+    }
   };
 
   const handleSave = async () => {

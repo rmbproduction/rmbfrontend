@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import userProfileDataService from '../services/userProfileDataService';
 import { toast } from 'react-toastify';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface UserProfileData {
   username?: string;
@@ -50,11 +51,24 @@ export interface FormattedProfileData {
   };
 }
 
+interface SharedFormData {
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  postalCode: string;
+}
+
+const STORAGE_KEY = 'user_shared_form_data';
+
 export const useUserProfile = () => {
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const queryClient = useQueryClient();
 
   // Fetch profile data
   const fetchProfile = async () => {
@@ -181,95 +195,95 @@ export const useUserProfile = () => {
     return `${address}, ${city}, ${state} ${postal_code || ''}`.trim();
   };
 
-  // Pre-fill form data
-  const prefillFormData = <T extends object>(
-    currentFormData: T,
-    formType: 'checkout' | 'vehicle' | 'subscription' | 'booking'
-  ): T => {
-    if (!profile) return currentFormData;
+  // Get data from localStorage or cache
+  const getSharedData = (): SharedFormData => {
+    const cached = queryClient.getQueryData<SharedFormData>(['sharedFormData']);
+    if (cached) return cached;
 
-    const formatted = getFormattedProfile();
-    const updates: Partial<T> = {};
-
-    // Common fields that should be shared across all forms
-    const commonFields = {
-      name: formatted.name,
-      email: formatted.email,
-      phone: formatted.phone,
-      address: formatted.address,
-      city: formatted.city,
-      state: formatted.state,
-      postal_code: formatted.postalCode,
-      country: formatted.country
-    };
-
-    switch (formType) {
-      case 'checkout':
-        Object.assign(updates, {
-          ...commonFields,
-          address: {
-            street: formatted.address,
-            city: formatted.city,
-            state: formatted.state,
-            zipCode: formatted.postalCode
-          }
-        });
-        break;
-
-      case 'vehicle':
-        Object.assign(updates, {
-          ...commonFields,
-          contactNumber: formatted.phone,
-          pickupAddress: formatted.fullAddress,
-          vehicleType: formatted.vehicleType,
-          manufacturer: formatted.manufacturer,
-          vehicleModel: formatted.vehicleModel,
-          registrationNumber: formatted.registrationNumber
-        });
-        break;
-
-      case 'subscription':
-        Object.assign(updates, {
-          ...commonFields,
-          customer_name: formatted.name,
-          customer_email: formatted.email,
-          customer_phone: formatted.phone,
-          vehicle_type: formatted.vehicleType,
-          manufacturer: formatted.manufacturer,
-          vehicle_model: formatted.vehicleModel
-        });
-        break;
-
-      case 'booking':
-        Object.assign(updates, {
-          ...commonFields,
-          contact_number: formatted.phone,
-          customer_name: formatted.name,
-          customer_email: formatted.email
-        });
-        break;
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const data = JSON.parse(stored);
+      queryClient.setQueryData(['sharedFormData'], data);
+      return data;
     }
 
-    return { ...currentFormData, ...updates };
+    return {
+      name: '',
+      email: '',
+      phone: '',
+      address: '',
+      city: '',
+      state: '',
+      postalCode: ''
+    };
   };
 
-  // Update shared form data
-  const updateSharedFormData = (formData: Partial<FormattedProfileData>) => {
-    updateProfile({
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone,
-      address: formData.address,
-      city: formData.city,
-      state: formData.state,
-      postal_code: formData.postalCode,
-      country: formData.country,
-      vehicle_name: formData.vehicleName,
-      vehicle_type: formData.vehicleType,
-      manufacturer: formData.manufacturer,
-      vehicle_model: formData.vehicleModel,
-      registration_number: formData.registrationNumber
+  // Update shared data
+  const updateSharedFormData = (data: Partial<SharedFormData>) => {
+    const currentData = getSharedData();
+    const newData = { ...currentData, ...data };
+
+    // Update both cache and localStorage
+    queryClient.setQueryData(['sharedFormData'], newData);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newData));
+  };
+
+  // Prefill form data based on form type
+  const prefillFormData = <T extends object>(defaultData: T, formType: 'profile' | 'checkout' | 'subscription'): T => {
+    const sharedData = getSharedData();
+    
+    // Map shared fields to form-specific fields
+    const fieldMappings = {
+      profile: {
+        name: 'name',
+        email: 'email',
+        phone: 'phone',
+        address: 'address',
+        city: 'city',
+        state: 'state',
+        postalCode: 'postal_code'
+      },
+      checkout: {
+        name: 'name',
+        email: 'email',
+        phone: 'phone',
+        'address.street': 'address',
+        'address.city': 'city',
+        'address.state': 'state',
+        'address.zipCode': 'postalCode'
+      },
+      subscription: {
+        customer_name: 'name',
+        customer_email: 'email',
+        customer_phone: 'phone',
+        address: 'address',
+        city: 'city',
+        state: 'state',
+        postal_code: 'postalCode'
+      }
+    };
+
+    const mapping = fieldMappings[formType];
+    const prefilledData = { ...defaultData };
+
+    // Apply mappings to prefill data
+    Object.entries(mapping).forEach(([formField, sharedField]) => {
+      const value = sharedData[sharedField as keyof SharedFormData];
+      if (value) {
+        if (formField.includes('.')) {
+          // Handle nested fields (e.g., address.street)
+          const [parent, child] = formField.split('.');
+          if (!prefilledData[parent as keyof T]) {
+            (prefilledData[parent as keyof T] as any) = {};
+          }
+          ((prefilledData[parent as keyof T] as any)[child]) = value;
+        } else {
+          (prefilledData[formField as keyof T] as any) = value;
+        }
+      }
     });
+
+    return prefilledData;
   };
 
   return {
@@ -283,6 +297,7 @@ export const useUserProfile = () => {
     combineAddress,
     prefillFormData,
     updateSharedFormData,
+    getSharedData,
     // Helper functions to get specific fields with type safety
     getUsername: () => profile?.username || '',
     getEmail: () => profile?.email || '',
