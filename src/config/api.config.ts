@@ -55,7 +55,16 @@ export const axiosInstance = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  withCredentials: true, // Enable sending cookies in cross-origin requests
+  withCredentials: true // Enable sending cookies in cross-origin requests
+});
+
+// Add timezone headers to all requests
+axiosInstance.interceptors.request.use((config) => {
+  if (config.headers) {
+    config.headers['X-Timezone'] = 'Asia/Kolkata';
+    config.headers['X-Timezone-Offset'] = '5.5';  // IST offset
+  }
+  return config;
 });
 
 // Add request interceptor for adding auth token
@@ -64,6 +73,12 @@ axiosInstance.interceptors.request.use(
     // Ensure trailing slash for Django URLs
     if (config.url && !config.url.endsWith('/')) {
       config.url = `${config.url}/`;
+    }
+
+    // Ensure headers are set for every request
+    if (config.headers) {
+      config.headers['Content-Type'] = 'application/json';
+      config.headers['Accept'] = 'application/json';
     }
 
     // Log the request details
@@ -111,7 +126,32 @@ const isPublicRoute = (url: string): boolean => {
 
 // Add response interceptor for handling auth errors and token refresh
 axiosInstance.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // For login responses, check if we have tokens
+    if (response.config.url?.includes('/login')) {
+      console.log('Processing login response:', {
+        hasAccess: !!response.data?.access,
+        hasRefresh: !!response.data?.refresh,
+        hasUser: !!response.data?.user
+      });
+      
+      // Validate login response
+      if (response.data?.access && response.data?.refresh) {
+        // Transform the response to match our expected format
+        return {
+          ...response,
+          data: {
+            user: response.data.user,
+            tokens: {
+              access: response.data.access,
+              refresh: response.data.refresh
+            }
+          }
+        };
+      }
+    }
+    return response;
+  },
   async (error) => {
     // Log detailed error information
     console.error('API Error:', {
@@ -342,37 +382,79 @@ export const apiService = {
   auth: {
     login: async (data: { email: string; password: string; rememberMe?: boolean }) => {
       console.log('Attempting login with:', { 
-        email: data.email, 
+        email: data.email,
+        hasPassword: !!data.password,
         rememberMe: data.rememberMe,
         url: API_ENDPOINTS.auth.login
       });
       
       try {
-        const response = await axiosInstance.post(API_ENDPOINTS.auth.login, data, {
+        const requestData = {
+          email: data.email,
+          password: data.password,
+          timezone: 'Asia/Kolkata',
+          timezone_offset: 5.5  // IST offset
+        };
+
+        console.log('Making login request with data:', {
+          ...requestData,
+          password: requestData.password ? 'PROVIDED' : 'MISSING',
+          timezone_info: {
+            offset: requestData.timezone_offset,
+            timezone: requestData.timezone
+          }
+        });
+
+        const response = await axiosInstance.post(API_ENDPOINTS.auth.login, requestData, {
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           },
           withCredentials: true
         });
         
-        console.log('Login response:', {
+        console.log('Raw login response:', {
           status: response.status,
           data: response.data,
-          headers: response.headers
+          hasTokens: !!(response.data?.tokens?.access || response.data?.access)
         });
 
-        if (!response.data?.tokens) {
-          console.error('No tokens in login response');
+        // Check for tokens in the response (either at root level or in tokens object)
+        const tokens = response.data?.tokens || {
+          access: response.data?.access,
+          refresh: response.data?.refresh
+        };
+
+        if (!tokens.access || !tokens.refresh) {
+          console.error('No tokens in login response:', response.data);
           throw new Error('Invalid login response: No tokens received');
         }
+
+        // Transform the response to match our expected format
+        const transformedResponse = {
+          ...response,
+          data: {
+            user: response.data.user || response.data,
+            tokens: tokens
+          }
+        };
+
+        console.log('Transformed login response:', {
+          hasTokens: !!transformedResponse.data.tokens,
+          hasUser: !!transformedResponse.data.user
+        });
         
-        return response;
+        return transformedResponse;
       } catch (error: any) {
         console.error('Login error:', {
           message: error.message,
           response: error.response?.data,
           status: error.response?.status,
-          headers: error.response?.headers
+          headers: error.response?.headers,
+          requestData: {
+            email: data.email,
+            hasPassword: !!data.password
+          }
         });
         throw error;
       }

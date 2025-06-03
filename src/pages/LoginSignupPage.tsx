@@ -15,6 +15,8 @@ interface FormData {
   email: string;
   password: string;
   rememberMe: boolean;
+  timezone?: string;
+  timezone_offset?: number;
 }
 
 interface PasswordCriteria {
@@ -71,7 +73,9 @@ const LoginSignupPage = () => {
     username: "",
     email: "",
     password: "",
-    rememberMe: true
+    rememberMe: true,
+    timezone: "Asia/Kolkata",
+    timezone_offset: 5.5
   });
   const [error, setError] = useState("");
   const [direction, setDirection] = useState(0);
@@ -191,24 +195,29 @@ const LoginSignupPage = () => {
     
     try {
       if (mode === "login") {
-        const response = await login(formData.email, formData.password, formData.rememberMe);
+        // Log the login attempt data for debugging
+        console.log("Login attempt data:", {
+          email: formData.email,
+          password: formData.password ? "PROVIDED" : "MISSING",
+          rememberMe: formData.rememberMe,
+          timezone: formData.timezone,
+          timezone_offset: formData.timezone_offset
+        });
+        
+        await login(
+          formData.email,
+          formData.password,
+          formData.rememberMe
+        );
+        
         // Reset attempts on successful login
         setLoginAttempts(0);
         localStorage.removeItem('loginLockoutUntil');
         toast.success("Successfully logged in!");
         
         // Navigate after successful login
-        if (response.is_first_login) {
-          navigate('/');
-        } else {
-          navigate(from || '/', { replace: true });
-        }
+        navigate(from || '/', { replace: true });
       } else if (mode === "signup") {
-        const response = await signupMutation.mutateAsync({
-          username: formData.username,
-          email: formData.email,
-          password: formData.password
-        });
         
         toast.success("Account created! Please verify your email.");
         
@@ -253,7 +262,9 @@ const LoginSignupPage = () => {
       username: "",
       email: "",
       password: "",
-      rememberMe: true
+      rememberMe: true,
+      timezone: "Asia/Kolkata",
+      timezone_offset: 5.5
     });
     setError("");
     setMode(newMode);

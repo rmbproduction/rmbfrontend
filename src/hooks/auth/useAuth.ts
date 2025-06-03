@@ -20,8 +20,40 @@ export const useLogin = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: LoginData) => 
-      apiService.auth.login(data),
+    mutationFn: async (data: LoginData) => {
+      console.log('Login mutation data:', {
+        email: data.email,
+        password: data.password ? 'PROVIDED' : 'MISSING',
+        rememberMe: data.rememberMe
+      });
+      
+      const response = await apiService.auth.login({
+        email: data.email,
+        password: data.password,
+        rememberMe: data.rememberMe
+      });
+
+      // Transform the response to match expected format
+      if (response.data) {
+        const transformedData = {
+          ...response,
+          data: {
+            user: response.data.user,
+            tokens: {
+              access: response.data.access,
+              refresh: response.data.refresh
+            }
+          }
+        };
+        console.log('Transformed login response:', {
+          hasTokens: !!transformedData.data.tokens,
+          hasUser: !!transformedData.data.user
+        });
+        return transformedData;
+      }
+      
+      return response;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
     },

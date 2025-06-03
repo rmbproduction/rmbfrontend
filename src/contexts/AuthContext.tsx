@@ -87,17 +87,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('Making login request...');
       const response = await loginMutation.mutateAsync({ email, password, rememberMe });
       console.log('Login response received:', {
-        hasTokens: !!response.data?.tokens,
+        hasTokens: !!response.data?.tokens || (!!response.data?.access && !!response.data?.refresh),
         hasUser: !!response.data?.user,
         status: response.status
       });
 
-      if (!response.data?.tokens) {
+      // Handle both response formats (transformed and original)
+      const tokens = response.data?.tokens || {
+        access: response.data?.access,
+        refresh: response.data?.refresh
+      };
+
+      if (!tokens?.access || !tokens?.refresh) {
+        console.error('Invalid login response:', response.data);
         throw new Error('Login failed: No tokens received');
       }
       
       console.log('Setting tokens in TokenManager...');
-      const tokensStored = verifyTokenStorage(response.data.tokens, rememberMe);
+      const tokensStored = verifyTokenStorage(tokens, rememberMe);
       
       if (!tokensStored) {
         throw new Error('Login failed: Unable to store authentication tokens');
