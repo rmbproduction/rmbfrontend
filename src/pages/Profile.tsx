@@ -39,6 +39,8 @@ interface VehicleModel {
 }
 
 interface UserProfile {
+  id?: number;
+  user?: number;
   email: string;
   username: string;
   name: string;
@@ -150,26 +152,28 @@ const Profile = () => {
       console.log('Fetched profile data:', response.data);
 
       if (response.data) {
-        const profileData = response.data;
+        const profileData = {
+          ...response.data,
+          email: response.data.email || '',
+          username: response.data.username || '',
+          name: response.data.name || '',
+          phone: response.data.phone || '',
+          address: response.data.address || '',
+          city: response.data.city || '',
+          state: response.data.state || '',
+          country: response.data.country || '',
+          postal_code: response.data.postal_code || '',
+          profile_photo: response.data.profile_photo || null,
+          vehicle_model: response.data.vehicle_model
+        };
+
         setProfileData(profileData);
         setIsNewProfile(false);
         
         // Update form data with received profile data
-        setFormData({
-          username: profileData.username || '',
-          email: profileData.email || '',
-          name: profileData.name || '',
-          phone: profileData.phone || '',
-          address: profileData.address || '',
-          city: profileData.city || '',
-          state: profileData.state || '',
-          country: profileData.country || '',
-          postal_code: profileData.postal_code || '',
-          profile_photo: profileData.profile_photo || null,
-          vehicle_model: profileData.vehicle_model
-        });
+        setFormData(profileData);
 
-        // If there's a vehicle model, fetch its details and update the dropdowns
+        // Update vehicle selections if vehicle_model exists
         if (profileData.vehicle_model) {
           try {
             const modelResponse = await apiService.vehicle.getModels();
@@ -291,18 +295,19 @@ const Profile = () => {
         return;
       }
 
-      // Prepare data for API
+      // Prepare data for API - only include fields that the API expects
       const profileData = {
         email: formData.email,
         username: formData.username,
         name: formData.name,
+        phone: formData.phone,
         address: formData.address,
         profile_photo: formData.profile_photo,
         city: formData.city,
         state: formData.state,
         country: formData.country,
         postal_code: formData.postal_code,
-        phone: formData.phone
+        vehicle_model: selectedVehicleModel || undefined
       };
 
       console.log('Sending Profile Data:', {
@@ -311,31 +316,54 @@ const Profile = () => {
       });
 
       let response;
-      if (isNewProfile) {
-        response = await apiService.profile.create(profileData);
-        console.log('Profile Created:', response.data);
-        setIsNewProfile(false);
-      } else {
-        response = await apiService.profile.update(profileData);
-        console.log('Profile Updated:', response.data);
+      try {
+        if (isNewProfile) {
+          response = await apiService.profile.create(profileData);
+        } else {
+          response = await apiService.profile.update(profileData);
+        }
+
+        console.log('Profile API Response:', response.data);
+
+        // Validate response data
+        if (!response.data || typeof response.data !== 'object') {
+          throw new Error('Invalid response from server');
+        }
+
+        // Update local state with response data
+        const updatedProfile = {
+          ...response.data,
+          email: response.data.email || formData.email,
+          username: response.data.username || formData.username,
+          name: response.data.name || formData.name,
+          phone: response.data.phone || formData.phone,
+          address: response.data.address || formData.address,
+          city: response.data.city || formData.city,
+          state: response.data.state || formData.state,
+          country: response.data.country || formData.country,
+          postal_code: response.data.postal_code || formData.postal_code,
+          profile_photo: response.data.profile_photo,
+          vehicle_model: response.data.vehicle_model
+        };
+
+        setFormData(updatedProfile);
+        setProfileData(updatedProfile);
+        updateProfile(updatedProfile);
+
+        console.log('Form data after save:', {
+          before: formData,
+          after: updatedProfile
+        });
+
+        toast.success(`Profile ${isNewProfile ? 'created' : 'updated'} successfully!`);
+        setIsEditing(false);
+        
+        // Refresh profile data
+        await fetchProfileData();
+      } catch (error) {
+        console.error('Profile API Error:', error);
+        throw error; // Re-throw to be caught by outer catch block
       }
-
-      setFormData(prev => ({
-        ...prev,
-        ...response.data
-      }));
-
-      updateProfile(response.data);
-
-      console.log('Form data after save:', {
-        before: formData,
-        after: response.data
-      });
-
-      toast.success(`Profile ${isNewProfile ? 'created' : 'updated'} successfully!`);
-      setIsEditing(false);
-      
-      await fetchProfileData();
     } catch (error) {
       console.error('Error saving profile:', error);
       if (axios.isAxiosError(error)) {
