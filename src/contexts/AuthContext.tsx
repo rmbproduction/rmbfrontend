@@ -2,13 +2,23 @@ import React, { createContext, useContext, useCallback, useMemo, useEffect } fro
 import { useLogin, useLogout, useProfile } from '../hooks/auth/useAuth';
 import TokenManager from '../services/tokenManager';
 import { toast } from 'react-toastify';
-import { User, LoginResponse } from '../schemas/auth';
+import { User } from '../schemas/auth';
 import { useQueryClient } from '@tanstack/react-query';
+
+interface LoginResponseData {
+  message?: string;
+  user: User;
+  tokens: {
+    access: string;
+    refresh: string;
+  };
+  is_first_login?: boolean;
+}
 
 interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
-  login: (email: string, password: string, rememberMe?: boolean) => Promise<LoginResponse>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<LoginResponseData>;
   logout: () => Promise<void>;
   isLoading: boolean;
 }
@@ -87,24 +97,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('Making login request...');
       const response = await loginMutation.mutateAsync({ email, password, rememberMe });
       console.log('Login response received:', {
-        hasTokens: !!response.data?.tokens || (!!response.data?.access && !!response.data?.refresh),
+        hasTokens: !!response.data?.tokens,
         hasUser: !!response.data?.user,
         status: response.status
       });
 
-      // Handle both response formats (transformed and original)
-      const tokens = response.data?.tokens || {
-        access: response.data?.access,
-        refresh: response.data?.refresh
-      };
-
-      if (!tokens?.access || !tokens?.refresh) {
+      if (!response.data?.tokens?.access || !response.data?.tokens?.refresh) {
         console.error('Invalid login response:', response.data);
         throw new Error('Login failed: No tokens received');
       }
       
       console.log('Setting tokens in TokenManager...');
-      const tokensStored = verifyTokenStorage(tokens, rememberMe);
+      const tokensStored = verifyTokenStorage(response.data.tokens, rememberMe);
       
       if (!tokensStored) {
         throw new Error('Login failed: Unable to store authentication tokens');

@@ -263,25 +263,9 @@ axiosInstance.interceptors.response.use(
     // For login responses, check if we have tokens
     if (response.config.url?.includes('/login')) {
       console.log('Processing login response:', {
-        hasAccess: !!response.data?.access,
-        hasRefresh: !!response.data?.refresh,
+        hasTokens: !!response.data?.tokens,
         hasUser: !!response.data?.user
       });
-      
-      // Validate login response
-      if (response.data?.access && response.data?.refresh) {
-        // Transform the response to match our expected format
-        return {
-          ...response,
-          data: {
-            user: response.data.user,
-            tokens: {
-              access: response.data.access,
-              refresh: response.data.refresh
-            }
-          }
-        };
-      }
     }
     return response;
   },
@@ -399,7 +383,7 @@ export const apiService = {
           throw new Error('Empty response received');
         }
 
-        // Extract tokens from response
+        // Extract data from response
         const { message, user, access, refresh } = response.data;
 
         console.log('=== RESPONSE VALIDATION ===');
@@ -418,35 +402,21 @@ export const apiService = {
           throw new Error('Login failed: No tokens received');
         }
 
-        // Return the response with tokens at root level
-        const result = {
+        // Return the response in the expected format
+        return {
           status: response.status,
           data: {
             message: message || 'Login successful',
             user,
-            access,
-            refresh
+            tokens: {
+              access,
+              refresh
+            }
           }
         };
-
-        console.log('=== FINAL RESULT ===');
-        console.log('Result structure:', {
-          status: result.status,
-          hasMessage: !!result.data.message,
-          hasUser: !!result.data.user,
-          hasAccess: !!result.data.access,
-          hasRefresh: !!result.data.refresh
-        });
-
-        return result;
-
       } catch (error: any) {
         console.error('=== LOGIN ERROR ===');
-        console.error('Error details:', {
-          message: error.message,
-          status: error.response?.status,
-          data: error.response?.data
-        });
+        console.error('Error details:', error);
         throw error;
       }
     },

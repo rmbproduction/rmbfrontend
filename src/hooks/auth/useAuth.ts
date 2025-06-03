@@ -10,6 +10,20 @@ interface LoginData {
   rememberMe?: boolean;
 }
 
+interface LoginResponseData {
+  message?: string;
+  user: User;
+  tokens: {
+    access: string;
+    refresh: string;
+  };
+}
+
+interface LoginResponse {
+  status: number;
+  data: LoginResponseData;
+}
+
 interface SignupData {
   username: string;
   email: string;
@@ -20,7 +34,7 @@ export const useLogin = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: LoginData) => {
+    mutationFn: async (data: LoginData): Promise<LoginResponse> => {
       console.log('Login mutation data:', {
         email: data.email,
         password: data.password ? 'PROVIDED' : 'MISSING',
@@ -33,26 +47,19 @@ export const useLogin = () => {
         rememberMe: data.rememberMe
       });
 
-      // Transform the response to match expected format
-      if (response.data) {
-        const transformedData = {
-          ...response,
-          data: {
-            user: response.data.user,
-            tokens: {
-              access: response.data.access,
-              refresh: response.data.refresh
-            }
-          }
-        };
-        console.log('Transformed login response:', {
-          hasTokens: !!transformedData.data.tokens,
-          hasUser: !!transformedData.data.user
-        });
-        return transformedData;
+      // The response should already be transformed by the interceptor
+      if (!response.data?.tokens?.access || !response.data?.tokens?.refresh) {
+        console.error('Invalid login response structure:', response.data);
+        throw new Error('Login failed: Invalid response structure');
       }
-      
-      return response;
+
+      console.log('Login response validation:', {
+        hasTokens: !!response.data.tokens,
+        hasUser: !!response.data.user,
+        tokenFormat: 'tokens' in response.data ? 'nested' : 'root'
+      });
+
+      return response as LoginResponse;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
@@ -80,56 +87,21 @@ export const useLogout = () => {
 };
 
 export const useProfile = () => {
-  const hasToken = !!TokenManager.getAccessToken();
-  const [profile, setProfile] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  useEffect(() => {
-    const fetchProfile = async () => {
-      if (!hasToken) {
-        setProfile(null);
-        setIsLoading(false);
-        return;
-      }
-
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['profile'],
+    queryFn: async () => {
       try {
-        console.log('Fetching profile data...');
         const response = await apiService.auth.getProfile();
-        console.log('Profile response:', response);
-        
-        if (!response.data) {
-          console.log('No profile data received');
-          TokenManager.clearTokens();
-          setProfile(null);
-          return;
-        }
-        
-        // Check if the response has the user data in the correct format
-        const userData = response.data.user || response.data;
-        if (!userData || !userData.email) {
-          console.error('Invalid profile data format:', userData);
-          TokenManager.clearTokens();
-          setProfile(null);
-          return;
-        }
-        
-        setProfile(userData);
-      } catch (error: any) {
+        return response.data;
+      } catch (error) {
         console.error('Profile fetch error:', error);
-        if (error.response?.status === 401) {
-          TokenManager.clearTokens();
-        }
-        setError(error);
-      } finally {
-        setIsLoading(false);
+        return null;
       }
-    };
+    },
+    retry: false
+  });
 
-    fetchProfile();
-  }, [hasToken]);
-
-  return { data: profile, isLoading, error };
+  return { data, isLoading, error, refetch };
 };
 
 export const useUpdateProfile = () => {
