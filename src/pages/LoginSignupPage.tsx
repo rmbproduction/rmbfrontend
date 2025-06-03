@@ -11,33 +11,25 @@ import { useAuth } from "../contexts/AuthContext";
 import { useSignup, useForgotPassword, useGoogleLogin } from "../hooks/auth/useAuth";
 
 // Define interfaces based on actual backend response
-interface LoginResponseUser {
-  email: string;
-  username: string;
-  is_admin: boolean;
-  is_staff_member: boolean;
-  is_field_staff: boolean;
-  is_customer: boolean;
-  email_verified: boolean;
-}
-
 interface LoginResponseData {
-  message: string;
-  user: LoginResponseUser;
-  tokens: {
-    access: string;
-    refresh: string;
+  message?: string;
+  access?: string;
+  refresh?: string;
+  user?: {
+    email: string;
+    username: string;
+    is_admin: boolean;
+    is_staff_member: boolean;
+    is_field_staff: boolean;
+    is_customer: boolean;
+    email_verified: boolean;
   };
 }
 
-interface ApiResponse<T> {
+interface ApiResponse {
   status: number;
-  statusText: string;
-  headers: any;
-  data: T;
+  data: LoginResponseData;
 }
-
-type LoginResponse = ApiResponse<LoginResponseData>;
 
 interface FormData {
   username: string;
@@ -220,34 +212,30 @@ const LoginSignupPage = () => {
       if (mode === "login") {
         console.log("Login attempt:", {
           email: formData.email,
-          hasPassword: !!formData.password,
-          rememberMe: formData.rememberMe
+          hasPassword: !!formData.password
         });
 
-        const loginResult = await login(
+        const result = await login(
           formData.email,
           formData.password,
           formData.rememberMe
-        ) as unknown as LoginResponse;  // Safe type assertion with unknown intermediate
+        );
 
-        if (!loginResult?.data) {
-          throw new Error("Login failed: No response data");
+        // Type assertion after checking response structure
+        if (!result || typeof result !== 'object' || !('data' in result)) {
+          throw new Error('Invalid response format');
         }
 
-        console.log("Login response:", {
-          success: true,
-          hasTokens: !!(loginResult.data.tokens?.access && loginResult.data.tokens?.refresh),
-          hasUser: !!loginResult.data.user
-        });
+        const loginResponse = result.data as LoginResponseData;
 
-        if (!loginResult.data.tokens?.access || !loginResult.data.tokens?.refresh) {
-          throw new Error("Login failed: Invalid response format");
+        if (loginResponse.access && loginResponse.refresh) {
+          setLoginAttempts(0);
+          localStorage.removeItem('loginLockoutUntil');
+          toast.success(loginResponse.message || "Login successful");
+          navigate(from, { replace: true });
+        } else {
+          throw new Error(loginResponse.message || "Invalid credentials");
         }
-
-        setLoginAttempts(0);
-        localStorage.removeItem('loginLockoutUntil');
-        toast.success(loginResult.data.message || "Successfully logged in!");
-        navigate(from, { replace: true });
 
       } else if (mode === "signup") {
         const response = await signupMutation.mutateAsync({
@@ -263,10 +251,12 @@ const LoginSignupPage = () => {
         }
         
         navigate(`/verify-email?email=${encodeURIComponent(formData.email)}`);
+
       } else if (mode === "forgot") {
         await forgotPasswordMutation.mutateAsync({
           email: formData.email
         });
+        
         sessionStorage.setItem('resetPasswordEmail', formData.email);
         navigate("/password-reset-confirmation");
         toast.success("Password reset link sent to your email!");
@@ -276,7 +266,9 @@ const LoginSignupPage = () => {
       if (mode === "login") {
         handleLoginFailure();
       }
-      handleApiError(error);
+      const errorMessage = error.response?.data?.detail || error.message || "An error occurred";
+      setError(errorMessage);
+      toast.error(errorMessage);
     }
   };
 

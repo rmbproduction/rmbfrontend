@@ -372,95 +372,41 @@ export const apiService = {
     login: async (data: { email: string; password: string; rememberMe?: boolean }) => {
       console.log('Attempting login with:', { 
         email: data.email,
-        hasPassword: !!data.password,
-        rememberMe: data.rememberMe,
-        url: API_ENDPOINTS.auth.login
+        hasPassword: !!data.password
       });
       
       try {
-        const requestData = {
+        const loginData = {
           email: data.email,
-          password: data.password,
-          timezone: 'Asia/Kolkata',
-          timezone_offset: 5.5  // IST offset
+          password: data.password
         };
 
-        const headers = {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest'
-        };
-
-        console.log('Making login request with:', {
-          url: `${API_BASE_URL}/${API_ENDPOINTS.auth.login}`,
-          headers,
-          data: {
-            ...requestData,
-            password: 'PROVIDED'
-          }
-        });
-
-        const response = await axiosInstance.post(API_ENDPOINTS.auth.login, requestData, {
-          headers,
-          withCredentials: true
+        const response = await axiosInstance.post(API_ENDPOINTS.auth.login, loginData, {
+          headers: { 'Content-Type': 'application/json' }
         });
         
-        console.log('Complete login response:', {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers,
-          data: response.data
-        });
+        console.log('Login response:', response.data);
 
-        // Validate response data
-        if (!response.data) {
-          throw new Error('Empty response received');
+        // Match the exact response structure from the backend
+        const { message, access, refresh, user } = response.data;
+
+        if (!access || !refresh) {
+          throw new Error('Login failed: Missing tokens');
         }
 
-        // Extract data from response, handling both nested and flat structures
-        const { user, tokens, message } = response.data;
-        const access = tokens?.access || response.data.access;
-        const refresh = tokens?.refresh || response.data.refresh;
-
-        console.log('Extracted login data:', {
-          hasUser: !!user,
-          hasTokens: !!(tokens || (access && refresh)),
-          tokenSource: tokens ? 'nested' : 'flat'
-        });
-
-        if (!access || !refresh || !user) {
-          console.error('Invalid response structure:', {
-            hasAccess: !!access,
-            hasRefresh: !!refresh,
-            hasUser: !!user,
-            responseData: response.data
-          });
-          throw new Error('Invalid login response: Missing required fields');
-        }
-
-        // Return the response in the expected format
+        // Return in the format expected by the auth context
         return {
-          ...response,
+          status: response.status,
           data: {
             message: message || 'Login successful',
-            user,
-            tokens: {
-              access,
-              refresh
-            }
+            access,
+            refresh,
+            user
           }
         };
+
       } catch (error: any) {
-        console.error('Login error:', {
-          message: error.message,
-          response: error.response?.data,
-          status: error.response?.status,
-          headers: error.response?.headers,
-          requestData: {
-            email: data.email,
-            hasPassword: !!data.password
-          }
-        });
+        console.error('Login error:', error.response?.data || error.message);
         throw error;
       }
     },
