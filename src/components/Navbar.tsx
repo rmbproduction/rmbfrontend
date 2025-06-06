@@ -11,6 +11,7 @@ import { useCartCountStore } from '../hooks/cart/useCartQueries';
 // Define menu items to avoid duplication
 const MENU_ITEMS = [
   { label: 'Services', path: '/', section: 'services' },
+  { label: 'Spare Parts', path: '/spare-parts' },
   { label: 'Subscription', path: '/subscription' },
   { label: 'How It Works', path: '/how-it-works' },
   { label: 'Contact Us', path: '/contact-us' }

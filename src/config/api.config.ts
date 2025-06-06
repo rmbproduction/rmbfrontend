@@ -11,6 +11,9 @@ export const queryClient = new QueryClient({
       enabled: false,
       gcTime: 10 * 60 * 1000, // 10 minutes
     },
+    mutations: {
+      onError: (error: unknown) => handleQueryError(error)
+    }
   },
 });
 
@@ -88,6 +91,18 @@ export const API_ENDPOINTS = {
     bookings: '/marketplace/bookings/',
     booking: (id: string) => `/marketplace/bookings/${id}/`,
     emailVehicleSummary: '/marketplace/email-vehicle-summary/',
+  },
+
+  // Spare parts endpoints
+  spareParts: {
+    list: '/spare-parts/',
+    detail: (id: string) => `/spare-parts/${id}/`,
+    categories: '/spare-parts/categories/',
+    reviews: '/spare-parts/reviews/',
+    search: '/spare-parts/search/',
+    filter: '/spare-parts/filter/',
+    manufacturers: '/spare-parts/manufacturers/',
+    vehicleCompatibility: '/spare-parts/vehicle-compatibility/',
   },
 
   // Repair service endpoints
@@ -281,15 +296,17 @@ axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    const currentPath = window.location.pathname;
 
     console.log('Response error:', {
       status: error.response?.status,
       url: originalRequest?.url,
-      hasRetried: !!originalRequest?._retry
+      hasRetried: !!originalRequest?._retry,
+      isPublicRoute: isPublicRoute(currentPath)
     });
 
     // Handle 401 errors (unauthorized)
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !isPublicRoute(currentPath)) {
       originalRequest._retry = true;
 
       try {
@@ -812,6 +829,42 @@ export const apiService = {
     checkCloudinary: () => axiosInstance.get(API_ENDPOINTS.vehicle.checkCloudinary),
     getVehicleImages: (id: string) => axiosInstance.get(API_ENDPOINTS.vehicle.vehicleImages(id)),
     getUploadParams: (id: string) => axiosInstance.get(API_ENDPOINTS.vehicle.uploadParams(id)),
+  },
+
+  // Spare parts services
+  spareParts: {
+    getAll: async (params?: any) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.list, { params });
+      return response.data;
+    },
+    getById: async (id: string) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.detail(id));
+      return response.data;
+    },
+    getCategories: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.categories);
+      return response.data;
+    },
+    getReviews: async (partId: string) => {
+      const response = await axiosInstance.get(`${API_ENDPOINTS.spareParts.reviews}?part_id=${partId}`);
+      return response.data;
+    },
+    search: async (query: string) => {
+      const response = await axiosInstance.get(`${API_ENDPOINTS.spareParts.search}?q=${query}`);
+      return response.data;
+    },
+    filter: async (filters: any) => {
+      const response = await axiosInstance.post(API_ENDPOINTS.spareParts.filter, filters);
+      return response.data;
+    },
+    getManufacturers: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.manufacturers);
+      return response.data;
+    },
+    getVehicleCompatibility: async (partId: string) => {
+      const response = await axiosInstance.get(`${API_ENDPOINTS.spareParts.vehicleCompatibility}?part_id=${partId}`);
+      return response.data;
+    },
   },
 };
 
