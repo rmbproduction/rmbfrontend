@@ -95,14 +95,15 @@ export const API_ENDPOINTS = {
 
   // Spare parts endpoints
   spareParts: {
-    list: '/spare-parts/',
-    detail: (id: string) => `/spare-parts/${id}/`,
+    list: '/spare-parts/parts/',
+    detail: (id: string) => `/spare-parts/parts/${id}/`,
     categories: '/spare-parts/categories/',
-    reviews: '/spare-parts/reviews/',
-    search: '/spare-parts/search/',
-    filter: '/spare-parts/filter/',
-    manufacturers: '/spare-parts/manufacturers/',
-    vehicleCompatibility: '/spare-parts/vehicle-compatibility/',
+    reviews: (id: string) => `/spare-parts/parts/${id}/reviews/`,
+    related: (id: string) => `/spare-parts/parts/${id}/related/`,
+    featured: '/spare-parts/parts/featured/',
+    byVehicle: '/spare-parts/parts/by_vehicle/',
+    filter: '/spare-parts/parts/',
+    search: '/spare-parts/parts/',
   },
 
   // Repair service endpoints
@@ -846,25 +847,33 @@ export const apiService = {
       return response.data;
     },
     getReviews: async (partId: string) => {
-      const response = await axiosInstance.get(`${API_ENDPOINTS.spareParts.reviews}?part_id=${partId}`);
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.reviews(partId));
+      return response.data;
+    },
+    getRelated: async (partId: string) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.related(partId));
+      return response.data;
+    },
+    getFeatured: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.featured);
+      return response.data;
+    },
+    getByVehicle: async (params: { vehicle_type?: string; manufacturer?: string; model?: string }) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.byVehicle, { params });
       return response.data;
     },
     search: async (query: string) => {
-      const response = await axiosInstance.get(`${API_ENDPOINTS.spareParts.search}?q=${query}`);
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.search, { 
+        params: { search: query }
+      });
       return response.data;
     },
     filter: async (filters: any) => {
-      const response = await axiosInstance.post(API_ENDPOINTS.spareParts.filter, filters);
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.filter, { 
+        params: filters 
+      });
       return response.data;
-    },
-    getManufacturers: async () => {
-      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.manufacturers);
-      return response.data;
-    },
-    getVehicleCompatibility: async (partId: string) => {
-      const response = await axiosInstance.get(`${API_ENDPOINTS.spareParts.vehicleCompatibility}?part_id=${partId}`);
-      return response.data;
-    },
+    }
   },
 };
 
