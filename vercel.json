@@ -3,6 +3,8 @@
     { "source": "/profile", "destination": "/index.html" },
     { "source": "/service/:path*", "destination": "/index.html" },
     { "source": "/vehicles/:path*", "destination": "/index.html" },
+    { "source": "/spare-parts/:path*", "destination": "/index.html" },
+    { "source": "/spare-parts", "destination": "/index.html" },
     { "source": "/verify-email/:token", "destination": "/index.html" },
     { "source": "/reset-password/:token", "destination": "/index.html" },
     { "source": "/login", "destination": "/index.html" },
