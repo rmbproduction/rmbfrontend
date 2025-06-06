@@ -19,12 +19,12 @@ const SparePartFilters: React.FC<SparePartFiltersProps> = ({ onFiltersChange, lo
   useEffect(() => {
     const fetchFilterOptions = async () => {
       try {
-        const [categoriesData, manufacturersData] = await Promise.all([
+        const [categoriesData, manufacturersResponse] = await Promise.all([
           apiService.spareParts.getCategories(),
-          apiService.spareParts.getManufacturers()
+          apiService.vehicle.getManufacturers()
         ]);
         setCategories(categoriesData);
-        setManufacturers(manufacturersData);
+        setManufacturers(manufacturersResponse.data);
       } catch (error) {
         console.error('Error fetching filter options:', error);
       }
