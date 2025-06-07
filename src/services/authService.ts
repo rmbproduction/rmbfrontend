@@ -2,6 +2,12 @@ import { tokenService } from './tokenService';
 import { apiService } from '../config/api.config';
 import type { LoginResponse, SignupResponse, User } from '../types/api';
 
+// Add type definition at the top
+interface TokenResponse {
+  access: string;
+  refresh?: string;
+}
+
 // Use apiService directly since it already has the correct base URL configured
 export const authService = {
   login: async (email: string, password: string, rememberMe: boolean = false) => {
@@ -80,23 +86,37 @@ export const authService = {
     try {
       const refreshToken = tokenService.getRefreshToken();
       if (!refreshToken) {
+        console.error('No refresh token found in storage');
+        tokenService.clearToken(); // Clear tokens
         throw new Error('No refresh token available');
       }
 
-      // Send refresh token without 'Bearer ' prefix
+      // Clean the refresh token before sending
+      const cleanToken = refreshToken.replace('Bearer ', '').trim();
+      
+      if (!cleanToken) {
+        console.error('Invalid refresh token format');
+        tokenService.clearToken();
+        throw new Error('Invalid refresh token');
+      }
+
       const response = await apiService.auth.refreshToken({
-        refresh: refreshToken.replace('Bearer ', '').trim()
+        refresh: cleanToken
       });
 
-      if (!response.data?.access) {
+      const tokenData = response.data as TokenResponse;
+      if (!tokenData.access) {
+        console.error('Invalid token refresh response:', tokenData);
+        tokenService.clearToken();
         throw new Error('Invalid token refresh response');
       }
 
-      tokenService.setToken(response.data.access);
-      return response.data.access;
+      // Store the new access token
+      tokenService.setToken(tokenData.access);
+      return tokenData.access;
     } catch (error) {
       console.error('Token refresh error:', error);
-      tokenService.clearToken();
+      tokenService.clearToken(); // Clear tokens on any error
       throw error;
     }
   },

@@ -29,16 +29,18 @@ const handleQueryError = (error: unknown) => {
 
 // API URLs
 export const API_BASE_URL = 'https://repairmybike.up.railway.app/api';
-export const FRONTEND_URL = 'https://repairmybike.up.railway.app';
+export const FRONTEND_URL = 'https://repairmybike.in';
 
 // Export API configuration for components that need it
 export const API_CONFIG = {
   baseURL: API_BASE_URL,
   frontendURL: FRONTEND_URL,
-  withCredentials: true,
+  withCredentials: true, // Important for CORS with credentials
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
+    'Origin': FRONTEND_URL,
+    'Access-Control-Allow-Origin': FRONTEND_URL,
   }
 } as const;
 
@@ -182,6 +184,7 @@ export const API_ENDPOINTS = {
   // Profile endpoints
   profile: {
     details: '/accounts/profile/',
+    create: '/accounts/profile/create/',
     update: '/accounts/profile/update/',
     changePassword: '/accounts/profile/change-password/',
   },
@@ -199,16 +202,25 @@ export const API_ENDPOINTS = {
   },
 };
 
-// Create axios instance with enforced base URL
+// Create axios instance with enforced base URL and CORS configuration
 const axiosInstance = axios.create(API_CONFIG);
 
 // Request interceptor for API calls
 axiosInstance.interceptors.request.use(
   (config) => {
+    // Add CORS headers
+    config.headers = {
+      ...config.headers,
+      'Origin': FRONTEND_URL,
+      'Access-Control-Allow-Origin': FRONTEND_URL,
+    };
+
+    // Add auth token if available
     const token = TokenManager.getAccessToken();
-    if (token && config.headers) {
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -220,6 +232,13 @@ axiosInstance.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Handle CORS errors
+    if (error.response?.status === 0 || error.response?.status === 'cors') {
+      console.error('CORS error detected:', error);
+      return Promise.reject(new Error('CORS error: Unable to access the API. Please check your network connection.'));
+    }
+
+    // Handle 401 and token refresh
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
@@ -239,9 +258,8 @@ axiosInstance.interceptors.response.use(
             refresh: refreshToken 
           }, localStorage.getItem('token_storage_type') === 'local');
 
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${response.data.access}`;
-          }
+          // Update auth header and retry
+          originalRequest.headers.Authorization = `Bearer ${response.data.access}`;
           return axiosInstance(originalRequest);
         }
       } catch (refreshError) {
@@ -361,6 +379,7 @@ export const apiService = {
   // Profile functions
   profile: {
     getDetails: () => axiosInstance.get<User>(API_ENDPOINTS.auth.profile),
+    create: (data: Partial<User>) => axiosInstance.post(API_ENDPOINTS.profile.create, data),
     update: (data: Partial<User>) => axiosInstance.patch(API_ENDPOINTS.auth.profile, data),
     changePassword: (data: { currentPassword: string; newPassword: string }) =>
       axiosInstance.post(API_ENDPOINTS.auth.changePassword, data),
