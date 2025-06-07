@@ -1,8 +1,7 @@
-import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import TokenManager from '../services/tokenManager';
-import { QueryClient } from '@tanstack/react-query';
-import type { LoginResponse, SignupResponse, GoogleAuthResponse, ForgotPasswordResponse, User } from '../types/api';
+import axios from 'axios';
 import { tokenService } from '../services/tokenService';
+import { QueryClient } from '@tanstack/react-query';
+import type { LoginResponse, SignupResponse, User } from '../types/api';
 
 // Create a new QueryClient instance with basic configuration
 export const queryClient = new QueryClient({
@@ -16,19 +15,8 @@ export const queryClient = new QueryClient({
   },
 });
 
-// Global query error handler
-const handleQueryError = (error: unknown) => {
-  const axiosError = error as AxiosError;
-  if (axiosError?.response?.status === 401) {
-    console.log('Unauthorized request detected, cleaning up...');
-    TokenManager.clearTokens();
-    queryClient.clear();
-  }
-};
-
-// API URLs
-export const API_BASE_URL = 'https://repairmybike.up.railway.app/api';
-export const FRONTEND_URL = 'https://repairmybike.in';
+// API base URL
+const API_BASE_URL = 'https://repairmybike.up.railway.app/api';
 
 // Export API configuration for components that need it
 export const API_CONFIG = {
@@ -67,6 +55,7 @@ export const API_ENDPOINTS = {
     resetPassword: '/accounts/password/reset/confirm/',
     profile: '/accounts/profile/',
     refreshToken: '/accounts/token/refresh/',
+    changePassword: '/accounts/profile/change-password/'
   },
 
   // Vehicle marketplace endpoints
@@ -210,13 +199,10 @@ axiosInstance.interceptors.request.use(
     }
 
     // Add auth token if available
-    const token = TokenManager.getAccessToken();
+    const token = tokenService.getAccessToken();
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers.Authorization = token; // Already includes 'Bearer '
     }
-
-    // Add required headers for CORS
-    config.headers['Origin'] = FRONTEND_URL;
     
     return config;
   },
@@ -243,7 +229,7 @@ axiosInstance.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = TokenManager.getRefreshToken();
+        const refreshToken = tokenService.getRefreshToken();
         if (!refreshToken) {
           throw new Error('No refresh token available');
         }
@@ -253,10 +239,7 @@ axiosInstance.interceptors.response.use(
         });
 
         if (response.data?.access) {
-          TokenManager.setTokens({
-            access: response.data.access,
-            refresh: refreshToken
-          });
+          tokenService.setToken(response.data.access);
           if (!originalRequest.headers) {
             originalRequest.headers = {};
           }
@@ -265,7 +248,7 @@ axiosInstance.interceptors.response.use(
         }
       } catch (refreshError) {
         console.error('Token refresh failed:', refreshError);
-        TokenManager.clearTokens();
+        tokenService.clearTokens();
         return Promise.reject(refreshError);
       }
     }
@@ -295,6 +278,8 @@ export const apiService = {
       axiosInstance.post(API_ENDPOINTS.auth.refreshToken, data),
     resetPassword: (data: { email: string }) =>
       axiosInstance.post(API_ENDPOINTS.auth.resetPassword, data),
+    changePassword: (data: { currentPassword: string; newPassword: string }) =>
+      axiosInstance.post(API_ENDPOINTS.auth.changePassword, data),
   },
 
   // Vehicle marketplace services
@@ -502,7 +487,7 @@ async function handleLogoutCleanup() {
   
   try {
     // Clear all tokens using TokenManager
-    TokenManager.clearTokens();
+    tokenService.clearTokens();
     console.log('Tokens cleared');
 
     // Clear all React Query cache
@@ -524,7 +509,7 @@ async function handleLogoutCleanup() {
   } catch (error) {
     console.error('Error during logout cleanup:', error);
     // Still clear tokens even if other cleanup fails
-    TokenManager.clearTokens();
+    tokenService.clearTokens();
   }
 }
 

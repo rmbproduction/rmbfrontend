@@ -1,6 +1,6 @@
 import { tokenService } from './tokenService';
 import { apiService } from '../config/api.config';
-import type { LoginResponse, SignupResponse, User } from '../types/api';
+import type { User } from '../types/api';
 
 // Add type definition at the top
 interface TokenResponse {
@@ -18,10 +18,11 @@ export const authService = {
         throw new Error('Invalid token data received');
       }
 
-      // Store tokens
+      // Store tokens with rememberMe preference
       tokenService.setTokens(
         response.data.tokens.access,
-        response.data.tokens.refresh
+        response.data.tokens.refresh,
+        rememberMe
       );
 
       return {
@@ -48,7 +49,7 @@ export const authService = {
       console.error('Logout error:', error);
     } finally {
       // Always clear tokens regardless of API call success
-      tokenService.clearToken();
+      tokenService.clearTokens();
     }
   },
 
@@ -87,7 +88,7 @@ export const authService = {
       const refreshToken = tokenService.getRefreshToken();
       if (!refreshToken) {
         console.error('No refresh token found in storage');
-        tokenService.clearToken(); // Clear tokens
+        tokenService.clearTokens();
         throw new Error('No refresh token available');
       }
 
@@ -96,7 +97,7 @@ export const authService = {
       
       if (!cleanToken) {
         console.error('Invalid refresh token format');
-        tokenService.clearToken();
+        tokenService.clearTokens();
         throw new Error('Invalid refresh token');
       }
 
@@ -107,7 +108,7 @@ export const authService = {
       const tokenData = response.data as TokenResponse;
       if (!tokenData.access) {
         console.error('Invalid token refresh response:', tokenData);
-        tokenService.clearToken();
+        tokenService.clearTokens();
         throw new Error('Invalid token refresh response');
       }
 
@@ -116,7 +117,7 @@ export const authService = {
       return tokenData.access;
     } catch (error) {
       console.error('Token refresh error:', error);
-      tokenService.clearToken(); // Clear tokens on any error
+      tokenService.clearTokens();
       throw error;
     }
   },

@@ -1,24 +1,35 @@
 // Token storage keys
-const TOKEN_KEY = 'access_token';
+const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
+const TOKEN_EXPIRY_KEY = 'token_expiry';
+const STORAGE_TYPE_KEY = 'token_storage_type';
 
 export const tokenService = {
   // Get the current access token
-  getToken: (): string | null => {
-    const token = localStorage.getItem(TOKEN_KEY);
+  getAccessToken: (): string | null => {
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
     return token ? `Bearer ${token}` : null;
   },
 
   // Get raw access token without Bearer prefix
   getRawToken: (): string | null => {
-    return localStorage.getItem(TOKEN_KEY);
+    return localStorage.getItem(ACCESS_TOKEN_KEY);
   },
 
   // Set a new access token
   setToken: (token: string): void => {
+    if (!token) {
+      console.error('Attempted to store empty token');
+      return;
+    }
     // Remove Bearer prefix if present
     const cleanToken = token.replace('Bearer ', '').trim();
-    localStorage.setItem(TOKEN_KEY, cleanToken);
+    localStorage.setItem(ACCESS_TOKEN_KEY, cleanToken);
+    
+    // Set token expiry (30 minutes from now)
+    const expiry = new Date();
+    expiry.setMinutes(expiry.getMinutes() + 30);
+    localStorage.setItem(TOKEN_EXPIRY_KEY, expiry.getTime().toString());
   },
 
   // Get the refresh token
@@ -28,29 +39,58 @@ export const tokenService = {
 
   // Set a new refresh token
   setRefreshToken: (token: string): void => {
+    if (!token) {
+      console.error('Attempted to store empty refresh token');
+      return;
+    }
     // Remove Bearer prefix if present
     const cleanToken = token.replace('Bearer ', '').trim();
     localStorage.setItem(REFRESH_TOKEN_KEY, cleanToken);
   },
 
   // Clear all tokens
-  clearToken: (): void => {
-    localStorage.removeItem(TOKEN_KEY);
+  clearTokens: (): void => {
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
+    localStorage.removeItem(TOKEN_EXPIRY_KEY);
+    localStorage.removeItem(STORAGE_TYPE_KEY);
   },
 
   // Set both tokens at once (useful after login)
-  setTokens: (access: string, refresh: string): void => {
-    // Remove Bearer prefix if present
-    const cleanAccess = access.replace('Bearer ', '').trim();
-    const cleanRefresh = refresh.replace('Bearer ', '').trim();
-    localStorage.setItem(TOKEN_KEY, cleanAccess);
-    localStorage.setItem(REFRESH_TOKEN_KEY, cleanRefresh);
+  setTokens: (access: string, refresh: string, rememberMe: boolean = false): void => {
+    try {
+      if (!access || !refresh) {
+        throw new Error('Invalid tokens provided');
+      }
+
+      const storage = rememberMe ? localStorage : sessionStorage;
+      
+      // Remove Bearer prefix if present
+      const cleanAccess = access.replace('Bearer ', '').trim();
+      const cleanRefresh = refresh.replace('Bearer ', '').trim();
+      
+      storage.setItem(ACCESS_TOKEN_KEY, cleanAccess);
+      storage.setItem(REFRESH_TOKEN_KEY, cleanRefresh);
+      
+      // Store storage type for future reference
+      localStorage.setItem(STORAGE_TYPE_KEY, rememberMe ? 'local' : 'session');
+      
+      // Set token expiry (30 minutes from now)
+      const expiry = new Date();
+      expiry.setMinutes(expiry.getMinutes() + 30);
+      storage.setItem(TOKEN_EXPIRY_KEY, expiry.getTime().toString());
+      
+      console.log('Tokens stored successfully in:', rememberMe ? 'localStorage' : 'sessionStorage');
+    } catch (error) {
+      console.error('Error storing tokens:', error);
+      this.clearTokens();
+      throw error;
+    }
   },
 
   // Check if we have valid tokens
   hasValidTokens: (): boolean => {
-    const accessToken = localStorage.getItem(TOKEN_KEY);
+    const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
     const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
     return !!accessToken && !!refreshToken;
   },
@@ -68,13 +108,14 @@ export const tokenService = {
       const { exp } = JSON.parse(jsonPayload);
       return exp ? exp * 1000 : null; // Convert to milliseconds
     } catch (e) {
+      console.error('Error parsing token:', e);
       return null;
     }
   },
 
   // Check if access token is expired
   isTokenExpired: (): boolean => {
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
     if (!token) return true;
 
     const expiration = tokenService.getTokenExpiration(token);
