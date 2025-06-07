@@ -5,12 +5,20 @@ const REFRESH_TOKEN_KEY = 'refresh_token';
 export const tokenService = {
   // Get the current access token
   getToken: (): string | null => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    return token ? `Bearer ${token}` : null;
+  },
+
+  // Get raw access token without Bearer prefix
+  getRawToken: (): string | null => {
     return localStorage.getItem(TOKEN_KEY);
   },
 
   // Set a new access token
   setToken: (token: string): void => {
-    localStorage.setItem(TOKEN_KEY, token);
+    // Remove Bearer prefix if present
+    const cleanToken = token.replace('Bearer ', '').trim();
+    localStorage.setItem(TOKEN_KEY, cleanToken);
   },
 
   // Get the refresh token
@@ -20,7 +28,9 @@ export const tokenService = {
 
   // Set a new refresh token
   setRefreshToken: (token: string): void => {
-    localStorage.setItem(REFRESH_TOKEN_KEY, token);
+    // Remove Bearer prefix if present
+    const cleanToken = token.replace('Bearer ', '').trim();
+    localStorage.setItem(REFRESH_TOKEN_KEY, cleanToken);
   },
 
   // Clear all tokens
@@ -31,8 +41,11 @@ export const tokenService = {
 
   // Set both tokens at once (useful after login)
   setTokens: (access: string, refresh: string): void => {
-    localStorage.setItem(TOKEN_KEY, access);
-    localStorage.setItem(REFRESH_TOKEN_KEY, refresh);
+    // Remove Bearer prefix if present
+    const cleanAccess = access.replace('Bearer ', '').trim();
+    const cleanRefresh = refresh.replace('Bearer ', '').trim();
+    localStorage.setItem(TOKEN_KEY, cleanAccess);
+    localStorage.setItem(REFRESH_TOKEN_KEY, cleanRefresh);
   },
 
   // Check if we have valid tokens
@@ -45,7 +58,9 @@ export const tokenService = {
   // Parse JWT token and get expiration
   getTokenExpiration: (token: string): number | null => {
     try {
-      const base64Url = token.split('.')[1];
+      // Remove Bearer prefix if present
+      const cleanToken = token.replace('Bearer ', '').trim();
+      const base64Url = cleanToken.split('.')[1];
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
       const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => 
         '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)

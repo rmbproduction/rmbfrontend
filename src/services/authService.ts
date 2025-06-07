@@ -32,14 +32,16 @@ export const authService = {
     try {
       const refreshToken = tokenService.getRefreshToken();
       if (refreshToken) {
-        await apiService.auth.logout(refreshToken);
+        // Send refresh token without 'Bearer ' prefix
+        await apiService.auth.logout({
+          refresh: refreshToken.replace('Bearer ', '').trim()
+        });
       }
-      tokenService.clearToken();
     } catch (error) {
       console.error('Logout error:', error);
-      // Clear tokens even if API call fails
+    } finally {
+      // Always clear tokens regardless of API call success
       tokenService.clearToken();
-      throw error;
     }
   },
 
@@ -80,7 +82,11 @@ export const authService = {
         throw new Error('No refresh token available');
       }
 
-      const response = await apiService.auth.refreshToken(refreshToken);
+      // Send refresh token without 'Bearer ' prefix
+      const response = await apiService.auth.refreshToken({
+        refresh: refreshToken.replace('Bearer ', '').trim()
+      });
+
       if (!response.data?.access) {
         throw new Error('Invalid token refresh response');
       }
