@@ -1,6 +1,9 @@
 import axios, { AxiosError } from 'axios';
 import TokenManager from '../services/tokenManager';
 import { QueryClient } from '@tanstack/react-query';
+import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import { tokenService } from '../services/tokenService';
+import type { LoginResponse, SignupResponse, GoogleAuthResponse, ForgotPasswordResponse, User } from '../types/api';
 
 // Create a new QueryClient instance with basic configuration
 export const queryClient = new QueryClient({
@@ -210,364 +213,120 @@ export const axiosInstance = axios.create({
   withCredentials: true
 });
 
-// Add request interceptor for adding auth token
-axiosInstance.interceptors.request.use(
-  async (config) => {
-    // Clean up the URL parts
-    const baseUrl = (config.baseURL || '').replace(/\/+$/, '');
-    let url = (config.url || '').replace(/^\/+/, '');
+// Helper to check if a request needs auth token
+const isAuthRequiredRequest = (config: AxiosRequestConfig): boolean => {
+  const path = config.url?.toLowerCase() || '';
+  return !(
+    path.includes('login') ||
+    path.includes('signup') ||
+    path.includes('verify-email') ||
+    path.includes('password/reset')
+  );
+};
 
-    // Ensure trailing slash for Django URLs
-    if (url && !url.endsWith('/')) {
-      url = `${url}/`;
+// Request interceptor for API calls
+axiosInstance.interceptors.request.use(
+  (config: AxiosRequestConfig): AxiosRequestConfig => {
+    // Ensure URL starts with /
+    if (config.url && !config.url.startsWith('/')) {
+      config.url = `/${config.url}`;
     }
 
-    // Set the cleaned url
-    config.url = url;
-    config.baseURL = baseUrl;
+    // Only add auth token for protected routes
+    if (isAuthRequiredRequest(config)) {
+      const token = tokenService.getToken();
+      if (token && config.headers) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
 
-    // Calculate and log the full URL for debugging
-    const fullUrl = `${baseUrl}/${url}`;
     console.log('Making request:', {
+      method: config.method,
       url: config.url,
       baseURL: config.baseURL,
-      fullUrl,
-      method: config.method,
-      hasAuthHeader: !!config.headers.Authorization
+      fullUrl: `${config.baseURL}${config.url}`,
+      hasAuthHeader: !!config.headers?.Authorization
     });
-
-    // Get the access token
-    const token = TokenManager.getAccessToken();
-    
-    // Only add token if we have one and it's not a login/verify request
-    if (token && !url.includes('login') && !url.includes('verify-email')) {
-      console.log('Adding auth token to request');
-      config.headers.Authorization = `Bearer ${token}`;
-    } else {
-      console.log('No token added to request:', {
-        hasToken: !!token,
-        isLoginRequest: url.includes('login'),
-        isVerifyRequest: url.includes('verify-email')
-      });
-    }
 
     return config;
   },
-  (error) => {
-    console.error('Request interceptor error:', error);
+  (error: unknown) => {
     return Promise.reject(error);
   }
 );
 
-// Helper function to check if a route is public
-const isPublicRoute = (url: string): boolean => {
-  const publicRoutes = [
-    '/login',
-    '/verify-email',
-    '/resend-verification',
-    '/reset-password',
-    '/password-reset-confirmation',
-    '/',
-    '/vehicles',
-    '/service',
-    '/contact',
-    '/about-us'
-  ];
-  return publicRoutes.some(route => url.includes(route));
-};
-
-// Add response interceptor for handling auth errors and token refresh
+// Response interceptor for API calls
 axiosInstance.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
+  (response: AxiosResponse): AxiosResponse => response,
+  async (error: unknown) => {
+    if (!(error instanceof Error)) {
+      return Promise.reject(error);
+    }
 
-    console.log('Response error:', {
-      status: error.response?.status,
-      url: originalRequest?.url,
-      hasRetried: !!originalRequest?._retry
-    });
+    const axiosError = error as AxiosError;
+    const originalRequest = axiosError.config;
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
 
-    // Handle 401 errors (unauthorized)
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Don't attempt refresh for non-auth required routes
+    if (!isAuthRequiredRequest(originalRequest)) {
+      return Promise.reject(error);
+    }
+
+    // If error is 401 and we haven't retried yet
+    if (axiosError.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
-        const refreshToken = TokenManager.getRefreshToken();
+        const refreshToken = localStorage.getItem('refresh_token');
         if (!refreshToken) {
-          console.log('No refresh token available');
-          await handleLogoutCleanup();
-          return Promise.reject(error);
+          throw new Error('No refresh token available');
         }
 
-        console.log('Attempting to refresh token');
-        const response = await axios.post(
-          `${API_BASE_URL}/accounts/token/refresh/`,
-          { refresh: refreshToken },
-          { withCredentials: true }
-        );
+        // Try to refresh the token
+        const response = await axiosInstance.post<{ access: string }>('/accounts/token/refresh/', {
+          refresh: refreshToken,
+        });
 
-        if (response.data?.access) {
-          console.log('Token refresh successful');
-          
-          // Update tokens
-          TokenManager.setTokens({
-            access: response.data.access,
-            refresh: refreshToken
-          });
+        const { access } = response.data;
+        tokenService.setToken(access);
 
-          // Update auth header and retry original request
-          originalRequest.headers.Authorization = `Bearer ${response.data.access}`;
-          return axiosInstance(originalRequest);
-        } else {
-          console.error('Token refresh failed - no access token in response');
-          await handleLogoutCleanup();
+        // Retry the original request
+        if (originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${access}`;
         }
+        return axiosInstance(originalRequest);
       } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
-        await handleLogoutCleanup();
+        // If refresh fails, clear tokens and reject
+        tokenService.clearToken();
+        localStorage.removeItem('refresh_token');
+        return Promise.reject(refreshError);
       }
     }
 
     return Promise.reject(error);
   }
 );
-
-interface LoginResponse {
-  message: string;
-  is_first_login: boolean;
-  tokens: {
-    access: string;
-    refresh: string;
-  };
-  user: {
-    id: number;
-    username: string;
-    email: string;
-    email_verified: boolean;
-  };
-}
 
 // API service functions
 export const apiService = {
   // Auth services
   auth: {
-    login: async (data: { email: string; password: string; rememberMe?: boolean }) => {
-      console.log('=== LOGIN ATTEMPT START ===');
-      console.log('Login request data:', {
-        email: data.email,
-        hasPassword: !!data.password,
-        rememberMe: data.rememberMe
-      });
-      
-      try {
-        const loginData = {
-          email: data.email,
-          password: data.password
-        };
-
-        console.log('Making API request to:', `${API_BASE_URL}/${API_ENDPOINTS.auth.login}`);
-
-        const response = await axiosInstance.post<LoginResponse>(
-          API_ENDPOINTS.auth.login,
-          loginData,
-          {
-            headers: { 
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            }
-          }
-        );
-        
-        console.log('=== RAW API RESPONSE ===');
-        console.log('Response data:', JSON.stringify(response.data, null, 2));
-
-        if (!response.data) {
-          console.error('Empty response received');
-          throw new Error('Empty response received');
-        }
-
-        // Extract and validate data from response
-        const { message, user, tokens, is_first_login } = response.data;
-
-        // Debug: Log the exact structure of tokens
-        console.log('=== TOKEN DEBUG ===');
-        console.log('Raw tokens object:', tokens);
-        console.log('Access token exists:', !!tokens?.access);
-        console.log('Refresh token exists:', !!tokens?.refresh);
-        console.log('Tokens structure:', {
-          isObject: typeof tokens === 'object',
-          hasAccess: 'access' in (tokens || {}),
-          hasRefresh: 'refresh' in (tokens || {}),
-          accessType: typeof tokens?.access,
-          refreshType: typeof tokens?.refresh
-        });
-
-        // Simplified but effective token validation
-        if (!tokens || !tokens.access || !tokens.refresh) {
-          console.error('Token validation failed:', {
-            hasTokens: !!tokens,
-            hasAccess: !!tokens?.access,
-            hasRefresh: !!tokens?.refresh
-          });
-          throw new Error('Invalid or missing tokens in response');
-        }
-
-        // Debug: Log token lengths and partial values (safely)
-        console.log('=== TOKEN VALIDATION SUCCESS ===');
-        console.log('Token lengths:', {
-          access: tokens.access.length,
-          refresh: tokens.refresh.length
-        });
-        console.log('Token previews:', {
-          access: `${tokens.access.substring(0, 15)}...`,
-          refresh: `${tokens.refresh.substring(0, 15)}...`
-        });
-
-        // Debug: Log localStorage operations
-        console.log('=== TOKEN STORAGE ===');
-        console.log('Attempting to store tokens in localStorage...');
-
-        // Store tokens
-        try {
-          localStorage.setItem('accessToken', tokens.access);
-          localStorage.setItem('refreshToken', tokens.refresh);
-          console.log('Tokens successfully stored in localStorage');
-          
-          // Verify storage
-          const storedAccess = localStorage.getItem('accessToken');
-          const storedRefresh = localStorage.getItem('refreshToken');
-          console.log('Storage verification:', {
-            accessStored: !!storedAccess,
-            refreshStored: !!storedRefresh,
-            accessLength: storedAccess?.length,
-            refreshLength: storedRefresh?.length
-          });
-        } catch (storageError) {
-          console.error('Failed to store tokens:', storageError);
-          // Continue execution as this is not critical
-        }
-
-        // Return the validated response
-        return {
-          status: response.status,
-          data: {
-            message: message || 'Login successful',
-            is_first_login: !!is_first_login,
-            user,
-            tokens: {
-              access: tokens.access,
-              refresh: tokens.refresh
-            }
-          }
-        };
-      } catch (error: any) {
-        console.error('=== LOGIN ERROR ===');
-        console.error('Error details:', {
-          message: error.message,
-          response: error.response?.data,
-          status: error.response?.status
-        });
-
-        // Enhanced error handling with specific messages
-        if (error.response?.status === 401) {
-          throw new Error('Invalid credentials');
-        } else if (error.response?.status === 400) {
-          throw new Error(error.response.data.message || 'Invalid request data');
-        } else if (error.response) {
-          throw new Error(error.response.data.message || 'Server error occurred');
-        } else if (error.request) {
-          throw new Error('No response from server');
-        } else {
-          throw new Error(error.message || 'An unexpected error occurred');
-        }
-      }
-    },
-    signup: async (data: { username: string; email: string; password: string }) => {
-      try {
-        const response = await axiosInstance.post(API_ENDPOINTS.auth.signup, data);
-        return response;
-      } catch (error) {
-        console.error('Signup error:', error);
-        throw error;
-      }
-    },
-    verifyEmail: async (token: string) => {
-      try {
-        // Using GET request with token in URL path to match backend route exactly
-        const url = API_ENDPOINTS.auth.verifyEmail(token);
-        console.log('Making verification request to:', url);
-        const response = await axiosInstance.get(url);
-        console.log('Verification response:', response);
-        return response;
-      } catch (error) {
-        console.error('Email verification error:', error);
-        throw error;
-      }
-    },
+    login: (data: { email: string; password: string; rememberMe?: boolean }) =>
+      axiosInstance.post<LoginResponse>(API_ENDPOINTS.auth.login, data),
+    signup: (data: { username: string; email: string; password: string }) =>
+      axiosInstance.post<SignupResponse>(API_ENDPOINTS.auth.signup, data),
+    logout: () => axiosInstance.post(API_ENDPOINTS.auth.logout),
+    googleLogin: () => axiosInstance.get<GoogleAuthResponse>(API_ENDPOINTS.auth.googleLogin),
+    forgotPassword: (data: { email: string }) =>
+      axiosInstance.post<ForgotPasswordResponse>(API_ENDPOINTS.auth.forgotPassword, data),
+    resetPassword: (data: { token: string; password: string }) =>
+      axiosInstance.post(API_ENDPOINTS.auth.resetPassword, data),
+    verifyEmail: (token: string) =>
+      axiosInstance.get(API_ENDPOINTS.auth.verifyEmail(token)),
     resendVerification: (email: string) =>
       axiosInstance.post(API_ENDPOINTS.auth.resendVerification, { email }),
-    resetPassword: (data: { password: string; confirmPassword: string }) =>
-      axiosInstance.post(API_ENDPOINTS.auth.passwordReset, data),
-    resetPasswordConfirm: (token: string, data: { password: string; confirmPassword: string }) =>
-      axiosInstance.post(API_ENDPOINTS.auth.passwordResetConfirm(token), data),
-    logout: async () => {
-      console.log('=== LOGOUT STARTED ===');
-      try {
-        const refreshToken = TokenManager.getRefreshToken();
-        if (!refreshToken) {
-          console.log('No refresh token found during logout');
-          await handleLogoutCleanup();
-          return { status: 200, message: 'Logged out successfully' };
-        }
-
-        const response = await axiosInstance.post(API_ENDPOINTS.auth.logout, {
-          refresh: refreshToken
-        });
-
-        console.log('Logout API response:', response.status);
-        await handleLogoutCleanup();
-        return response;
-      } catch (error) {
-        console.error('Logout error:', error);
-        await handleLogoutCleanup();
-        throw error;
-      }
-    },
-    getProfile: async () => {
-      const accessToken = TokenManager.getAccessToken();
-      if (!accessToken) {
-        console.log('No access token available for profile fetch');
-        return { data: null };
-      }
-
-      try {
-        console.log('Fetching profile with token');
-        const response = await axiosInstance.get(API_ENDPOINTS.auth.profile);
-        console.log('Profile fetch successful');
-        return response;
-      } catch (error: any) {
-        console.error('Profile fetch failed:', {
-          status: error.response?.status,
-          data: error.response?.data
-        });
-        
-        if (error.response?.status === 401) {
-          await handleLogoutCleanup();
-          return { data: null };
-        }
-        throw error;
-      }
-    },
-    updateProfile: async (data: any) => {
-      return axiosInstance.patch(API_ENDPOINTS.auth.profile, data);
-    },
-    forgotPassword: async (data: { email: string }) => {
-      return axiosInstance.post(API_ENDPOINTS.auth.passwordReset, data);
-    },
-    googleLogin: async () => {
-      return axiosInstance.get(API_ENDPOINTS.auth.googleLogin);
-    },
   },
 
   // Vehicle marketplace services
@@ -653,63 +412,10 @@ export const apiService = {
 
   // Profile functions
   profile: {
-    getDetails: async () => {
-      try {
-        console.log('Getting profile details...');
-        const token = TokenManager.getAccessToken();
-        if (!token) {
-          console.log('No access token found');
-          return { data: null };
-        }
-
-        const response = await axiosInstance.get(API_ENDPOINTS.profile.details);
-        console.log('Profile details response:', response.data);
-        return { data: response.data };
-      } catch (error: any) {
-        console.error('Profile fetch error:', {
-          message: error.message,
-          status: error.response?.status,
-          data: error.response?.data
-        });
-        
-        if (error.response?.status === 401) {
-          TokenManager.clearTokens();
-        }
-        throw error;
-      }
-    },
-    create: async (data: any) => {
-      try {
-        console.log('Creating new profile with data:', data);
-        const response = await axiosInstance.post(API_ENDPOINTS.profile.details, data);
-        console.log('Profile creation response:', response.data);
-        return response;
-      } catch (error: any) {
-        console.error('Profile creation error:', {
-          message: error.message,
-          status: error.response?.status,
-          data: error.response?.data
-        });
-        throw error;
-      }
-    },
-    update: async (data: any) => {
-      try {
-        console.log('Updating profile with data:', data);
-        const response = await axiosInstance.patch(API_ENDPOINTS.profile.details, data);
-        console.log('Profile update response:', response.data);
-        return response;
-      } catch (error: any) {
-        console.error('Profile update error:', {
-          message: error.message,
-          status: error.response?.status,
-          data: error.response?.data
-        });
-        throw error;
-      }
-    },
+    getDetails: () => axiosInstance.get<User>(API_ENDPOINTS.auth.profile),
+    update: (data: Partial<User>) => axiosInstance.patch(API_ENDPOINTS.auth.profile, data),
     changePassword: (data: { currentPassword: string; newPassword: string }) =>
-      axiosInstance.post(API_ENDPOINTS.profile.changePassword, data),
+      axiosInstance.post(API_ENDPOINTS.auth.changePassword, data),
   },
 
   // Subscription services
