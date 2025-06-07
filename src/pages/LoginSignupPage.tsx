@@ -22,8 +22,19 @@ interface LoginResponseData {
     is_customer: boolean;
     email_verified: boolean;
   };
-  access: string;    // Tokens at root level
-  refresh: string;   // Tokens at root level
+  tokens: {
+    access: string;
+    refresh: string;
+  };
+  is_first_login?: boolean;
+}
+
+interface SignupResponseData {
+  message: string;
+  user: {
+    email: string;
+    username: string;
+  };
 }
 
 interface LoginResult {
@@ -73,6 +84,17 @@ const pageVariants = {
     }
   })
 };
+
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string;
+      message?: string;
+    };
+    status?: number;
+  };
+  message: string;
+}
 
 const LoginSignupPage = () => {
   const navigate = useNavigate();
@@ -218,26 +240,20 @@ const LoginSignupPage = () => {
         });
 
         try {
-          const result = await login(
+          const loginResult = await login(
             formData.email,
             formData.password,
             formData.rememberMe
-          ) as unknown as LoginResult;
+          );
 
-          console.log('=== LOGIN RESPONSE VALIDATION ===');
-          console.log('Response structure:', {
-            status: result?.status,
-            hasData: !!result?.data,
-            dataKeys: result?.data ? Object.keys(result.data) : [],
-            hasAccess: !!result?.data?.access,
-            hasRefresh: !!result?.data?.refresh,
-            hasUser: !!result?.data?.user
-          });
+          // Log the raw response for debugging
+          console.log('=== RAW LOGIN RESPONSE ===');
+          console.log(loginResult);
 
-          // Validate response structure
-          if (!result?.data?.access || !result?.data?.refresh) {
+          // The login function returns { user, tokens, isFirstLogin }
+          if (!loginResult?.tokens?.access || !loginResult?.tokens?.refresh) {
             console.error('=== LOGIN VALIDATION FAILED ===');
-            console.error('Response data:', result?.data);
+            console.error('Response data:', loginResult);
             throw new Error('Login failed: No tokens received');
           }
 
@@ -245,30 +261,33 @@ const LoginSignupPage = () => {
           console.log('=== LOGIN SUCCESSFUL ===');
           setLoginAttempts(0);
           localStorage.removeItem('loginLockoutUntil');
-          toast.success(result.data.message || "Login successful");
+          toast.success("Login successful");
           
           console.log('Redirecting to:', from);
           navigate(from, { replace: true });
-        } catch (error: any) {
+        } catch (error) {
           console.error('=== LOGIN ERROR ===');
           console.error('Error details:', error);
           handleLoginFailure();
-          handleApiError(error);
+
+          const apiError = error as ApiError;
+          const errorMessage = apiError.response?.data?.detail || 
+                             apiError.response?.data?.message || 
+                             apiError.message || 
+                             "An error occurred during login";
+          
+          setError(errorMessage);
+          toast.error(errorMessage);
         }
 
       } else if (mode === "signup") {
-        const response = await signupMutation.mutateAsync({
+        const signupResponse = await signupMutation.mutateAsync({
           username: formData.username,
           email: formData.email,
           password: formData.password
         });
 
-        if (response.data?.message) {
-          toast.success(response.data.message);
-        } else {
-          toast.success("Account created! Please verify your email.");
-        }
-        
+        toast.success("Account created! Please verify your email.");
         navigate(`/verify-email?email=${encodeURIComponent(formData.email)}`);
 
       } else if (mode === "forgot") {
@@ -280,24 +299,19 @@ const LoginSignupPage = () => {
         navigate("/password-reset-confirmation");
         toast.success("Password reset link sent to your email!");
       }
-    } catch (error: any) {
+    } catch (error) {
       // Enhanced error logging
-      console.error('Login error:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
+      console.error('Form submission error:', error);
 
       if (mode === "login") {
         handleLoginFailure();
       }
 
-      // Get the most appropriate error message
-      const errorMessage = 
-        error.response?.data?.detail || 
-        error.response?.data?.message || 
-        error.message || 
-        "An error occurred during login";
+      const apiError = error as ApiError;
+      const errorMessage = apiError.response?.data?.detail || 
+                         apiError.response?.data?.message || 
+                         apiError.message || 
+                         "An unexpected error occurred";
 
       setError(errorMessage);
       toast.error(errorMessage);

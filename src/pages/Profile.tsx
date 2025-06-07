@@ -1,1025 +1,509 @@
+// Profile.tsx
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  User, Settings, LogOut, Bike, 
-  Clock, Menu,
-  Loader, Wrench, CreditCard as Subscription
-} from 'lucide-react';
 import { toast } from 'react-toastify';
-import { useAuth } from '../contexts/AuthContext';
-import ForSaleVehicles from '../components/ForSaleVehicles';
-import BookedVehicles from '../components/BookedVehicles';
-import MyRepairs from './MyRepairs';
-import MySubscription from '../components/subscription/MySubscription';
-import { apiService } from '../config/api.config.ts';
-import axios from 'axios';
-import { useUserProfile } from '../hooks/useUserProfile';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiService } from '../config/api.config';
+import { tokenService } from '../services/tokenService';
 
+const API_BASE_URL = 'https://repairmybike.up.railway.app/api';
+
+// Add interfaces for vehicle-related types
 interface VehicleType {
   id: number;
   name: string;
-  image?: string;
 }
 
 interface Manufacturer {
   id: number;
   name: string;
-  image?: string;
 }
 
 interface VehicleModel {
   id: number;
   name: string;
   manufacturer: number;
-  manufacturer_name: string;
   vehicle_type: number;
-  vehicle_type_name: string;
-  image?: string;
 }
 
-interface UserProfile {
-  id?: number;
-  user?: number;
-  email: string;
-  username: string;
+interface ApiResponse<T> {
+  data: T[];
+}
+
+interface ProfileFormData {
   name: string;
-  phone: string;
+  phone_number: string;  // Changed to match backend
   address: string;
-  profile_photo: string | null;
   city: string;
   state: string;
-  country: string;
   postal_code: string;
-  preferred_location?: string;
-  vehicle_model?: number | null;
-  vehicle_details?: {
-    vehicle_model: number;
-    vehicle_type: number;
-    manufacturer: number;
-    model_name: string;
-    type_name: string;
-    manufacturer_name: string;
-  };
+  country: string;
+  profile_picture: File | null;  // Changed to match backend
+  bio: string;
+  vehicle_name: number | null;
+  vehicle_type: number | null;
+  manufacturer: number | null;
 }
 
-interface SidebarProps {
-  className?: string;
-}
-
-type TabType = 'profile' | 'vehicles' | 'bookings' | 'repairs' | 'subscriptions' | 'change-password';
-
-const defaultProfile: UserProfile = {
-  email: '',
-  username: '',
+const initialFormData: ProfileFormData = {
   name: '',
-  phone: '',
+  phone_number: '',
   address: '',
-  profile_photo: null,
   city: '',
   state: '',
   country: '',
   postal_code: '',
-  preferred_location: ''
+  profile_picture: null,
+  bio: '',
+  vehicle_type: null,
+  manufacturer: null,
+  vehicle_name: null
 };
 
-// Add type for API responses
-interface ApiResponse<T> {
-  data: T;
-}
-
-interface VehicleDetails {
-  vehicle_model: number;
-  vehicle_type: number;
-  manufacturer: number;
-  model_name: string;
-  type_name: string;
-  manufacturer_name: string;
-}
-
-interface ProfileResponse extends UserProfile {
-  vehicle_details?: VehicleDetails;
-}
-
 const Profile = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { user, logout, isAuthenticated, isLoading } = useAuth();
-  const { updateProfile, updateSharedFormData } = useUserProfile();
-  const queryClient = useQueryClient();
-  const [isEditing, setIsEditing] = useState(false);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [profileData, setProfileData] = useState<UserProfile | null>(null);
-  const [formData, setFormData] = useState<UserProfile>(defaultProfile);
-  const [isNewProfile, setIsNewProfile] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [formData, setFormData] = useState<ProfileFormData>(initialFormData);
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([]);
-  const [selectedVehicleType, setSelectedVehicleType] = useState<number | null>(null);
-  const [selectedManufacturer, setSelectedManufacturer] = useState<number | null>(null);
-  const [selectedVehicleModel, setSelectedVehicleModel] = useState<number | null>(null);
-  const [filteredModels, setFilteredModels] = useState<VehicleModel[]>([]);
 
-  // Get active tab from URL query parameter
-  const queryParams = new URLSearchParams(location.search);
-  const tabFromUrl = queryParams.get('tab') as TabType | null;
-  const [activeTab, setActiveTab] = useState<TabType>(tabFromUrl || 'profile');
-
-  // Add debug logs
-  console.log('Profile Component State:', {
-    isAuthenticated,
-    isLoading,
-    user,
-    activeTab,
-    formData
-  });
-
-  // Handle authentication check
+  // Add back the useEffect hooks
   useEffect(() => {
-    console.log('Auth Check Effect:', { isAuthenticated, isLoading });
-    if (!isAuthenticated && !isLoading) {
-      console.log('Redirecting to login...');
-      navigate('/login', { replace: true });
-    }
-  }, [isAuthenticated, isLoading, navigate]);
+    const fetchVehicleData = async () => {
+      try {
+        const [vehicleTypesResponse, manufacturersResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/vehicles/types/`),
+          fetch(`${API_BASE_URL}/vehicles/manufacturers/`)
+        ]);
 
-  // Update form data when user data changes
-  useEffect(() => {
-    console.log('User Data Effect:', { user });
-    if (user) {
-      setFormData({
-        username: user.username || '',
-        email: user.email || '',
-        name: user.profile?.name || user.name || '',
-        phone: user.profile?.phone || user.phone || '',
-        address: user.profile?.address || user.address || '',
-        city: user.profile?.city || '',
-        state: user.profile?.state || '',
-        country: user.profile?.country || '',
-        postal_code: user.profile?.postal_code || '',
-        profile_photo: user.profile?.profile_photo || null
-      });
-    }
-  }, [user]);
-
-  // Update active tab when URL changes
-  useEffect(() => {
-    const tab = queryParams.get('tab') as TabType | null;
-    if (tab && tab !== activeTab) {
-      setActiveTab(tab);
-    }
-  }, [location.search]);
-
-  // Query keys
-  const QUERY_KEYS = {
-    profile: ['profile'],
-    vehicleTypes: ['vehicleTypes'],
-    manufacturers: ['manufacturers'],
-    vehicleModels: (type: number | null | undefined, manufacturer: number | null | undefined) => 
-      ['vehicleModels', { type: type || undefined, manufacturer: manufacturer || undefined }]
-  } as const;
-
-  // Fetch profile data using React Query
-  const { data: profileQueryData, isLoading: isProfileLoading } = useQuery<ProfileResponse>({
-    queryKey: QUERY_KEYS.profile,
-    queryFn: async () => {
-      const response = await apiService.profile.getDetails();
-      console.log('Fetched profile data:', response.data); // Debug log
-      return response.data;
-    },
-    enabled: isAuthenticated,
-    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    retry: false
-  });
-
-  // Add a function to handle vehicle selection updates
-  const handleVehicleSelectionChange = (type: 'type' | 'manufacturer' | 'model', value: number | null) => {
-    console.log('Updating vehicle selection:', { type, value });
-    
-    switch (type) {
-      case 'type':
-        setSelectedVehicleType(value);
-        // Reset dependent fields
-        setSelectedManufacturer(null);
-        setSelectedVehicleModel(null);
-        break;
-      case 'manufacturer':
-        setSelectedManufacturer(value);
-        // Reset model when manufacturer changes
-        setSelectedVehicleModel(null);
-        break;
-      case 'model':
-        setSelectedVehicleModel(value);
-        break;
-    }
-  };
-
-  // Update the vehicle dropdowns JSX
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-    {/* Vehicle Type Dropdown */}
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        Vehicle Type
-      </label>
-      <select
-        name="vehicle_type"
-        value={selectedVehicleType || ''}
-        onChange={(e) => {
-          const value = e.target.value ? parseInt(e.target.value) : null;
-          handleVehicleSelectionChange('type', value);
-        }}
-        disabled={!isEditing}
-        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-      >
-        <option value="">Select Vehicle Type</option>
-        {vehicleTypes.map((type) => (
-          <option key={type.id} value={type.id}>
-            {type.name}
-          </option>
-        ))}
-      </select>
-    </div>
-
-    {/* Manufacturer Dropdown */}
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        Manufacturer
-      </label>
-      <select
-        name="manufacturer"
-        value={selectedManufacturer || ''}
-        onChange={(e) => {
-          const value = e.target.value ? parseInt(e.target.value) : null;
-          handleVehicleSelectionChange('manufacturer', value);
-        }}
-        disabled={!isEditing}
-        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-      >
-        <option value="">Select Manufacturer</option>
-        {manufacturers.map((manufacturer) => (
-          <option key={manufacturer.id} value={manufacturer.id}>
-            {manufacturer.name}
-          </option>
-        ))}
-      </select>
-    </div>
-
-    {/* Vehicle Model Dropdown */}
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        Vehicle Model
-      </label>
-      <select
-        name="vehicle_model"
-        value={selectedVehicleModel || ''}
-        onChange={(e) => {
-          const value = e.target.value ? parseInt(e.target.value) : null;
-          handleVehicleSelectionChange('model', value);
-        }}
-        disabled={!isEditing || !selectedVehicleType || !selectedManufacturer}
-        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-      >
-        <option value="">Select Vehicle Model</option>
-        {filteredModels.map((model) => (
-          <option key={model.id} value={model.id}>
-            {model.name}
-          </option>
-        ))}
-      </select>
-      {isEditing && (!selectedVehicleType || !selectedManufacturer) && (
-        <p className="mt-1 text-sm text-gray-500">
-          Please select both Vehicle Type and Manufacturer first
-        </p>
-      )}
-    </div>
-  </div>
-
-  // Update useEffect for profile data handling
-  useEffect(() => {
-    if (profileQueryData) {
-      console.log('Setting profile data from query:', profileQueryData);
-      const formattedData = {
-        ...profileQueryData,
-        email: profileQueryData.email || '',
-        username: profileQueryData.username || '',
-        name: profileQueryData.name || '',
-        phone: profileQueryData.phone || '',
-        address: profileQueryData.address || '',
-        city: profileQueryData.city || '',
-        state: profileQueryData.state || '',
-        country: profileQueryData.country || '',
-        postal_code: profileQueryData.postal_code || '',
-        profile_photo: profileQueryData.profile_photo || null,
-        vehicle_model: profileQueryData.vehicle_model
-      };
-
-      setFormData(formattedData);
-      setProfileData(formattedData);
-      setIsNewProfile(false);
-
-      // Enhanced vehicle details restoration
-      console.log('Vehicle details from profile:', profileQueryData.vehicle_details);
-      if (profileQueryData.vehicle_details) {
-        const { vehicle_type, manufacturer, vehicle_model } = profileQueryData.vehicle_details;
-        
-        console.log('Restoring vehicle selections:', {
-          type: vehicle_type,
-          manufacturer,
-          model: vehicle_model
-        });
-
-        // First set the vehicle type
-        setSelectedVehicleType(vehicle_type);
-
-        // Then set manufacturer after a small delay to ensure type is set
-        setTimeout(() => {
-          setSelectedManufacturer(manufacturer);
-
-          // Finally set the vehicle model after manufacturer is set
-          setTimeout(() => {
-            setSelectedVehicleModel(vehicle_model);
-            console.log('Vehicle selections restored:', {
-              type: vehicle_type,
-              manufacturer,
-              model: vehicle_model
-            });
-          }, 100);
-        }, 100);
-      } else {
-        console.log('No vehicle details found in profile data');
-        // Reset selections if no vehicle details
-        setSelectedVehicleType(null);
-        setSelectedManufacturer(null);
-        setSelectedVehicleModel(null);
-      }
-    } else {
-      console.log('No profile data received, setting as new profile');
-      setIsNewProfile(true);
-      // Reset vehicle selections for new profile
-      setSelectedVehicleType(null);
-      setSelectedManufacturer(null);
-      setSelectedVehicleModel(null);
-    }
-  }, [profileQueryData]);
-
-  // Add a debug effect for vehicle selections
-  useEffect(() => {
-    console.log('Current vehicle selections:', {
-      type: selectedVehicleType,
-      manufacturer: selectedManufacturer,
-      model: selectedVehicleModel
-    });
-  }, [selectedVehicleType, selectedManufacturer, selectedVehicleModel]);
-
-  // Fetch vehicle types using React Query
-  const { data: vehicleTypesData } = useQuery<VehicleType[]>({
-    queryKey: QUERY_KEYS.vehicleTypes,
-    queryFn: async () => {
-      const response = await apiService.vehicle.getTypes();
-      return response.data;
-    },
-    enabled: isAuthenticated,
-    staleTime: 30 * 60 * 1000 // Consider data fresh for 30 minutes
-  });
-
-  // Update vehicle types when data changes
-  useEffect(() => {
-    if (vehicleTypesData) {
-      setVehicleTypes(vehicleTypesData);
-    }
-  }, [vehicleTypesData]);
-
-  // Fetch manufacturers using React Query
-  const { data: manufacturersData } = useQuery<Manufacturer[]>({
-    queryKey: QUERY_KEYS.manufacturers,
-    queryFn: async () => {
-      const response = await apiService.vehicle.getManufacturers();
-      return response.data;
-    },
-    enabled: isAuthenticated,
-    staleTime: 30 * 60 * 1000 // Consider data fresh for 30 minutes
-  });
-
-  // Update manufacturers when data changes
-  useEffect(() => {
-    if (manufacturersData) {
-      setManufacturers(manufacturersData);
-    }
-  }, [manufacturersData]);
-
-  // Fetch vehicle models using React Query
-  const { data: vehicleModelsData } = useQuery<VehicleModel[]>({
-    queryKey: QUERY_KEYS.vehicleModels(selectedVehicleType, selectedManufacturer),
-    queryFn: async () => {
-      if (!selectedVehicleType && !selectedManufacturer) return [];
-      
-      const queryParams: Record<string, string> = {};
-      if (selectedVehicleType) queryParams.vehicle_type = selectedVehicleType.toString();
-      if (selectedManufacturer) queryParams.manufacturer = selectedManufacturer.toString();
-      
-      const response = await apiService.vehicle.getModels(queryParams);
-      return Array.isArray(response.data) ? response.data : response.data.vehicle_models || [];
-    },
-    enabled: isAuthenticated && (!!selectedVehicleType || !!selectedManufacturer),
-    staleTime: 5 * 60 * 1000 // Consider data fresh for 5 minutes
-  });
-
-  // Update vehicle models when data changes
-  useEffect(() => {
-    if (vehicleModelsData) {
-      setVehicleModels(vehicleModelsData);
-    }
-  }, [vehicleModelsData]);
-
-  // Profile update mutation
-  const updateProfileMutation = useMutation({
-    mutationFn: async (data: Partial<UserProfile>) => {
-      console.log('Sending to backend:', data); // Debug log
-      const response = isNewProfile
-        ? await apiService.profile.create(data)
-        : await apiService.profile.update(data);
-      console.log('Backend response:', response.data); // Debug log
-      return response.data;
-    },
-    onSuccess: (data) => {
-      console.log('Mutation success, updated profile:', data); // Debug log
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.profile });
-      toast.success(`Profile ${isNewProfile ? 'created' : 'updated'} successfully!`);
-      setIsEditing(false);
-    },
-    onError: (error: unknown) => {
-      console.error('Profile update error:', error);
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 401) {
-          toast.error('Session expired. Please login again.');
-          navigate('/login');
-        } else {
-          const errorMessage = error.response?.data?.message || 
-            Object.values(error.response?.data || {}).flat().join(', ') ||
-            'Failed to update profile. Please try again.';
-          toast.error(errorMessage);
+        if (!vehicleTypesResponse.ok || !manufacturersResponse.ok) {
+          throw new Error('Failed to fetch vehicle data');
         }
-      } else {
-        toast.error('Failed to update profile. Please try again.');
+
+        const vehicleTypesData = await vehicleTypesResponse.json() as ApiResponse<VehicleType>;
+        const manufacturersData = await manufacturersResponse.json() as ApiResponse<Manufacturer>;
+
+        setVehicleTypes(vehicleTypesData.data);
+        setManufacturers(manufacturersData.data);
+      } catch (error) {
+        console.error('Error fetching vehicle data:', error);
+        toast.error('Failed to load vehicle data');
       }
-    }
-  });
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/login', { replace: true });
-    } catch (error) {
-      toast.error('Failed to logout');
-    }
-  };
-
-  const handleTabChange = (tab: TabType) => {
-    setActiveTab(tab);
-    setIsDrawerOpen(false);
-    if (tab === 'change-password') {
-      navigate('/reset-password');
-    } else {
-      navigate(`/profile${tab === 'profile' ? '' : `?tab=${tab}`}`, { replace: true });
-    }
-  };
-
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-
-    // Update shared form data when common fields change
-    const sharedFields = {
-      name: 'name',
-      email: 'email',
-      phone: 'phone',
-      address: 'address',
-      city: 'city',
-      state: 'state',
-      postal_code: 'postalCode'
     };
 
-    if (name in sharedFields) {
-      updateSharedFormData({
-        [sharedFields[name as keyof typeof sharedFields]]: value
-      });
-    }
-  };
+    fetchVehicleData();
+  }, []);
 
-  const handleSave = async () => {
-    try {
-      setIsSaving(true);
-
-      if (!formData.name?.trim()) {
-        toast.error('Please enter your name');
-        return;
-      }
-      if (!formData.phone?.trim()) {
-        toast.error('Please enter your phone number');
-        return;
-      }
-      if (!formData.address?.trim()) {
-        toast.error('Please enter your address');
-        return;
-      }
-      if (!formData.city?.trim()) {
-        toast.error('Please enter your city');
-        return;
-      }
-      if (!formData.state?.trim()) {
-        toast.error('Please enter your state');
-        return;
-      }
-      if (!formData.postal_code?.trim()) {
-        toast.error('Please enter your postal code');
-        return;
-      }
-      if (!formData.country?.trim()) {
-        toast.error('Please enter your country');
-        return;
-      }
-
-      console.log('Current selections:', { // Debug log
-        selectedVehicleType,
-        selectedManufacturer,
-        selectedVehicleModel
-      });
-
-      const profileData: Partial<UserProfile> = {
-        email: formData.email,
-        username: formData.username,
-        name: formData.name,
-        phone: formData.phone,
-        address: formData.address,
-        profile_photo: formData.profile_photo,
-        city: formData.city,
-        state: formData.state,
-        country: formData.country,
-        postal_code: formData.postal_code,
-        vehicle_model: selectedVehicleModel || null
-      };
-
-      console.log('Saving profile data:', profileData); // Debug log
-      await updateProfileMutation.mutateAsync(profileData);
-    } catch (error) {
-      console.error('Error in handleSave:', error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setIsEditing(false);
-    setFormData(profileData || defaultProfile);
-  };
-
-  // Update useEffect for filtering vehicle models
+  // Fetch vehicle models when type and manufacturer are selected
   useEffect(() => {
-    const filtered = vehicleModelsData?.filter(model => {
-      const matchesType = !selectedVehicleType || model.vehicle_type === selectedVehicleType;
-      const matchesManufacturer = !selectedManufacturer || model.manufacturer === selectedManufacturer;
-      return matchesType && matchesManufacturer;
-    }) || [];
+    const fetchVehicleModels = async () => {
+      if (formData.vehicle_type && formData.manufacturer) {
+        try {
+          const response = await fetch(
+            `${API_BASE_URL}/vehicles/models/?vehicle_type=${formData.vehicle_type}&manufacturer=${formData.manufacturer}`
+          );
 
-    setFilteredModels(filtered);
-  }, [selectedVehicleType, selectedManufacturer, vehicleModelsData]);
+          if (!response.ok) {
+            throw new Error('Failed to fetch vehicle models');
+          }
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'profile':
-        return (
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-semibold text-gray-900">Profile Information</h3>
-              <button
-                onClick={() => setIsEditing(!isEditing)}
-                className="text-sm text-[#FF5733] hover:text-[#ff4019]"
-              >
-                {isEditing ? 'Cancel' : 'Edit Profile'}
-              </button>
-            </div>
+          const data = await response.json() as ApiResponse<VehicleModel>;
+          setVehicleModels(data.data);
+        } catch (error) {
+          console.error('Error fetching vehicle models:', error);
+          toast.error('Failed to load vehicle models');
+        }
+      }
+    };
 
-            <div className="space-y-6">
-              {/* Username and Email inline */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Username
-                    <span className="text-gray-400 ml-1">(read-only)</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="username"
-                    value={formData.username}
-                    disabled={true}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                    <span className="text-gray-400 ml-1">(read-only)</span>
-                  </label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    disabled={true}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-                  />
-                </div>
-              </div>
+    fetchVehicleModels();
+  }, [formData.vehicle_type, formData.manufacturer]);
 
-              {/* Name and Phone */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Full Name {isEditing && <span className="text-red-500">*</span>}
-                  </label>
-                    <input
-                      type="text"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-                    placeholder={isEditing ? "Enter your full name" : ""}
-                    />
-                  </div>
-                  <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone Number {isEditing && <span className="text-red-500">*</span>}
-                  </label>
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-                    placeholder={isEditing ? "Enter phone number with country code" : ""}
-                    />
-                  </div>
-              </div>
+  const validateForm = (): boolean => {
+    const requiredFields: (keyof ProfileFormData)[] = [
+      'name', 'phone_number', 'address', 'city', 'state',
+      'postal_code', 'country', 'vehicle_type', 'manufacturer', 'vehicle_name'
+    ];
 
-              {/* Address */}
-                  <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Street Address {isEditing && <span className="text-red-500">*</span>}
-                </label>
-                    <input
-                      type="text"
-                      name="address"
-                      value={formData.address}
-                      onChange={handleInputChange}
-                  disabled={!isEditing}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-                  placeholder={isEditing ? "Enter your street address" : ""}
-                />
-              </div>
+    const missingFields = requiredFields.filter(field => !formData[field]);
+    if (missingFields.length > 0) {
+      toast.error(`Please fill in all required fields: ${missingFields.join(', ')}`);
+      return false;
+    }
 
-              {/* City, State, and Postal Code */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    City {isEditing && <span className="text-red-500">*</span>}
-                  </label>
-                  <input
-                    type="text"
-                    name="city"
-                    value={formData.city}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-                    placeholder={isEditing ? "Enter your city" : ""}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    State {isEditing && <span className="text-red-500">*</span>}
-                  </label>
-                  <input
-                    type="text"
-                    name="state"
-                    value={formData.state}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-                    placeholder={isEditing ? "Enter your state" : ""}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Postal Code {isEditing && <span className="text-red-500">*</span>}
-                  </label>
-                  <input
-                    type="text"
-                    name="postal_code"
-                    value={formData.postal_code}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-                    placeholder={isEditing ? "Enter postal code" : ""}
-                  />
-                </div>
-              </div>
+    // Validate phone number (must be less than 15 characters per backend)
+    if (formData.phone_number.length > 15) {
+      toast.error('Phone number must be less than 15 characters');
+      return false;
+    }
 
-              {/* Country */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Country {isEditing && <span className="text-red-500">*</span>}
-                </label>
-                <input
-                  type="text"
-                  name="country"
-                  value={formData.country}
-                  onChange={handleInputChange}
-                  disabled={!isEditing}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-                  placeholder={isEditing ? "Enter your country" : ""}
-                />
-              </div>
+    // Validate vehicle relationships
+    if (!formData.vehicle_type || !formData.manufacturer || !formData.vehicle_name) {
+      toast.error('Please select all vehicle information');
+      return false;
+    }
 
-              {/* Vehicle Information Section */}
-              <div className="border-t pt-6 mt-6">
-                <h4 className="text-lg font-medium text-gray-900 mb-4">Vehicle Information</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Vehicle Type Dropdown */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Vehicle Type
-                    </label>
-                    <select
-                      name="vehicle_type"
-                      value={selectedVehicleType || ''}
-                      onChange={(e) => {
-                        const value = e.target.value ? parseInt(e.target.value) : null;
-                        handleVehicleSelectionChange('type', value);
-                      }}
-                      disabled={!isEditing}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-                    >
-                      <option value="">Select Vehicle Type</option>
-                      {vehicleTypes.map((type) => (
-                        <option key={type.id} value={type.id}>
-                          {type.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+    return true;
+  };
 
-                  {/* Manufacturer Dropdown */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Manufacturer
-                    </label>
-                    <select
-                      name="manufacturer"
-                      value={selectedManufacturer || ''}
-                      onChange={(e) => {
-                        const value = e.target.value ? parseInt(e.target.value) : null;
-                        handleVehicleSelectionChange('manufacturer', value);
-                      }}
-                      disabled={!isEditing}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-                    >
-                      <option value="">Select Manufacturer</option>
-                      {manufacturers.map((manufacturer) => (
-                        <option key={manufacturer.id} value={manufacturer.id}>
-                          {manufacturer.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
 
-                  {/* Vehicle Model Dropdown */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Vehicle Model
-                    </label>
-                    <select
-                      name="vehicle_model"
-                      value={selectedVehicleModel || ''}
-                      onChange={(e) => {
-                        const value = e.target.value ? parseInt(e.target.value) : null;
-                        handleVehicleSelectionChange('model', value);
-                      }}
-                      disabled={!isEditing || !selectedVehicleType || !selectedManufacturer}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#FF5733] focus:border-[#FF5733] disabled:bg-gray-100"
-                    >
-                      <option value="">Select Vehicle Model</option>
-                      {filteredModels.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.name}
-                        </option>
-                      ))}
-                    </select>
-                    {isEditing && (!selectedVehicleType || !selectedManufacturer) && (
-                      <p className="mt-1 text-sm text-gray-500">
-                        Please select both Vehicle Type and Manufacturer first
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
+    setIsLoading(true);
 
-              {/* Save Button */}
-              {isEditing && (
-                <div className="flex justify-end space-x-3">
-                  <button
-                    type="button"
-                    onClick={handleCancel}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-                    disabled={isSaving}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="px-6 py-2 bg-[#FF5733] text-white rounded-md hover:bg-[#ff4019] transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FF5733] disabled:opacity-50"
-                  >
-                    {isSaving ? (
-                      <div className="flex items-center">
-                        <Loader className="w-4 h-4 mr-2 animate-spin" />
-                        {isNewProfile ? 'Creating...' : 'Saving...'}
-                      </div>
-                    ) : (
-                      isNewProfile ? 'Create Profile' : 'Update Profile'
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      case 'vehicles':
-        return <ForSaleVehicles />;
-      case 'bookings':
-        return <BookedVehicles />;
-      case 'repairs':
-        return <MyRepairs />;
-      case 'subscriptions':
-        return <MySubscription />;
+    try {
+      // Check if we have a valid token
+      const accessToken = tokenService.getAccessToken();
+      if (!accessToken || tokenService.isTokenExpired()) {
+        // Try to refresh the token
+        const refreshToken = tokenService.getRefreshToken();
+        if (!refreshToken) {
+          throw new Error('Please log in again');
+        }
 
-      default:
-        return null;
+        // Attempt to refresh the token
+        const refreshResponse = await fetch(`${API_BASE_URL}/accounts/token/refresh/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            refresh: refreshToken
+          })
+        });
+
+        if (!refreshResponse.ok) {
+          throw new Error('Session expired. Please log in again');
+        }
+
+        const { access } = await refreshResponse.json();
+        tokenService.setToken(access);
+      }
+
+      const formDataToSend = new FormData();
+      
+      // Add all the required fields to FormData
+      formDataToSend.append('name', formData.name);
+      formDataToSend.append('phone_number', formData.phone_number);
+      formDataToSend.append('address', formData.address);
+      formDataToSend.append('city', formData.city);
+      formDataToSend.append('state', formData.state);
+      formDataToSend.append('postal_code', formData.postal_code);
+      formDataToSend.append('country', formData.country);
+      formDataToSend.append('vehicle_name', formData.vehicle_name!.toString());
+      formDataToSend.append('vehicle_type', formData.vehicle_type!.toString());
+      formDataToSend.append('manufacturer', formData.manufacturer!.toString());
+
+      if (formData.bio) {
+        formDataToSend.append('bio', formData.bio);
+      }
+      if (formData.profile_picture) {
+        formDataToSend.append('profile_picture', formData.profile_picture);
+      }
+
+      // Get the current access token (which should be valid now)
+      const currentToken = tokenService.getAccessToken();
+      if (!currentToken) {
+        throw new Error('Authentication error');
+      }
+
+      // Make the API request with the current token
+      const response = await fetch(`${API_BASE_URL}/accounts/profile/`, {
+        method: 'PATCH',
+        body: formDataToSend,
+        headers: {
+          'Authorization': currentToken,
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to update profile');
+      }
+
+      const data = await response.json();
+      console.log('Profile update response:', data);
+      toast.success('Profile updated successfully!');
+      
+    } catch (error: any) {
+      console.error('Error updating profile:', error);
+      if (error.message.includes('log in')) {
+        // Handle authentication errors
+        tokenService.clearTokens();
+        window.location.href = '/login'; // Redirect to login page
+      } else {
+        toast.error(error.message || 'Failed to update profile');
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => (
-    <div className={`bg-white rounded-2xl shadow-lg p-6 ${className}`}>
-      <div className="space-y-1">
-        <button
-          onClick={() => handleTabChange('profile')}
-          className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
-            activeTab === 'profile' ? 'text-[#FF5733] bg-[#FFF5F2]' : 'text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          <User className="h-5 w-5 mr-3" />
-          Profile Information
-        </button>
-        <button
-          onClick={() => handleTabChange('vehicles')}
-          className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
-            activeTab === 'vehicles' ? 'text-[#FF5733] bg-[#FFF5F2]' : 'text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          <Bike className="h-5 w-5 mr-3" />
-          Vehicles for Sale
-        </button>
-        <button
-          onClick={() => handleTabChange('repairs')}
-          className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
-            activeTab === 'repairs' ? 'text-[#FF5733] bg-[#FFF5F2]' : 'text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          <Wrench className="h-5 w-5 mr-3" />
-          My Repairs
-        </button>
-        <button
-          onClick={() => handleTabChange('bookings')}
-          className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
-            activeTab === 'bookings' ? 'text-[#FF5733] bg-[#FFF5F2]' : 'text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          <Clock className="h-5 w-5 mr-3" />
-          My Bookings
-        </button>
-        <button
-          onClick={() => handleTabChange('subscriptions')}
-          className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
-            activeTab === 'subscriptions' ? 'text-[#FF5733] bg-[#FFF5F2]' : 'text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          <Subscription className="h-5 w-5 mr-3" />
-          My Subscriptions
-        </button>
-        <button
-          onClick={() => handleTabChange('change-password')}
-          className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${
-            activeTab === 'change-password' ? 'text-[#FF5733] bg-[#FFF5F2]' : 'text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          <Settings className="h-5 w-5 mr-3" />
-          Change Password
-        </button>
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg mt-4"
-        >
-          <LogOut className="h-5 w-5 mr-3" />
-          Logout
-        </button>
-      </div>
-    </div>
-  );
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+    
+    if (name === 'vehicle_type' || name === 'manufacturer') {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value ? Number(value) : null,
+        vehicle_name: null // Reset vehicle_name when type or manufacturer changes
+      }));
+    } else if (name === 'vehicle_name') {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value ? Number(value) : null
+      }));
+    } else if (name === 'phone_number') {
+      // Only allow numbers and limit to 15 characters
+      const numbersOnly = value.replace(/[^0-9]/g, '').slice(0, 15);
+      setFormData(prev => ({
+        ...prev,
+        [name]: numbersOnly
+      }));
+    } else if (type === 'file') {
+      const fileInput = e.target as HTMLInputElement;
+      const file = fileInput.files?.[0] || null;
+      setFormData(prev => ({
+        ...prev,
+        profile_picture: file
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Mobile Header */}
-      <div className="lg:hidden bg-white shadow-sm py-4 px-4 flex items-center justify-between">
-        <button
-          onClick={() => setIsDrawerOpen(true)}
-          className="p-2 hover:bg-gray-100 rounded-lg"
-        >
-          <Menu className="h-6 w-6 text-gray-600" />
-        </button>
-        <h1 className="text-xl font-semibold text-gray-900">Profile</h1>
-        <div className="w-8" /> {/* Spacer for centering */}
-      </div>
-
-      {/* Mobile Drawer */}
-      <AnimatePresence>
-        {isDrawerOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsDrawerOpen(false)}
-              className="fixed inset-0 bg-black z-40 lg:hidden"
+    <div className="max-w-2xl mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-6">Create Profile</h1>
+      
+      <form onSubmit={handleSubmit} className="space-y-4" encType="multipart/form-data">
+        {/* Personal Information */}
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold">Personal Information</h2>
+          
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Full Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
             />
-            <motion.div
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'tween' }}
-              className="fixed inset-y-0 left-0 w-3/4 max-w-xs bg-white z-50 lg:hidden"
-            >
-              <div className="p-4 flex justify-end">
-                <button
-                  onClick={() => setIsDrawerOpen(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
-                >
-                  <Menu className="h-6 w-6 text-gray-600" />
-                </button>
-              </div>
-              <Sidebar className="rounded-none shadow-none" />
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+          </div>
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Desktop Sidebar */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
-            className="hidden lg:block lg:col-span-1"
-          >
-            <Sidebar />
-          </motion.div>
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Phone Number <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="tel"
+              name="phone_number"
+              value={formData.phone_number}
+              onChange={handleChange}
+              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+              maxLength={15}
+              title="Please enter a valid phone number (max 15 digits)"
+            />
+          </div>
 
-          {/* Main Content */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="lg:col-span-3"
-          >
-            {isProfileLoading ? (
-              <div className="flex justify-center items-center p-4">
-                <Loader className="w-6 h-6 animate-spin" />
-                <span className="ml-2">Loading profile...</span>
-              </div>
-            ) : renderTabContent()}
-          </motion.div>
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Profile Picture
+            </label>
+            <input
+              type="file"
+              name="profile_picture"
+              onChange={handleChange}
+              accept="image/*"
+              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Bio
+            </label>
+            <textarea
+              name="bio"
+              value={formData.bio}
+              onChange={handleChange}
+              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              rows={3}
+            />
+          </div>
         </div>
-      </div>
+
+        {/* Address Information - All fields are required */}
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold">Address Information</h2>
+          
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Address <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              name="address"
+              value={formData.address}
+              onChange={handleChange}
+              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                City <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="city"
+                value={formData.city}
+                onChange={handleChange}
+                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                State <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="state"
+                value={formData.state}
+                onChange={handleChange}
+                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Country <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="country"
+                value={formData.country}
+                onChange={handleChange}
+                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Postal Code <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="postal_code"
+                value={formData.postal_code}
+                onChange={handleChange}
+                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+                maxLength={6}
+                pattern="[0-9]{6}"
+                title="Please enter a valid 6-digit postal code"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Vehicle Information - All fields are required */}
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold">Vehicle Information</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Vehicle Type <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="vehicle_type"
+                value={formData.vehicle_type || ''}
+                onChange={handleChange}
+                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              >
+                <option value="">Select Type</option>
+                {vehicleTypes.map(type => (
+                  <option key={type.id} value={type.id}>{type.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Manufacturer <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="manufacturer"
+                value={formData.manufacturer || ''}
+                onChange={handleChange}
+                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              >
+                <option value="">Select Manufacturer</option>
+                {manufacturers.map(mfr => (
+                  <option key={mfr.id} value={mfr.id}>{mfr.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Vehicle Model <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="vehicle_name"
+                value={formData.vehicle_name || ''}
+                onChange={handleChange}
+                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+                disabled={!formData.vehicle_type || !formData.manufacturer}
+              >
+                <option value="">Select Model</option>
+                {vehicleModels.map(model => (
+                  <option key={model.id} value={model.id}>{model.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Submit Button */}
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        >
+          {isLoading ? (
+            <span className="flex items-center justify-center">
+              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Saving...
+            </span>
+          ) : 'Save Profile'}
+        </button>
+      </form>
     </div>
   );
 };

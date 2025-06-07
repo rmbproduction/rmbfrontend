@@ -3,11 +3,20 @@ import { authService } from '../services/authService';
 import { tokenService } from '../services/tokenService';
 import type { User } from '../types/api';
 
+interface AuthResponse {
+  user: User;
+  tokens: {
+    access: string;
+    refresh: string;
+  };
+  isFirstLogin?: boolean;
+}
+
 interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<AuthResponse>;
   logout: () => Promise<void>;
   updateUser: (user: User) => void;
 }
@@ -58,12 +67,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-  const handleLogin = async (email: string, password: string, rememberMe: boolean = false) => {
+  const handleLogin = async (email: string, password: string, rememberMe: boolean = false): Promise<AuthResponse> => {
     try {
       setIsLoading(true);
-      const { user: userData } = await authService.login(email, password, rememberMe);
-      setUser(userData);
+      const response = await authService.login(email, password, rememberMe);
+      setUser(response.user);
       setIsAuthenticated(true);
+      return response;
     } catch (error) {
       console.error('Login error:', error);
       throw error;

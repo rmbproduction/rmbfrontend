@@ -5,7 +5,14 @@ import type { User } from '../types/api';
 // Add type definition at the top
 interface TokenResponse {
   access: string;
-  refresh?: string;
+  refresh: string;
+}
+
+interface LoginResponse {
+  message?: string;
+  user: User;
+  tokens: TokenResponse;
+  is_first_login?: boolean;
 }
 
 // Use apiService directly since it already has the correct base URL configured
@@ -13,22 +20,23 @@ export const authService = {
   login: async (email: string, password: string, rememberMe: boolean = false) => {
     try {
       const response = await apiService.auth.login({ email, password });
+      const data = response.data as LoginResponse;
       
-      if (!response.data?.tokens?.access || !response.data?.tokens?.refresh) {
+      if (!data?.tokens?.access || !data?.tokens?.refresh) {
         throw new Error('Invalid token data received');
       }
 
       // Store tokens with rememberMe preference
       tokenService.setTokens(
-        response.data.tokens.access,
-        response.data.tokens.refresh,
+        data.tokens.access,
+        data.tokens.refresh,
         rememberMe
       );
 
       return {
-        user: response.data.user,
-        tokens: response.data.tokens,
-        isFirstLogin: response.data.is_first_login
+        user: data.user,
+        tokens: data.tokens,
+        isFirstLogin: data.is_first_login
       };
     } catch (error) {
       console.error('Login error:', error);

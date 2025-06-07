@@ -1,7 +1,35 @@
 import axios from 'axios';
-import { tokenService } from '../services/tokenService';
 import { QueryClient } from '@tanstack/react-query';
-import type { LoginResponse, SignupResponse, User } from '../types/api';
+import { tokenService } from '../services/tokenService';
+import type { User } from '../types/api';
+
+interface TokenResponse {
+  access: string;
+  refresh: string;
+}
+
+interface LoginResponse {
+  message?: string;
+  user: {
+    email: string;
+    username: string;
+    is_admin: boolean;
+    is_staff_member: boolean;
+    is_field_staff: boolean;
+    is_customer: boolean;
+    email_verified: boolean;
+  };
+  tokens: TokenResponse;
+  is_first_login?: boolean;
+}
+
+interface SignupResponse {
+  message: string;
+  user: {
+    email: string;
+    username: string;
+  };
+}
 
 // Create a new QueryClient instance with basic configuration
 export const queryClient = new QueryClient({
@@ -22,7 +50,7 @@ const API_BASE_URL = 'https://repairmybike.up.railway.app/api';
 export const API_CONFIG = {
   baseURL: API_BASE_URL,
   withCredentials: true,
-  timeout: 30000, // Increased timeout
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json, text/plain, */*',
@@ -52,10 +80,10 @@ export const API_ENDPOINTS = {
     verifyEmail: (token: string) => `/accounts/verify-email/${token}/`,
     resendVerification: '/accounts/resend-verification/',
     forgotPassword: '/accounts/password/reset/',
-    resetPassword: '/accounts/password/reset/confirm/',
+    resetPassword: '/accounts/password-reset/',
     profile: '/accounts/profile/',
     refreshToken: '/accounts/token/refresh/',
-    changePassword: '/accounts/profile/change-password/'
+    changePassword: '/accounts/change-password/',
   },
 
   // Vehicle marketplace endpoints
@@ -201,7 +229,7 @@ axiosInstance.interceptors.request.use(
     // Add auth token if available
     const token = tokenService.getAccessToken();
     if (token) {
-      config.headers.Authorization = token; // Already includes 'Bearer '
+      config.headers.Authorization = `Bearer ${token}`;
     }
     
     return config;
@@ -234,18 +262,17 @@ axiosInstance.interceptors.response.use(
           throw new Error('No refresh token available');
         }
 
-        const response = await axiosInstance.post<{ access: string }>('/accounts/token/refresh/', {
-          refresh: refreshToken.replace('Bearer ', '').trim()
+        const response = await axiosInstance.post<TokenResponse>('/accounts/token/refresh/', {
+          refresh: refreshToken,
         });
 
-        if (response.data?.access) {
-          tokenService.setToken(response.data.access);
-          if (!originalRequest.headers) {
-            originalRequest.headers = {};
-          }
-          originalRequest.headers.Authorization = `Bearer ${response.data.access}`;
-          return axiosInstance(originalRequest);
+        const { access } = response.data;
+        tokenService.setToken(access);
+        if (!originalRequest.headers) {
+          originalRequest.headers = {};
         }
+        originalRequest.headers.Authorization = `Bearer ${access}`;
+        return axiosInstance(originalRequest);
       } catch (refreshError) {
         console.error('Token refresh failed:', refreshError);
         tokenService.clearTokens();
@@ -275,7 +302,7 @@ export const apiService = {
     updateProfile: (data: Partial<User>) =>
       axiosInstance.patch(API_ENDPOINTS.auth.profile, data),
     refreshToken: (data: { refresh: string }) =>
-      axiosInstance.post(API_ENDPOINTS.auth.refreshToken, data),
+      axiosInstance.post<TokenResponse>(API_ENDPOINTS.auth.refreshToken, data),
     resetPassword: (data: { email: string }) =>
       axiosInstance.post(API_ENDPOINTS.auth.resetPassword, data),
     changePassword: (data: { currentPassword: string; newPassword: string }) =>
