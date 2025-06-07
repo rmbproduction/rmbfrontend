@@ -45,9 +45,6 @@ export default defineConfig(({ mode }) => {
           target: 'https://repairmybike.up.railway.app',
           changeOrigin: true,
           secure: false,
-          headers: {
-            'Origin': 'https://repairmybike.in',
-          },
           rewrite: (path) => path.replace(/^\/api/, ''),
         }
       },
