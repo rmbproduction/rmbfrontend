@@ -1,9 +1,8 @@
-import axios from 'axios';
+import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import TokenManager from '../services/tokenManager';
 import { QueryClient } from '@tanstack/react-query';
-import type { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { tokenService } from '../services/tokenService';
 import type { LoginResponse, SignupResponse, GoogleAuthResponse, ForgotPasswordResponse, User } from '../types/api';
+import { tokenService } from '../services/tokenService';
 
 // Create a new QueryClient instance with basic configuration
 export const queryClient = new QueryClient({
@@ -34,13 +33,11 @@ export const FRONTEND_URL = 'https://repairmybike.in';
 // Export API configuration for components that need it
 export const API_CONFIG = {
   baseURL: API_BASE_URL,
-  frontendURL: FRONTEND_URL,
-  withCredentials: true, // Important for CORS with credentials
-  timeout: 10000,
+  withCredentials: true,
+  timeout: 30000, // Increased timeout
   headers: {
     'Content-Type': 'application/json',
-    'Origin': FRONTEND_URL,
-    'Access-Control-Allow-Origin': FRONTEND_URL,
+    'Accept': 'application/json, text/plain, */*',
   }
 } as const;
 
@@ -208,12 +205,9 @@ const axiosInstance = axios.create(API_CONFIG);
 // Request interceptor for API calls
 axiosInstance.interceptors.request.use(
   (config) => {
-    // Add CORS headers
-    config.headers = {
-      ...config.headers,
-      'Origin': FRONTEND_URL,
-      'Access-Control-Allow-Origin': FRONTEND_URL,
-    };
+    if (!config.headers) {
+      config.headers = {};
+    }
 
     // Add auth token if available
     const token = TokenManager.getAccessToken();
@@ -221,9 +215,15 @@ axiosInstance.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
+    // Add required headers for CORS
+    config.headers['Origin'] = FRONTEND_URL;
+    
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    console.error('Request interceptor error:', error);
+    return Promise.reject(error);
+  }
 );
 
 // Response interceptor for API calls
@@ -232,10 +232,10 @@ axiosInstance.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Handle CORS errors
-    if (error.response?.status === 0 || error.response?.status === 'cors') {
-      console.error('CORS error detected:', error);
-      return Promise.reject(new Error('CORS error: Unable to access the API. Please check your network connection.'));
+    // Handle network errors
+    if (!error.response) {
+      console.error('Network error:', error);
+      return Promise.reject(new Error('Network Error: Please check your internet connection'));
     }
 
     // Handle 401 and token refresh
@@ -248,21 +248,23 @@ axiosInstance.interceptors.response.use(
           throw new Error('No refresh token available');
         }
 
-        const response = await axiosInstance.post('/accounts/token/refresh/', {
-          refresh: refreshToken
+        const response = await axiosInstance.post<{ access: string }>('/accounts/token/refresh/', {
+          refresh: refreshToken.replace('Bearer ', '').trim()
         });
 
         if (response.data?.access) {
-          TokenManager.setTokens({ 
-            access: response.data.access, 
-            refresh: refreshToken 
-          }, localStorage.getItem('token_storage_type') === 'local');
-
-          // Update auth header and retry
+          TokenManager.setTokens({
+            access: response.data.access,
+            refresh: refreshToken
+          });
+          if (!originalRequest.headers) {
+            originalRequest.headers = {};
+          }
           originalRequest.headers.Authorization = `Bearer ${response.data.access}`;
           return axiosInstance(originalRequest);
         }
       } catch (refreshError) {
+        console.error('Token refresh failed:', refreshError);
         TokenManager.clearTokens();
         return Promise.reject(refreshError);
       }
