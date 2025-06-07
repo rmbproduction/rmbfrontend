@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../../config/api.config';
 import TokenManager from '../../services/tokenManager';
-import { User } from '../../schemas/auth';
+import type { User } from '../../schemas/auth';
 import { useState, useEffect } from 'react';
 import { authService } from '../../services/authService';
 import type { LoginResponse, SignupResponse } from '../../types/api';
@@ -14,6 +14,23 @@ const authAxios = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+interface ApiResponse<T> {
+  data: T;
+  message?: string;
+  status: number;
+}
+
+interface TokenResponse {
+  access: string;
+  refresh: string;
+}
+
+interface UserResponse {
+  user: User;
+  tokens: TokenResponse;
+  is_first_login?: boolean;
+}
 
 interface LoginData {
   email: string;
@@ -58,17 +75,30 @@ export const useProfile = () => {
 };
 
 export const useLogin = () => {
+  const queryClient = useQueryClient();
+  
   return useMutation({
-    mutationFn: async ({ email, password, rememberMe }: { email: string; password: string; rememberMe?: boolean }) => {
+    mutationFn: async ({ email, password, rememberMe }: { 
+      email: string; 
+      password: string; 
+      rememberMe?: boolean 
+    }) => {
       const response = await apiService.auth.login({ email, password });
-      return response.data;
+      return response.data as UserResponse;
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+    }
   });
 };
 
 export const useSignup = () => {
   return useMutation({
-    mutationFn: async ({ email, username, password }: { email: string; username: string; password: string }) => {
+    mutationFn: async ({ email, username, password }: { 
+      email: string; 
+      username: string; 
+      password: string 
+    }) => {
       const response = await apiService.auth.signup({ email, username, password });
       return response.data;
     },
@@ -79,8 +109,10 @@ export const useLogout = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: { refresh_token: string }) => 
-      apiService.auth.logout(data),
+    mutationFn: async ({ refresh }: { refresh: string }) => {
+      const response = await apiService.auth.logout({ refresh });
+      return response.data;
+    },
     onSuccess: () => {
       queryClient.clear();
     },
@@ -91,7 +123,10 @@ export const useUpdateProfile = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: apiService.auth.updateProfile,
+    mutationFn: async (data: Partial<User>) => {
+      const response = await apiService.auth.updateProfile(data);
+      return response.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
     },
