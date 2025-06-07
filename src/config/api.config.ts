@@ -5,6 +5,15 @@ import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { tokenService } from '../services/tokenService';
 import type { LoginResponse, SignupResponse, GoogleAuthResponse, ForgotPasswordResponse, User } from '../types/api';
 
+// Create axios instance
+const axiosInstance = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL,
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
 // Create a new QueryClient instance with basic configuration
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,7 +52,11 @@ export const API_CONFIG = {
   baseURL: API_BASE_URL,
   frontendURL: FRONTEND_URL,
   withCredentials: true,
-};
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  }
+} as const;
 
 // CDN Configuration
 export const CDN_CONFIG = {
@@ -62,18 +75,15 @@ export const CDN_CONFIG = {
 // Export API endpoints
 export const API_ENDPOINTS = {
   auth: {
-    signup: 'accounts/signup/',
-    login: 'accounts/login/',
-    logout: 'accounts/logout/',
-    refreshToken: 'accounts/token/refresh/',
-    passwordReset: 'accounts/password-reset/',
-    passwordResetConfirm: (token: string) => `accounts/password-reset/${token}/`,
-    verifyEmail: (token: string) => `accounts/verify-email/${token}/`,
+    login: '/accounts/login/',
+    signup: '/accounts/signup/',
+    logout: '/accounts/logout/',
+    verifyEmail: (token: string) => `/accounts/verify-email/${token}/`,
     resendVerification: '/accounts/resend-verification/',
-    googleLogin: 'accounts/google/login/',
-    googleCallback: 'accounts/google/callback/',
-    profile: 'accounts/profile/',
-    contact: 'accounts/contact/',
+    forgotPassword: '/accounts/password/reset/',
+    resetPassword: '/accounts/password/reset/confirm/',
+    profile: '/accounts/profile/',
+    refreshToken: '/accounts/token/refresh/',
   },
 
   // Vehicle marketplace endpoints
@@ -150,7 +160,7 @@ export const API_ENDPOINTS = {
 
     // Active Subscription
     subscriptions: '/subscription/subscriptions/',
-    activeSubscription: '/subscription/subscriptions/active/',
+    active: '/subscription/subscriptions/active/',
     subscriptionStatus: (id: string) => `/subscription/subscriptions/${id}/status/`,
     cancelSubscription: (id: string) => `/subscription/subscriptions/${id}/cancel/`,
     renewSubscription: (id: string) => `/subscription/subscriptions/${id}/renew/`,
@@ -171,6 +181,8 @@ export const API_ENDPOINTS = {
     cancelVisit: (id: string) => `/subscription/visits/${id}/cancel/`,
     rescheduleVisit: (id: string) => `/subscription/visits/${id}/reschedule/`,
     completeVisit: (id: string) => `/subscription/visits/${id}/complete/`,
+    create: '/subscription/subscriptions/create/',
+    history: '/subscription/history/',
   },
 
   // CDN endpoints
@@ -203,50 +215,21 @@ export const API_ENDPOINTS = {
   },
 };
 
-// Create axios instance with default config
-export const axiosInstance = axios.create({
-  baseURL: API_BASE_URL.replace(/\/+$/, ''),  // Remove trailing slashes
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json'
-  },
-  withCredentials: true
-});
-
-// Helper to check if a request needs auth token
-const isAuthRequiredRequest = (config: AxiosRequestConfig): boolean => {
-  const path = config.url?.toLowerCase() || '';
-  return !(
-    path.includes('login') ||
-    path.includes('signup') ||
-    path.includes('verify-email') ||
-    path.includes('password/reset')
-  );
-};
-
 // Request interceptor for API calls
 axiosInstance.interceptors.request.use(
-  (config: AxiosRequestConfig): AxiosRequestConfig => {
+  (config: AxiosRequestConfig) => {
     // Ensure URL starts with /
     if (config.url && !config.url.startsWith('/')) {
       config.url = `/${config.url}`;
     }
 
-    // Only add auth token for protected routes
-    if (isAuthRequiredRequest(config)) {
-      const token = tokenService.getToken();
-      if (token && config.headers) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+    // Get the token using TokenManager
+    const token = TokenManager.getAccessToken();
+    
+    // Add token to auth header if we have one
+    if (token && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-
-    console.log('Making request:', {
-      method: config.method,
-      url: config.url,
-      baseURL: config.baseURL,
-      fullUrl: `${config.baseURL}${config.url}`,
-      hasAuthHeader: !!config.headers?.Authorization
-    });
 
     return config;
   },
@@ -257,7 +240,7 @@ axiosInstance.interceptors.request.use(
 
 // Response interceptor for API calls
 axiosInstance.interceptors.response.use(
-  (response: AxiosResponse): AxiosResponse => response,
+  (response) => response,
   async (error: unknown) => {
     if (!(error instanceof Error)) {
       return Promise.reject(error);
@@ -265,42 +248,43 @@ axiosInstance.interceptors.response.use(
 
     const axiosError = error as AxiosError;
     const originalRequest = axiosError.config;
-    if (!originalRequest) {
-      return Promise.reject(error);
-    }
 
-    // Don't attempt refresh for non-auth required routes
-    if (!isAuthRequiredRequest(originalRequest)) {
-      return Promise.reject(error);
-    }
-
-    // If error is 401 and we haven't retried yet
-    if (axiosError.response?.status === 401 && !originalRequest._retry) {
+    // Only try refresh if we got a 401 and haven't tried yet
+    if (axiosError.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem('refresh_token');
+        const refreshToken = TokenManager.getRefreshToken();
         if (!refreshToken) {
           throw new Error('No refresh token available');
         }
 
         // Try to refresh the token
-        const response = await axiosInstance.post<{ access: string }>('/accounts/token/refresh/', {
-          refresh: refreshToken,
+        const response = await axiosInstance.post('/accounts/token/refresh/', {
+          refresh: refreshToken
         });
 
         const { access } = response.data;
-        tokenService.setToken(access);
+        
+        // Store new access token using TokenManager
+        if (access) {
+          const storageType = localStorage.getItem('token_storage_type');
+          TokenManager.setTokens({ 
+            access, 
+            refresh: refreshToken 
+          }, storageType === 'local');
+        }
 
-        // Retry the original request
+        // Update the auth header
         if (originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${access}`;
         }
+        
+        // Retry the original request
         return axiosInstance(originalRequest);
       } catch (refreshError) {
-        // If refresh fails, clear tokens and reject
-        tokenService.clearToken();
-        localStorage.removeItem('refresh_token');
+        // Clear tokens on refresh failure
+        TokenManager.clearTokens();
         return Promise.reject(refreshError);
       }
     }
@@ -311,22 +295,23 @@ axiosInstance.interceptors.response.use(
 
 // API service functions
 export const apiService = {
-  // Auth services
   auth: {
-    login: (data: { email: string; password: string; rememberMe?: boolean }) =>
+    login: (data: { email: string; password: string }) =>
       axiosInstance.post<LoginResponse>(API_ENDPOINTS.auth.login, data),
     signup: (data: { username: string; email: string; password: string }) =>
       axiosInstance.post<SignupResponse>(API_ENDPOINTS.auth.signup, data),
-    logout: () => axiosInstance.post(API_ENDPOINTS.auth.logout),
-    googleLogin: () => axiosInstance.get<GoogleAuthResponse>(API_ENDPOINTS.auth.googleLogin),
-    forgotPassword: (data: { email: string }) =>
-      axiosInstance.post<ForgotPasswordResponse>(API_ENDPOINTS.auth.forgotPassword, data),
-    resetPassword: (data: { token: string; password: string }) =>
-      axiosInstance.post(API_ENDPOINTS.auth.resetPassword, data),
+    logout: (data: { refresh: string }) =>
+      axiosInstance.post(API_ENDPOINTS.auth.logout, data),
     verifyEmail: (token: string) =>
       axiosInstance.get(API_ENDPOINTS.auth.verifyEmail(token)),
     resendVerification: (email: string) =>
       axiosInstance.post(API_ENDPOINTS.auth.resendVerification, { email }),
+    getProfile: () =>
+      axiosInstance.get<User>(API_ENDPOINTS.auth.profile),
+    updateProfile: (data: Partial<User>) =>
+      axiosInstance.patch(API_ENDPOINTS.auth.profile, data),
+    refreshToken: (data: { refresh: string }) =>
+      axiosInstance.post(API_ENDPOINTS.auth.refreshToken, data),
   },
 
   // Vehicle marketplace services
@@ -466,7 +451,7 @@ export const apiService = {
       return response.data;
     },
     getActiveSubscription: async () => {
-      const response = await axiosInstance.get(API_ENDPOINTS.subscription.activeSubscription);
+      const response = await axiosInstance.get(API_ENDPOINTS.subscription.active);
       return response.data;
     },
     cancelSubscription: async (id: string, data?: any) => {
@@ -507,6 +492,12 @@ export const apiService = {
       const response = await axiosInstance.get(API_ENDPOINTS.subscription.subscriptionStatus(id));
       return response.data;
     },
+    getActive: () =>
+      axiosInstance.get(API_ENDPOINTS.subscription.active),
+    create: (data: any) =>
+      axiosInstance.post(API_ENDPOINTS.subscription.create, data),
+    getHistory: () =>
+      axiosInstance.get(API_ENDPOINTS.subscription.history),
   },
 
   // Vehicle services
@@ -526,24 +517,19 @@ async function handleLogoutCleanup() {
   console.log('=== STARTING LOGOUT CLEANUP ===');
   
   try {
-    // 1. Clear all tokens
+    // Clear all tokens using TokenManager
     TokenManager.clearTokens();
     console.log('Tokens cleared');
 
-    // 2. Clear all React Query cache
+    // Clear all React Query cache
     queryClient.clear();
     console.log('Query cache cleared');
 
-    // 3. Cancel any ongoing queries
+    // Cancel any ongoing queries
     await queryClient.cancelQueries();
     console.log('Ongoing queries cancelled');
 
-    // 4. Remove any other auth-related storage
-    localStorage.removeItem('user');
-    sessionStorage.clear();
-    console.log('Additional storage cleared');
-
-    // 5. Reset auth-related queries
+    // Reset auth-related queries
     await Promise.all([
       queryClient.resetQueries({ queryKey: ['profile'] }),
       queryClient.resetQueries({ queryKey: ['auth'] })
@@ -558,4 +544,5 @@ async function handleLogoutCleanup() {
   }
 }
 
+export { axiosInstance, handleLogoutCleanup };
 export default apiService;

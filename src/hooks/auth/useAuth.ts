@@ -3,6 +3,7 @@ import { apiService } from '../../config/api.config';
 import TokenManager from '../../services/tokenManager';
 import { User } from '../../schemas/auth';
 import { useState, useEffect } from 'react';
+import { authService } from '../../services/authService';
 
 interface LoginData {
   email: string;
@@ -30,12 +31,28 @@ interface SignupData {
   password: string;
 }
 
+export const useProfile = () => {
+  return useQuery({
+    queryKey: ['profile'],
+    queryFn: async () => {
+      try {
+        const response = await apiService.auth.getProfile();
+        return response.data;
+      } catch (error) {
+        console.error('Profile fetch error:', error);
+        throw error;
+      }
+    },
+    enabled: TokenManager.getAccessToken() !== null,
+  });
+};
+
 export const useLogin = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: LoginData): Promise<LoginResponse> => {
-      console.log('Login mutation data:', {
+    mutationFn: async (data: LoginData): Promise<LoginResponseData> => {
+      console.log('Login attempt started:', {
         email: data.email,
         password: data.password ? 'PROVIDED' : 'MISSING',
         rememberMe: data.rememberMe
@@ -43,15 +60,8 @@ export const useLogin = () => {
       
       const response = await apiService.auth.login({
         email: data.email,
-        password: data.password,
-        rememberMe: data.rememberMe
+        password: data.password
       });
-
-      // The response should already be transformed by the interceptor
-      if (!response.data?.tokens?.access || !response.data?.tokens?.refresh) {
-        console.error('Invalid login response structure:', response.data);
-        throw new Error('Login failed: Invalid response structure');
-      }
 
       console.log('Login response validation:', {
         hasTokens: !!response.data.tokens,
@@ -59,7 +69,18 @@ export const useLogin = () => {
         tokenFormat: 'tokens' in response.data ? 'nested' : 'root'
       });
 
-      return response as LoginResponse;
+      // Store tokens using TokenManager
+      if (response.data?.tokens?.access && response.data?.tokens?.refresh) {
+        TokenManager.setTokens(response.data.tokens, data.rememberMe);
+        console.log('Token verification check:', {
+          accessToken: !!TokenManager.getAccessToken(),
+          refreshToken: !!TokenManager.getRefreshToken()
+        });
+      } else {
+        throw new Error('Login failed: No tokens received');
+      }
+
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
@@ -84,24 +105,6 @@ export const useLogout = () => {
       queryClient.clear();
     },
   });
-};
-
-export const useProfile = () => {
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['profile'],
-    queryFn: async () => {
-      try {
-        const response = await apiService.auth.getProfile();
-        return response.data;
-      } catch (error) {
-        console.error('Profile fetch error:', error);
-        return null;
-      }
-    },
-    retry: false
-  });
-
-  return { data, isLoading, error, refetch };
 };
 
 export const useUpdateProfile = () => {

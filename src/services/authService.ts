@@ -1,5 +1,5 @@
 import { tokenService } from './tokenService';
-import apiService from '../config/api.config';
+import { apiService } from '../config/api.config';
 import type { LoginResponse, SignupResponse, User } from '../types/api';
 
 export const authService = {

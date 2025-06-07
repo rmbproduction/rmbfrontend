@@ -49,35 +49,26 @@ class TokenManager {
     }
   }
 
-  private static getStorage(): Storage {
-    const storageType = localStorage.getItem(this.STORAGE_TYPE_KEY);
-    return storageType === 'local' ? localStorage : sessionStorage;
-  }
-
   static getAccessToken(): string | null {
-    return localStorage.getItem(this.ACCESS_TOKEN_KEY);
+    const storageType = localStorage.getItem(this.STORAGE_TYPE_KEY);
+    const storage = storageType === 'local' ? localStorage : sessionStorage;
+    return storage.getItem(this.ACCESS_TOKEN_KEY);
   }
 
   static getRefreshToken(): string | null {
-    return localStorage.getItem(this.REFRESH_TOKEN_KEY);
+    const storageType = localStorage.getItem(this.STORAGE_TYPE_KEY);
+    const storage = storageType === 'local' ? localStorage : sessionStorage;
+    return storage.getItem(this.REFRESH_TOKEN_KEY);
   }
 
   static clearTokens(): void {
-    try {
-      // Clear from both storage types to be safe
-      localStorage.removeItem(this.ACCESS_TOKEN_KEY);
-      localStorage.removeItem(this.REFRESH_TOKEN_KEY);
-      localStorage.removeItem(this.TOKEN_EXPIRY_KEY);
-      localStorage.removeItem(this.STORAGE_TYPE_KEY);
-      
-      sessionStorage.removeItem(this.ACCESS_TOKEN_KEY);
-      sessionStorage.removeItem(this.REFRESH_TOKEN_KEY);
-      sessionStorage.removeItem(this.TOKEN_EXPIRY_KEY);
-      
-      console.log('All tokens cleared successfully');
-    } catch (error) {
-      console.error('Error clearing tokens:', error);
-    }
+    localStorage.removeItem(this.ACCESS_TOKEN_KEY);
+    localStorage.removeItem(this.REFRESH_TOKEN_KEY);
+    localStorage.removeItem(this.TOKEN_EXPIRY_KEY);
+    localStorage.removeItem(this.STORAGE_TYPE_KEY);
+    sessionStorage.removeItem(this.ACCESS_TOKEN_KEY);
+    sessionStorage.removeItem(this.REFRESH_TOKEN_KEY);
+    sessionStorage.removeItem(this.TOKEN_EXPIRY_KEY);
   }
 
   static isTokenExpired(): boolean {
@@ -110,12 +101,14 @@ class TokenManager {
       }
 
       const response = await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL}/auth/token/refresh/`,
+        `${import.meta.env.VITE_API_BASE_URL}/accounts/token/refresh/`,
         { refresh: refreshToken }
       );
 
       if (response.data.access) {
-        localStorage.setItem(this.ACCESS_TOKEN_KEY, response.data.access);
+        const storageType = localStorage.getItem(this.STORAGE_TYPE_KEY);
+        const storage = storageType === 'local' ? localStorage : sessionStorage;
+        storage.setItem(this.ACCESS_TOKEN_KEY, response.data.access);
         return true;
       }
 
