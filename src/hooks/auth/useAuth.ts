@@ -2,19 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../../config/api.config';
 import TokenManager from '../../services/tokenManager';
 import type { User } from '../../schemas/auth';
-import { useState, useEffect } from 'react';
-import { authService } from '../../services/authService';
-import type { LoginResponse, SignupResponse } from '../../types/api';
-import axios from 'axios';
 
-// Create a dedicated auth axios instance with the correct base URL
-const authAxios = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
+// Remove conflicting imports and define our own interfaces
 interface ApiResponse<T> {
   data: T;
   message?: string;
@@ -133,10 +122,11 @@ export const useUpdateProfile = () => {
   });
 };
 
+// Note: These methods might need to be added to apiService.auth if they don't exist
 export const useForgotPassword = () => {
   return useMutation({
     mutationFn: async ({ email }: { email: string }) => {
-      const response = await apiService.auth.forgotPassword({ email });
+      const response = await apiService.auth.resetPassword({ email });
       return response.data;
     },
   });
@@ -145,7 +135,7 @@ export const useForgotPassword = () => {
 export const useGoogleLogin = () => {
   return useMutation({
     mutationFn: async () => {
-      const response = await apiService.auth.googleLogin();
+      const response = await apiService.auth.login({ provider: 'google' });
       return response.data;
     },
   });

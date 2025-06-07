@@ -1,18 +1,9 @@
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 import TokenManager from '../services/tokenManager';
 import { QueryClient } from '@tanstack/react-query';
-import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import type { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { tokenService } from '../services/tokenService';
 import type { LoginResponse, SignupResponse, GoogleAuthResponse, ForgotPasswordResponse, User } from '../types/api';
-
-// Create axios instance
-const axiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
 
 // Create a new QueryClient instance with basic configuration
 export const queryClient = new QueryClient({
@@ -28,24 +19,17 @@ export const queryClient = new QueryClient({
 
 // Global query error handler
 const handleQueryError = (error: unknown) => {
-  if (error instanceof AxiosError && error.response?.status === 401) {
+  const axiosError = error as AxiosError;
+  if (axiosError?.response?.status === 401) {
     console.log('Unauthorized request detected, cleaning up...');
     TokenManager.clearTokens();
     queryClient.clear();
   }
 };
 
-// Get the base URL based on environment
-const getBaseUrl = () => {
-  if (process.env.NODE_ENV === 'production') {
-    return 'https://repairmybike.up.railway.app/api';
-  }
-  return 'http://localhost:8000/api';
-};
-
-// Base configuration
-const API_BASE_URL = getBaseUrl();
-const FRONTEND_URL = import.meta.env.VITE_FRONTEND_URL || 'https://repairmybike.up.railway.app';
+// API URLs
+export const API_BASE_URL = 'https://repairmybike.up.railway.app/api';
+export const FRONTEND_URL = 'https://repairmybike.up.railway.app';
 
 // Export API configuration for components that need it
 export const API_CONFIG = {
@@ -215,42 +199,28 @@ export const API_ENDPOINTS = {
   },
 };
 
+// Create axios instance with enforced base URL
+const axiosInstance = axios.create(API_CONFIG);
+
 // Request interceptor for API calls
 axiosInstance.interceptors.request.use(
-  (config: AxiosRequestConfig) => {
-    // Ensure URL starts with /
-    if (config.url && !config.url.startsWith('/')) {
-      config.url = `/${config.url}`;
-    }
-
-    // Get the token using TokenManager
+  (config) => {
     const token = TokenManager.getAccessToken();
-    
-    // Add token to auth header if we have one
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-
     return config;
   },
-  (error: unknown) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // Response interceptor for API calls
 axiosInstance.interceptors.response.use(
   (response) => response,
-  async (error: unknown) => {
-    if (!(error instanceof Error)) {
-      return Promise.reject(error);
-    }
+  async (error) => {
+    const originalRequest = error.config;
 
-    const axiosError = error as AxiosError;
-    const originalRequest = axiosError.config;
-
-    // Only try refresh if we got a 401 and haven't tried yet
-    if (axiosError.response?.status === 401 && originalRequest && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
@@ -259,31 +229,22 @@ axiosInstance.interceptors.response.use(
           throw new Error('No refresh token available');
         }
 
-        // Try to refresh the token
         const response = await axiosInstance.post('/accounts/token/refresh/', {
           refresh: refreshToken
         });
 
-        const { access } = response.data;
-        
-        // Store new access token using TokenManager
-        if (access) {
-          const storageType = localStorage.getItem('token_storage_type');
+        if (response.data?.access) {
           TokenManager.setTokens({ 
-            access, 
+            access: response.data.access, 
             refresh: refreshToken 
-          }, storageType === 'local');
-        }
+          }, localStorage.getItem('token_storage_type') === 'local');
 
-        // Update the auth header
-        if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${access}`;
+          if (originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${response.data.access}`;
+          }
+          return axiosInstance(originalRequest);
         }
-        
-        // Retry the original request
-        return axiosInstance(originalRequest);
       } catch (refreshError) {
-        // Clear tokens on refresh failure
         TokenManager.clearTokens();
         return Promise.reject(refreshError);
       }
@@ -296,7 +257,7 @@ axiosInstance.interceptors.response.use(
 // API service functions
 export const apiService = {
   auth: {
-    login: (data: { email: string; password: string }) =>
+    login: (data: { email: string; password: string } | { provider: string }) =>
       axiosInstance.post<LoginResponse>(API_ENDPOINTS.auth.login, data),
     signup: (data: { username: string; email: string; password: string }) =>
       axiosInstance.post<SignupResponse>(API_ENDPOINTS.auth.signup, data),
@@ -312,6 +273,8 @@ export const apiService = {
       axiosInstance.patch(API_ENDPOINTS.auth.profile, data),
     refreshToken: (data: { refresh: string }) =>
       axiosInstance.post(API_ENDPOINTS.auth.refreshToken, data),
+    resetPassword: (data: { email: string }) =>
+      axiosInstance.post(API_ENDPOINTS.auth.resetPassword, data),
   },
 
   // Vehicle marketplace services
