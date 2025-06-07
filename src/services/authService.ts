@@ -1,4 +1,4 @@
-import { tokenService } from './tokenService';
+import TokenManager from './tokenManager';
 import { apiService } from '../config/api.config';
 import type { User } from '../types/api';
 
@@ -27,9 +27,11 @@ export const authService = {
       }
 
       // Store tokens with rememberMe preference
-      tokenService.setTokens(
-        data.tokens.access,
-        data.tokens.refresh,
+      TokenManager.setTokens(
+        {
+          access: data.tokens.access,
+          refresh: data.tokens.refresh
+        },
         rememberMe
       );
 
@@ -46,18 +48,16 @@ export const authService = {
 
   logout: async () => {
     try {
-      const refreshToken = tokenService.getRefreshToken();
+      const refreshToken = TokenManager.getRefreshToken();
       if (refreshToken) {
-        // Send refresh token without 'Bearer ' prefix
         await apiService.auth.logout({
-          refresh: refreshToken.replace('Bearer ', '').trim()
+          refresh: refreshToken
         });
       }
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      // Always clear tokens regardless of API call success
-      tokenService.clearTokens();
+      TokenManager.clearTokens();
     }
   },
 
@@ -92,45 +92,10 @@ export const authService = {
   },
 
   refreshToken: async () => {
-    try {
-      const refreshToken = tokenService.getRefreshToken();
-      if (!refreshToken) {
-        console.error('No refresh token found in storage');
-        tokenService.clearTokens();
-        throw new Error('No refresh token available');
-      }
-
-      // Clean the refresh token before sending
-      const cleanToken = refreshToken.replace('Bearer ', '').trim();
-      
-      if (!cleanToken) {
-        console.error('Invalid refresh token format');
-        tokenService.clearTokens();
-        throw new Error('Invalid refresh token');
-      }
-
-      const response = await apiService.auth.refreshToken({
-        refresh: cleanToken
-      });
-
-      const tokenData = response.data as TokenResponse;
-      if (!tokenData.access) {
-        console.error('Invalid token refresh response:', tokenData);
-        tokenService.clearTokens();
-        throw new Error('Invalid token refresh response');
-      }
-
-      // Store the new access token
-      tokenService.setToken(tokenData.access);
-      return tokenData.access;
-    } catch (error) {
-      console.error('Token refresh error:', error);
-      tokenService.clearTokens();
-      throw error;
-    }
+    return TokenManager.refreshToken();
   },
 
   isAuthenticated: (): boolean => {
-    return tokenService.hasValidTokens() && !tokenService.isTokenExpired();
+    return TokenManager.hasValidTokens();
   }
 };

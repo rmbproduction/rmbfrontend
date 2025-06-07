@@ -34,7 +34,10 @@ export const tokenService = {
 
   // Get the refresh token
   getRefreshToken: (): string | null => {
-    return localStorage.getItem(REFRESH_TOKEN_KEY);
+    const storageType = localStorage.getItem(STORAGE_TYPE_KEY) || 'local';
+    const storage = storageType === 'local' ? localStorage : sessionStorage;
+    const token = storage.getItem(REFRESH_TOKEN_KEY);
+    return token ? token.replace('Bearer ', '').trim() : null;
   },
 
   // Set a new refresh token
@@ -65,14 +68,19 @@ export const tokenService = {
 
       const storage = rememberMe ? localStorage : sessionStorage;
       
-      // Remove Bearer prefix if present
+      // Remove Bearer prefix if present and clean tokens
       const cleanAccess = access.replace('Bearer ', '').trim();
       const cleanRefresh = refresh.replace('Bearer ', '').trim();
       
+      if (!cleanAccess || !cleanRefresh) {
+        throw new Error('Invalid token format');
+      }
+      
+      // Store tokens in the selected storage
       storage.setItem(ACCESS_TOKEN_KEY, cleanAccess);
       storage.setItem(REFRESH_TOKEN_KEY, cleanRefresh);
       
-      // Store storage type for future reference
+      // Always store storage type in localStorage for reference
       localStorage.setItem(STORAGE_TYPE_KEY, rememberMe ? 'local' : 'session');
       
       // Set token expiry (30 minutes from now)

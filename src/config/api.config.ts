@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { QueryClient } from '@tanstack/react-query';
-import { tokenService } from '../services/tokenService';
+import TokenManager from '../services/tokenManager';
 import type { User } from '../types/api';
 
 interface TokenResponse {
@@ -222,20 +222,16 @@ const axiosInstance = axios.create(API_CONFIG);
 // Request interceptor for API calls
 axiosInstance.interceptors.request.use(
   (config) => {
-    if (!config.headers) {
-      config.headers = {};
-    }
-
-    // Add auth token if available
-    const token = tokenService.getAccessToken();
+    const token = TokenManager.getAccessToken();
     if (token) {
+      if (!config.headers) {
+        config.headers = {};
+      }
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
     return config;
   },
   (error) => {
-    console.error('Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
@@ -257,25 +253,21 @@ axiosInstance.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = tokenService.getRefreshToken();
-        if (!refreshToken) {
-          throw new Error('No refresh token available');
+        const success = await TokenManager.refreshToken();
+        if (!success) {
+          TokenManager.clearTokens();
+          throw new Error('Token refresh failed');
         }
 
-        const response = await axiosInstance.post<TokenResponse>('/accounts/token/refresh/', {
-          refresh: refreshToken,
-        });
-
-        const { access } = response.data;
-        tokenService.setToken(access);
+        const newToken = TokenManager.getAccessToken();
         if (!originalRequest.headers) {
           originalRequest.headers = {};
         }
-        originalRequest.headers.Authorization = `Bearer ${access}`;
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return axiosInstance(originalRequest);
       } catch (refreshError) {
         console.error('Token refresh failed:', refreshError);
-        tokenService.clearTokens();
+        TokenManager.clearTokens();
         return Promise.reject(refreshError);
       }
     }
@@ -394,7 +386,14 @@ export const apiService = {
   profile: {
     getDetails: () => axiosInstance.get<User>(API_ENDPOINTS.auth.profile),
     create: (data: Partial<User>) => axiosInstance.post(API_ENDPOINTS.profile.create, data),
-    update: (data: Partial<User>) => axiosInstance.patch(API_ENDPOINTS.auth.profile, data),
+    update: (data: FormData | Partial<User>) => 
+      axiosInstance.patch(API_ENDPOINTS.profile.details, data, {
+        headers: {
+          ...(data instanceof FormData 
+            ? { 'Content-Type': 'multipart/form-data' }
+            : { 'Content-Type': 'application/json' })
+        }
+      }),
     changePassword: (data: { currentPassword: string; newPassword: string }) =>
       axiosInstance.post(API_ENDPOINTS.auth.changePassword, data),
   },
@@ -514,7 +513,7 @@ async function handleLogoutCleanup() {
   
   try {
     // Clear all tokens using TokenManager
-    tokenService.clearTokens();
+    TokenManager.clearTokens();
     console.log('Tokens cleared');
 
     // Clear all React Query cache
@@ -536,7 +535,7 @@ async function handleLogoutCleanup() {
   } catch (error) {
     console.error('Error during logout cleanup:', error);
     // Still clear tokens even if other cleanup fails
-    tokenService.clearTokens();
+    TokenManager.clearTokens();
   }
 }
 

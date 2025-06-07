@@ -37,6 +37,12 @@ export default defineConfig(() => {
     },
     server: {
       port: 5173,
+      hmr: {
+        // Reduce HMR connection attempts
+        timeout: 5000,
+        // Increase heartbeat interval
+        heartbeat: 5000,
+      },
       proxy: {
         '/api': {
           target: 'https://repairmybike.up.railway.app',
@@ -50,6 +56,10 @@ export default defineConfig(() => {
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
         credentials: true,
       },
+      watch: {
+        // Ignore node_modules to reduce file watching
+        ignored: ['**/node_modules/**', '**/dist/**'],
+      }
     }
   };
 });

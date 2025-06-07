@@ -1,8 +1,11 @@
 // Profile.tsx
 import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
-import { apiService } from '../config/api.config';
-import { tokenService } from '../services/tokenService';
+import { apiService, CDN_CONFIG } from '../config/api.config';
+import TokenManager from '../services/tokenManager';
+import { motion } from 'framer-motion';
+import { User, MapPin, Bike, ChevronLeft, Loader2, Camera } from 'lucide-react';
+import axios from 'axios';
 
 const API_BASE_URL = 'https://repairmybike.up.railway.app/api';
 
@@ -30,32 +33,48 @@ interface ApiResponse<T> {
 
 interface ProfileFormData {
   name: string;
-  phone_number: string;  // Changed to match backend
+  email: string;
+  phone_number: string;
   address: string;
   city: string;
   state: string;
   postal_code: string;
   country: string;
-  profile_picture: File | null;  // Changed to match backend
-  bio: string;
-  vehicle_name: number | null;
   vehicle_type: number | null;
   manufacturer: number | null;
+  vehicle_name: number | null;
+  profile_picture?: File | null;
 }
 
 const initialFormData: ProfileFormData = {
   name: '',
+  email: '',
   phone_number: '',
   address: '',
   city: '',
   state: '',
   country: '',
   postal_code: '',
-  profile_picture: null,
-  bio: '',
   vehicle_type: null,
   manufacturer: null,
-  vehicle_name: null
+  vehicle_name: null,
+  profile_picture: null
+};
+
+// Update the getCloudinaryUrl function
+const getCloudinaryUrl = (url: string) => {
+  // If it's a data URL (from FileReader), return as is
+  if (url.startsWith('data:')) {
+    return url;
+  }
+
+  // If it's already a full Cloudinary URL, return as is
+  if (url.startsWith('https://res.cloudinary.com')) {
+    return url;
+  }
+
+  // If it's just the public ID, construct the full URL
+  return `https://res.cloudinary.com/${CDN_CONFIG.cloudName}/image/upload/${url}`;
 };
 
 const Profile = () => {
@@ -64,74 +83,162 @@ const Profile = () => {
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([]);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // Add back the useEffect hooks
-  useEffect(() => {
-    const fetchVehicleData = async () => {
-      try {
-        const [vehicleTypesResponse, manufacturersResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/vehicles/types/`),
-          fetch(`${API_BASE_URL}/vehicles/manufacturers/`)
-        ]);
-
-        if (!vehicleTypesResponse.ok || !manufacturersResponse.ok) {
-          throw new Error('Failed to fetch vehicle data');
-        }
-
-        const vehicleTypesData = await vehicleTypesResponse.json() as ApiResponse<VehicleType>;
-        const manufacturersData = await manufacturersResponse.json() as ApiResponse<Manufacturer>;
-
-        setVehicleTypes(vehicleTypesData.data);
-        setManufacturers(manufacturersData.data);
-      } catch (error) {
-        console.error('Error fetching vehicle data:', error);
-        toast.error('Failed to load vehicle data');
+  // Fetch vehicle types
+  const fetchVehicleTypes = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/vehicle/vehicle-types/`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch vehicle types');
       }
-    };
+      const data = await response.json();
+      setVehicleTypes(data);
+    } catch (error) {
+      console.error('Error fetching vehicle types:', error);
+      toast.error('Failed to load vehicle types');
+    }
+  };
 
-    fetchVehicleData();
+  // Fetch manufacturers
+  const fetchManufacturers = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/vehicle/manufacturers/`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch manufacturers');
+      }
+      const data = await response.json();
+      setManufacturers(data);
+    } catch (error) {
+      console.error('Error fetching manufacturers:', error);
+      toast.error('Failed to load manufacturers');
+    }
+  };
+
+  // Fetch vehicle models
+  const fetchVehicleModels = async (vehicleType: number, manufacturer: number) => {
+    try {
+      const response = await axios.get<VehicleModel[]>(`${API_BASE_URL}/vehicle/vehicle-models/`, {
+        params: {
+          vehicle_type: vehicleType,
+          manufacturer: manufacturer
+        }
+      });
+      setVehicleModels(response.data);
+      } catch (error) {
+      console.error('Error fetching vehicle models:', error);
+      toast.error('Failed to load vehicle models');
+    }
+  };
+
+  // Initial load of vehicle types and manufacturers
+  useEffect(() => {
+    fetchVehicleTypes();
+    fetchManufacturers();
+    fetchProfile();
   }, []);
 
-  // Fetch vehicle models when type and manufacturer are selected
-  useEffect(() => {
-    const fetchVehicleModels = async () => {
-      if (formData.vehicle_type && formData.manufacturer) {
-        try {
-          const response = await fetch(
-            `${API_BASE_URL}/vehicles/models/?vehicle_type=${formData.vehicle_type}&manufacturer=${formData.manufacturer}`
-          );
+  // Add this function
+  const fetchProfile = async () => {
+    try {
+      const response = await apiService.profile.getDetails();
+      const profileData = response.data;
+      
+      // Log the profile data to see the URL format
+      console.log('Profile data:', profileData);
+      
+      setFormData(prev => ({
+        ...prev,
+        name: profileData.name || '',
+        email: profileData.email || '',
+        phone_number: profileData.phone_number || '',
+        address: profileData.address || '',
+        city: profileData.city || '',
+        state: profileData.state || '',
+        postal_code: profileData.postal_code || '',
+        country: profileData.country || '',
+        vehicle_type: profileData.vehicle_type?.id || null,
+        manufacturer: profileData.manufacturer?.id || null,
+        vehicle_name: profileData.vehicle_name?.id || null
+      }));
 
-          if (!response.ok) {
-            throw new Error('Failed to fetch vehicle models');
+      // If profile photo exists, use the URL directly
+      if (profileData.profile_photo) {
+        // Log the profile photo URL
+        console.log('Profile photo URL:', profileData.profile_photo);
+        // Check if it's a Cloudinary URL and has a version
+        if (profileData.profile_photo.includes('cloudinary.com')) {
+          // Extract version and public ID
+          const match = profileData.profile_photo.match(/\/v\d+\/(.+)$/);
+          if (match) {
+            const [, publicId] = match;
+            // Use the full URL with version
+            setPreviewImage(profileData.profile_photo);
+          } else {
+            // If no version in URL, use as is
+            setPreviewImage(profileData.profile_photo);
           }
-
-          const data = await response.json() as ApiResponse<VehicleModel>;
-          setVehicleModels(data.data);
-        } catch (error) {
-          console.error('Error fetching vehicle models:', error);
-          toast.error('Failed to load vehicle models');
+        } else {
+          // Not a Cloudinary URL, use as is
+          setPreviewImage(profileData.profile_photo);
         }
       }
-    };
 
-    fetchVehicleModels();
+      // If both vehicle type and manufacturer exist, fetch vehicle models
+      if (profileData.vehicle_type?.id && profileData.manufacturer?.id) {
+        fetchVehicleModels(profileData.vehicle_type.id, profileData.manufacturer.id);
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      toast.error('Failed to load profile data');
+    }
+  };
+
+  // Fetch vehicle models when both vehicle type and manufacturer are selected
+  useEffect(() => {
+    if (formData.vehicle_type && formData.manufacturer) {
+      fetchVehicleModels(formData.vehicle_type, formData.manufacturer);
+    } else {
+      // Reset vehicle models if either selection is cleared
+      setVehicleModels([]);
+    }
   }, [formData.vehicle_type, formData.manufacturer]);
 
   const validateForm = (): boolean => {
     const requiredFields: (keyof ProfileFormData)[] = [
-      'name', 'phone_number', 'address', 'city', 'state',
-      'postal_code', 'country', 'vehicle_type', 'manufacturer', 'vehicle_name'
+      'name',
+      'email',
+      'phone_number',
+      'address',
+      'city',
+      'state',
+      'postal_code',
+      'country',
+      'vehicle_type',
+      'manufacturer',
+      'vehicle_name'
     ];
 
-    const missingFields = requiredFields.filter(field => !formData[field]);
+    // Check for missing required fields
+    const missingFields = requiredFields.filter(field => {
+      const value = formData[field];
+      return value === null || value === undefined || value === '';
+    });
+
     if (missingFields.length > 0) {
-      toast.error(`Please fill in all required fields: ${missingFields.join(', ')}`);
+      toast.error(`Please fill in all required fields: ${missingFields.map(field => field.replace(/_/g, ' ')).join(', ')}`);
       return false;
     }
 
     // Validate phone number (must be less than 15 characters per backend)
-    if (formData.phone_number.length > 15) {
+    if (formData.phone_number && formData.phone_number.length > 15) {
       toast.error('Phone number must be less than 15 characters');
+      return false;
+    }
+
+    // Validate postal code (must be 6 digits)
+    if (formData.postal_code && !/^\d{6}$/.test(formData.postal_code)) {
+      toast.error('Postal code must be exactly 6 digits');
       return false;
     }
 
@@ -144,131 +251,68 @@ const Profile = () => {
     return true;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
-
     setIsLoading(true);
 
     try {
-      // Check if we have a valid token
-      const accessToken = tokenService.getAccessToken();
-      if (!accessToken || tokenService.isTokenExpired()) {
-        // Try to refresh the token
-        const refreshToken = tokenService.getRefreshToken();
-        if (!refreshToken) {
-          throw new Error('Please log in again');
-        }
-
-        // Attempt to refresh the token
-        const refreshResponse = await fetch(`${API_BASE_URL}/accounts/token/refresh/`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            refresh: refreshToken
-          })
-        });
-
-        if (!refreshResponse.ok) {
-          throw new Error('Session expired. Please log in again');
-        }
-
-        const { access } = await refreshResponse.json();
-        tokenService.setToken(access);
-      }
-
       const formDataToSend = new FormData();
       
-      // Add all the required fields to FormData
-      formDataToSend.append('name', formData.name);
-      formDataToSend.append('phone_number', formData.phone_number);
-      formDataToSend.append('address', formData.address);
-      formDataToSend.append('city', formData.city);
-      formDataToSend.append('state', formData.state);
-      formDataToSend.append('postal_code', formData.postal_code);
-      formDataToSend.append('country', formData.country);
-      formDataToSend.append('vehicle_name', formData.vehicle_name!.toString());
-      formDataToSend.append('vehicle_type', formData.vehicle_type!.toString());
-      formDataToSend.append('manufacturer', formData.manufacturer!.toString());
-
-      if (formData.bio) {
-        formDataToSend.append('bio', formData.bio);
-      }
-      if (formData.profile_picture) {
-        formDataToSend.append('profile_picture', formData.profile_picture);
-      }
-
-      // Get the current access token (which should be valid now)
-      const currentToken = tokenService.getAccessToken();
-      if (!currentToken) {
-        throw new Error('Authentication error');
-      }
-
-      // Make the API request with the current token
-      const response = await fetch(`${API_BASE_URL}/accounts/profile/`, {
-        method: 'PATCH',
-        body: formDataToSend,
-        headers: {
-          'Authorization': currentToken,
+      // Append all form fields to FormData
+      (Object.keys(formData) as Array<keyof ProfileFormData>).forEach(key => {
+        if (key === 'profile_picture' && formData[key] instanceof File) {
+          formDataToSend.append('profile_photo', formData[key] as File);
+        } else if (key !== 'profile_picture' && formData[key] !== null) {
+          formDataToSend.append(key, formData[key]?.toString() || '');
         }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to update profile');
-      }
+      // Log the form data for debugging
+      console.log('Form data being sent:', {
+        ...Object.fromEntries(formDataToSend),
+        profile_photo: formData.profile_picture ? 'File present' : 'No file'
+      });
 
-      const data = await response.json();
-      console.log('Profile update response:', data);
+      const response = await apiService.profile.update(formDataToSend);
+
+      // Log the response data to see the URL format
+      console.log('Profile update response:', response);
+
       toast.success('Profile updated successfully!');
-      
+      // Refresh the profile data
+      fetchProfile();
     } catch (error: any) {
       console.error('Error updating profile:', error);
-      if (error.message.includes('log in')) {
-        // Handle authentication errors
-        tokenService.clearTokens();
-        window.location.href = '/login'; // Redirect to login page
-      } else {
-        toast.error(error.message || 'Failed to update profile');
-      }
+      const errorMessage = error.response?.data?.detail || 
+                         error.response?.data?.message || 
+                         error.message || 
+                         'Failed to update profile';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
     
-    if (name === 'vehicle_type' || name === 'manufacturer') {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value ? Number(value) : null,
-        vehicle_name: null // Reset vehicle_name when type or manufacturer changes
-      }));
-    } else if (name === 'vehicle_name') {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value ? Number(value) : null
-      }));
-    } else if (name === 'phone_number') {
-      // Only allow numbers and limit to 15 characters
-      const numbersOnly = value.replace(/[^0-9]/g, '').slice(0, 15);
-      setFormData(prev => ({
-        ...prev,
-        [name]: numbersOnly
-      }));
-    } else if (type === 'file') {
-      const fileInput = e.target as HTMLInputElement;
-      const file = fileInput.files?.[0] || null;
+    if (e.target instanceof HTMLInputElement && e.target.type === 'file') {
+      const file = e.target.files?.[0];
+      if (file) {
       setFormData(prev => ({
         ...prev,
         profile_picture: file
       }));
+        
+        // Preview logic
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          // Log the preview URL for debugging
+          console.log('Setting preview image:', reader.result);
+          setPreviewImage(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
     } else {
       setFormData(prev => ({
         ...prev,
@@ -277,233 +321,389 @@ const Profile = () => {
     }
   };
 
-  return (
-    <div className="max-w-2xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Create Profile</h1>
-      
-      <form onSubmit={handleSubmit} className="space-y-4" encType="multipart/form-data">
-        {/* Personal Information */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold">Personal Information</h2>
-          
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Full Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Phone Number <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="tel"
-              name="phone_number"
-              value={formData.phone_number}
-              onChange={handleChange}
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-              maxLength={15}
-              title="Please enter a valid phone number (max 15 digits)"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Profile Picture
-            </label>
-            <input
-              type="file"
-              name="profile_picture"
-              onChange={handleChange}
-              accept="image/*"
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Bio
-            </label>
-            <textarea
-              name="bio"
-              value={formData.bio}
-              onChange={handleChange}
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              rows={3}
-            />
+        return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => window.history.back()}
+              className="flex items-center text-gray-600 hover:text-gray-900"
+            >
+              <ChevronLeft size={20} />
+              Back
+            </button>
+            <h1 className="text-2xl font-bold text-gray-900">Profile Settings</h1>
           </div>
         </div>
 
-        {/* Address Information - All fields are required */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold">Address Information</h2>
-          
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Address <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              name="address"
-              value={formData.address}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-6" encType="multipart/form-data">
+              {/* Profile Picture Section */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-xl p-6 shadow-sm"
+              >
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                    <Camera className="w-5 h-5 text-[#FF5733]" />
+                  </div>
+                  <h3 className="font-semibold">Profile Picture</h3>
+                </div>
+
+                <div className="flex flex-col items-center space-y-4">
+                  <div className="relative">
+                    <div className="w-32 h-32 rounded-full overflow-hidden bg-gray-100 border-4 border-white shadow-lg">
+                      {previewImage ? (
+                        <img 
+                          src={previewImage} 
+                          alt="Profile Preview" 
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            console.error('Error loading image:', {
+                              src: target.src,
+                              naturalWidth: target.naturalWidth,
+                              naturalHeight: target.naturalHeight,
+                              error: e
+                            });
+                            
+                            // If it's a Cloudinary URL, try adding a timestamp
+                            if (target.src.includes('cloudinary.com')) {
+                              const timestamp = new Date().getTime();
+                              const newSrc = `${target.src}${target.src.includes('?') ? '&' : '?'}t=${timestamp}`;
+                              console.log('Retrying with timestamped URL:', newSrc);
+                              target.src = newSrc;
+                              
+                              // If the retry also fails, show default icon
+                              target.onerror = () => {
+                                console.error('Retry failed, showing default icon');
+                                target.onerror = null;
+                                target.src = '';
+                              };
+                            } else {
+                              // Not a Cloudinary URL, just show default icon
+                              target.onerror = null;
+                              target.src = '';
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                          <User className="w-16 h-16 text-gray-300" />
+                        </div>
+                      )}
+                    </div>
+                    <label 
+                      htmlFor="profile_picture" 
+                      className="absolute bottom-0 right-0 bg-[#FF5733] text-white p-2 rounded-full cursor-pointer shadow-lg hover:bg-[#ff4019] transition-colors"
+                    >
+                      <Camera className="w-4 h-4" />
+                  </label>
+                    <input
+                      type="file"
+                      id="profile_picture"
+                      name="profile_picture"
+                      onChange={handleChange}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    Click the camera icon to upload a profile picture
+                  </p>
+                </div>
+              </motion.div>
+
+              {/* Personal Information */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="bg-white rounded-xl p-6 shadow-sm"
+              >
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                    <User className="w-5 h-5 text-[#FF5733]" />
+                  </div>
+                  <h3 className="font-semibold">Personal Information</h3>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                    <input
+                      type="text"
+                      name="name"
+                      value={formData.name}
               onChange={handleChange}
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Full Name *"
+                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
               required
-            />
-          </div>
+                    />
+                    </div>
+                    <div>
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        placeholder="Email Address"
+                        className="w-full px-4 py-2 border rounded-lg bg-gray-100 border-gray-300"
+                        readOnly
+                        disabled
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <input
+                      type="tel"
+              name="phone_number"
+              value={formData.phone_number}
+              onChange={handleChange}
+                      placeholder="Phone Number *"
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+              required
+              maxLength={15}
+                    />
+                  </div>
+              </div>
+              </motion.div>
+
+              {/* Address Information */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="bg-white rounded-xl p-6 shadow-sm"
+              >
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                    <MapPin className="w-5 h-5 text-[#FF5733]" />
+                  </div>
+                  <h3 className="font-semibold">Address Information</h3>
+                </div>
+
+        <div className="space-y-4">
+                  <div>
+                    <input
+                      type="text"
+                      name="address"
+                      value={formData.address}
+              onChange={handleChange}
+                      placeholder="Street Address *"
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+              required
+                />
+              </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                City <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="city"
-                value={formData.city}
+                <div>
+                  <input
+                    type="text"
+                    name="city"
+                    value={formData.city}
                 onChange={handleChange}
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="City *"
+                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
                 required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                State <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="state"
-                value={formData.state}
+                  />
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    name="state"
+                    value={formData.state}
                 onChange={handleChange}
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="State *"
+                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
                 required
-              />
-            </div>
-          </div>
+                  />
+                </div>
+              </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Country <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="country"
-                value={formData.country}
-                onChange={handleChange}
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Postal Code <span className="text-red-500">*</span>
-              </label>
+              <div>
               <input
                 type="text"
                 name="postal_code"
                 value={formData.postal_code}
                 onChange={handleChange}
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Postal Code *"
+                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
                 required
                 maxLength={6}
                 pattern="[0-9]{6}"
-                title="Please enter a valid 6-digit postal code"
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        name="country"
+                        value={formData.country}
+                        onChange={handleChange}
+                        placeholder="Country *"
+                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                        required
               />
             </div>
           </div>
         </div>
+              </motion.div>
 
-        {/* Vehicle Information - All fields are required */}
+              {/* Vehicle Information */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="bg-white rounded-xl p-6 shadow-sm"
+              >
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                    <Bike className="w-5 h-5 text-[#FF5733]" />
+                  </div>
+                  <h3 className="font-semibold">Vehicle Information</h3>
+                </div>
+
         <div className="space-y-4">
-          <h2 className="text-xl font-semibold">Vehicle Information</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Vehicle Type <span className="text-red-500">*</span>
-              </label>
-              <select
-                name="vehicle_type"
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <select
+                      name="vehicle_type"
                 value={formData.vehicle_type || ''}
                 onChange={handleChange}
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
                 required
               >
-                <option value="">Select Type</option>
+                        <option value="">Select Vehicle Type *</option>
                 {vehicleTypes.map(type => (
                   <option key={type.id} value={type.id}>{type.name}</option>
-                ))}
-              </select>
-            </div>
+                      ))}
+                    </select>
+                  </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Manufacturer <span className="text-red-500">*</span>
-              </label>
-              <select
-                name="manufacturer"
+                  <div>
+                    <select
+                      name="manufacturer"
                 value={formData.manufacturer || ''}
                 onChange={handleChange}
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
                 required
-              >
-                <option value="">Select Manufacturer</option>
+                    >
+                        <option value="">Select Manufacturer *</option>
                 {manufacturers.map(mfr => (
                   <option key={mfr.id} value={mfr.id}>{mfr.name}</option>
-                ))}
-              </select>
-            </div>
+                      ))}
+                    </select>
+                  </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Vehicle Model <span className="text-red-500">*</span>
-              </label>
-              <select
+                  <div>
+                    <select
                 name="vehicle_name"
                 value={formData.vehicle_name || ''}
                 onChange={handleChange}
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
                 required
                 disabled={!formData.vehicle_type || !formData.manufacturer}
               >
-                <option value="">Select Model</option>
+                        <option value="">Select Vehicle Model *</option>
                 {vehicleModels.map(model => (
                   <option key={model.id} value={model.id}>{model.name}</option>
-                ))}
-              </select>
+                      ))}
+                    </select>
             </div>
-          </div>
-        </div>
+      </div>
+    </div>
+              </motion.div>
 
         {/* Submit Button */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+              >
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  className="w-full bg-[#FF5733] text-white py-3 rounded-lg hover:bg-[#ff4019] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading ? (
-            <span className="flex items-center justify-center">
-              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
               Saving...
-            </span>
-          ) : 'Save Profile'}
+                    </>
+                  ) : (
+                    'Save Profile'
+                  )}
         </button>
+              </motion.div>
       </form>
+          </div>
+
+          {/* Right Side - Profile Summary */}
+          <div className="lg:col-span-1">
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="bg-white rounded-xl p-6 shadow-sm sticky top-4"
+            >
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-100">
+                  {previewImage ? (
+                    <img 
+                      src={previewImage} 
+                      alt="Profile" 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                      <User className="w-8 h-8 text-gray-300" />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">{formData.name || 'Your Name'}</h3>
+                  <p className="text-sm text-gray-600">{formData.email}</p>
+                </div>
+              </div>
+
+              {/* Personal Details */}
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <h4 className="text-sm font-medium text-gray-700">Personal Details</h4>
+                <p className="text-sm text-gray-600">{formData.name || 'Not set'}</p>
+                <p className="text-sm text-gray-600">{formData.email || 'Not set'}</p>
+                <p className="text-sm text-gray-600">{formData.phone_number || 'Not set'}</p>
+              </div>
+
+              {/* Address Details */}
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <h4 className="text-sm font-medium text-gray-700">Address</h4>
+                <p className="text-sm text-gray-600">{formData.address || 'Not set'}</p>
+                <p className="text-sm text-gray-600">
+                  {formData.city && formData.state ? `${formData.city}, ${formData.state}` : 'Not set'}
+                </p>
+                <p className="text-sm text-gray-600">{formData.postal_code || 'Not set'}</p>
+              </div>
+
+              {/* Vehicle Details */}
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <h4 className="text-sm font-medium text-gray-700">Vehicle Information</h4>
+                <p className="text-sm text-gray-600">
+                  {vehicleTypes.find(t => t.id === formData.vehicle_type)?.name || 'Not set'}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {manufacturers.find(m => m.id === formData.manufacturer)?.name || 'Not set'}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {vehicleModels.find(m => m.id === formData.vehicle_name)?.name || 'Not set'}
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

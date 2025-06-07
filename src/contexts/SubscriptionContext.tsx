@@ -1,6 +1,7 @@
 import React, { createContext, useContext, ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import subscriptionService from '../services/subscriptionService';
+import { useAuth } from '../contexts/AuthContext';
 
 interface SubscriptionData {
   id: number;
@@ -22,6 +23,14 @@ interface ScheduledVisit {
   scheduled_date: string;
   status: string;
   service_notes?: string;
+}
+
+interface SubscriptionResponse {
+  data: SubscriptionData;
+}
+
+interface VisitsResponse {
+  data: ScheduledVisit[];
 }
 
 interface SubscriptionContextType {
@@ -48,37 +57,53 @@ interface SubscriptionProviderProps {
 
 export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ children }) => {
   const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
 
   const { 
     data: subscription, 
     isLoading: subscriptionLoading,
     error: subscriptionError 
-  } = useQuery<SubscriptionData | null, Error>({
+  } = useQuery<SubscriptionData | null>({
     queryKey: ['activeSubscription'],
-    queryFn: async () => {
-      const response = await subscriptionService.getActiveSubscription();
+    queryFn: async (): Promise<SubscriptionData | null> => {
+      try {
+        const response = await subscriptionService.getActiveSubscription() as SubscriptionResponse;
       return response.data;
+      } catch (error) {
+        console.error('Error fetching subscription:', error);
+        return null;
+      }
     },
-    staleTime: 30000, // Consider data fresh for 30 seconds
-    gcTime: 1000 * 60 * 5, // Cache for 5 minutes
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+    gcTime: 30 * 60 * 1000, // Cache for 30 minutes
+    enabled: isAuthenticated, // Only fetch if user is authenticated
+    retry: false // Don't retry on failure
   });
 
   const { 
     data: upcomingVisits = [], 
     isLoading: visitsLoading,
     error: visitsError 
-  } = useQuery<ScheduledVisit[], Error>({
+  } = useQuery<ScheduledVisit[]>({
     queryKey: ['upcomingVisits'],
-    queryFn: async () => {
-      const response = await subscriptionService.getUpcomingVisits();
+    queryFn: async (): Promise<ScheduledVisit[]> => {
+      try {
+        const response = await subscriptionService.getUpcomingVisits() as VisitsResponse;
       return response.data;
+      } catch (error) {
+        console.error('Error fetching visits:', error);
+        return [];
+      }
     },
-    staleTime: 30000,
-    gcTime: 1000 * 60 * 5,
-    enabled: !!subscription, // Only fetch visits if there's an active subscription
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+    gcTime: 30 * 60 * 1000, // Cache for 30 minutes
+    enabled: !!subscription && isAuthenticated, // Only fetch if there's an active subscription and user is authenticated
+    retry: false // Don't retry on failure
   });
 
   const refreshSubscription = async () => {
+    if (!isAuthenticated) return; // Don't refresh if not authenticated
+    
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['activeSubscription'] }),
       queryClient.invalidateQueries({ queryKey: ['upcomingVisits'] })
