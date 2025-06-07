@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiService, API_BASE_URL } from '../../config/api.config';
+import { apiService } from '../../config/api.config';
 import TokenManager from '../../services/tokenManager';
 import { User } from '../../schemas/auth';
 import { useState, useEffect } from 'react';
@@ -58,15 +58,10 @@ export const useProfile = () => {
 };
 
 export const useLogin = () => {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async ({ email, password, rememberMe }: { email: string; password: string; rememberMe?: boolean }) => {
-      const response = await authAxios.post('/accounts/login/', { email, password });
+      const response = await apiService.auth.login({ email, password });
       return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profile'] });
     },
   });
 };
@@ -74,7 +69,7 @@ export const useLogin = () => {
 export const useSignup = () => {
   return useMutation({
     mutationFn: async ({ email, username, password }: { email: string; username: string; password: string }) => {
-      const response = await authAxios.post('/accounts/signup/', { email, username, password });
+      const response = await apiService.auth.signup({ email, username, password });
       return response.data;
     },
   });
@@ -106,7 +101,7 @@ export const useUpdateProfile = () => {
 export const useForgotPassword = () => {
   return useMutation({
     mutationFn: async ({ email }: { email: string }) => {
-      const response = await authAxios.post('/accounts/password/reset/', { email });
+      const response = await apiService.auth.forgotPassword({ email });
       return response.data;
     },
   });
@@ -115,7 +110,7 @@ export const useForgotPassword = () => {
 export const useGoogleLogin = () => {
   return useMutation({
     mutationFn: async () => {
-      const response = await authAxios.get('/accounts/google/login/');
+      const response = await apiService.auth.googleLogin();
       return response.data;
     },
   });
