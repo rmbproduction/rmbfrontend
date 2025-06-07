@@ -11,6 +11,7 @@ class TokenManager {
   private static readonly TOKEN_EXPIRY_KEY = 'token_expiry';
   private static readonly STORAGE_TYPE_KEY = 'token_storage_type';
   private static readonly TOKEN_KEY = 'auth_token';
+  private static readonly API_BASE_URL = 'https://repairmybike.up.railway.app/api';
 
   static setTokens(tokens: { access: string; refresh: string }, rememberMe: boolean = false): void {
     const storage = rememberMe ? localStorage : sessionStorage;
@@ -101,7 +102,7 @@ class TokenManager {
       }
 
       const response = await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL}/accounts/token/refresh/`,
+        `${this.API_BASE_URL}/accounts/token/refresh/`,
         { refresh: refreshToken }
       );
 
