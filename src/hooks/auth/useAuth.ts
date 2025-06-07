@@ -1,9 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiService } from '../../config/api.config';
+import { apiService, API_BASE_URL } from '../../config/api.config';
 import TokenManager from '../../services/tokenManager';
 import { User } from '../../schemas/auth';
 import { useState, useEffect } from 'react';
 import { authService } from '../../services/authService';
+import type { LoginResponse, SignupResponse } from '../../types/api';
+import axios from 'axios';
+
+// Create a dedicated auth axios instance with the correct base URL
+const authAxios = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
 interface LoginData {
   email: string;
@@ -51,35 +61,8 @@ export const useLogin = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: LoginData): Promise<LoginResponseData> => {
-      console.log('Login attempt started:', {
-        email: data.email,
-        password: data.password ? 'PROVIDED' : 'MISSING',
-        rememberMe: data.rememberMe
-      });
-      
-      const response = await apiService.auth.login({
-        email: data.email,
-        password: data.password
-      });
-
-      console.log('Login response validation:', {
-        hasTokens: !!response.data.tokens,
-        hasUser: !!response.data.user,
-        tokenFormat: 'tokens' in response.data ? 'nested' : 'root'
-      });
-
-      // Store tokens using TokenManager
-      if (response.data?.tokens?.access && response.data?.tokens?.refresh) {
-        TokenManager.setTokens(response.data.tokens, data.rememberMe);
-        console.log('Token verification check:', {
-          accessToken: !!TokenManager.getAccessToken(),
-          refreshToken: !!TokenManager.getRefreshToken()
-        });
-      } else {
-        throw new Error('Login failed: No tokens received');
-      }
-
+    mutationFn: async ({ email, password, rememberMe }: { email: string; password: string; rememberMe?: boolean }) => {
+      const response = await authAxios.post('/accounts/login/', { email, password });
       return response.data;
     },
     onSuccess: () => {
@@ -90,8 +73,10 @@ export const useLogin = () => {
 
 export const useSignup = () => {
   return useMutation({
-    mutationFn: (data: SignupData) => 
-      apiService.auth.signup(data),
+    mutationFn: async ({ email, username, password }: { email: string; username: string; password: string }) => {
+      const response = await authAxios.post('/accounts/signup/', { email, username, password });
+      return response.data;
+    },
   });
 };
 
@@ -120,12 +105,18 @@ export const useUpdateProfile = () => {
 
 export const useForgotPassword = () => {
   return useMutation({
-    mutationFn: apiService.auth.forgotPassword,
+    mutationFn: async ({ email }: { email: string }) => {
+      const response = await authAxios.post('/accounts/password/reset/', { email });
+      return response.data;
+    },
   });
 };
 
 export const useGoogleLogin = () => {
   return useMutation({
-    mutationFn: apiService.auth.googleLogin,
+    mutationFn: async () => {
+      const response = await authAxios.get('/accounts/google/login/');
+      return response.data;
+    },
   });
 }; 

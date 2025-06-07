@@ -1,6 +1,16 @@
 import { tokenService } from './tokenService';
-import { apiService } from '../config/api.config';
+import { apiService, API_BASE_URL } from '../config/api.config';
 import type { LoginResponse, SignupResponse, User } from '../types/api';
+
+// Ensure we're using the correct base URL for all auth operations
+const AUTH_ENDPOINTS = {
+  login: `${API_BASE_URL}/accounts/login/`,
+  signup: `${API_BASE_URL}/accounts/signup/`,
+  logout: `${API_BASE_URL}/accounts/logout/`,
+  verifyEmail: (token: string) => `${API_BASE_URL}/accounts/verify-email/${token}/`,
+  refreshToken: `${API_BASE_URL}/accounts/token/refresh/`,
+  profile: `${API_BASE_URL}/accounts/profile/`,
+};
 
 export const authService = {
   login: async (email: string, password: string, rememberMe: boolean = false) => {
