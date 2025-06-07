@@ -1,5 +1,10 @@
 import axios from 'axios';
 
+interface TokenResponse {
+  access: string;
+  refresh?: string;
+}
+
 export interface Tokens {
   access: string;
   refresh: string;
@@ -13,7 +18,7 @@ class TokenManager {
   private static readonly TOKEN_KEY = 'auth_token';
   private static readonly API_BASE_URL = 'https://repairmybike.up.railway.app/api';
 
-  static setTokens(tokens: { access: string; refresh: string }, rememberMe: boolean = false): void {
+  static setTokens(tokens: Tokens, rememberMe: boolean = false): void {
     const storage = rememberMe ? localStorage : sessionStorage;
     
     try {
@@ -101,12 +106,12 @@ class TokenManager {
         return false;
       }
 
-      const response = await axios.post(
+      const response = await axios.post<TokenResponse>(
         `${this.API_BASE_URL}/accounts/token/refresh/`,
         { refresh: refreshToken }
       );
 
-      if (response.data.access) {
+      if (response.data?.access) {
         const storageType = localStorage.getItem(this.STORAGE_TYPE_KEY);
         const storage = storageType === 'local' ? localStorage : sessionStorage;
         storage.setItem(this.ACCESS_TOKEN_KEY, response.data.access);
