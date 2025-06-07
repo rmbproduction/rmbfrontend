@@ -191,6 +191,10 @@ const Profile = () => {
     },
     enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false
   });
 
   // Add a function to handle vehicle selection updates
