@@ -11,7 +11,9 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     base: '/',
     define: {
-      'process.env.VITE_API_BASE_URL': JSON.stringify('https://repairmybike.up.railway.app/api')
+      'process.env.VITE_API_BASE_URL': JSON.stringify('https://repairmybike.up.railway.app/api'),
+      'process.env.VITE_API_URL': JSON.stringify('https://repairmybike.up.railway.app/api'),
+      'process.env.VITE_FRONTEND_URL': JSON.stringify('https://repairmybike.in'),
     },
     resolve: {
       alias: {
@@ -43,9 +45,17 @@ export default defineConfig(({ mode }) => {
           target: 'https://repairmybike.up.railway.app',
           changeOrigin: true,
           secure: false,
+          headers: {
+            'Origin': 'https://repairmybike.in',
+          },
           rewrite: (path) => path.replace(/^\/api/, ''),
         }
-      }
+      },
+      cors: {
+        origin: 'https://repairmybike.in',
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        credentials: true,
+      },
     }
   };
 });
