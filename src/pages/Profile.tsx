@@ -10,6 +10,7 @@ import {
   Wrench, Clock, Wallet
 } from 'lucide-react';
 import axios from 'axios';
+import { useUserProfile } from '../hooks/useUserProfile';
 
 // Import tab components
 import ForSaleVehicles from '../components/ForSaleVehicles';
@@ -179,6 +180,16 @@ const Profile = () => {
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([]);
   const [previewImage, setPreviewImage] = useState<string | undefined>(undefined);
+  const { prefillFormData, updateSharedFormData } = useUserProfile();
+
+  // Prefill profile form from shared data on mount
+  useEffect(() => {
+    const loadSharedData = async () => {
+      const prefilled = await prefillFormData(initialFormData, 'profile');
+      setFormData(prev => ({ ...prev, ...prefilled }));
+    };
+    loadSharedData();
+  }, []);
 
   // Fetch vehicle types
   const fetchVehicleTypes = async () => {
@@ -390,6 +401,20 @@ const Profile = () => {
         ...prev,
         [name]: value
       }));
+      // Update shared form data for two-way sync
+      if ([
+        'name', 'email', 'phone_number', 'address', 'city', 'state', 'postal_code'
+      ].includes(name)) {
+        updateSharedFormData({
+          name: name === 'name' ? value : formData.name,
+          email: name === 'email' ? value : formData.email,
+          phone: name === 'phone_number' ? value : formData.phone_number,
+          address: name === 'address' ? value : formData.address,
+          city: name === 'city' ? value : formData.city,
+          state: name === 'state' ? value : formData.state,
+          postalCode: name === 'postal_code' ? value : formData.postal_code,
+        });
+      }
     }
   };
 
@@ -429,6 +454,16 @@ const Profile = () => {
       }
 
       toast.success('Profile updated successfully!');
+      // Update shared form data after successful save
+      updateSharedFormData({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone_number,
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        postalCode: formData.postal_code,
+      });
     } catch (error: any) {
       console.error('Error updating profile:', error);
       const errorMessage = error.response?.data?.detail || 

@@ -17,8 +17,7 @@ import Contact from './pages/Contact';
 import LoginSignupPage from './pages/LoginSignupPage';
 import Profile from './pages/Profile';
 import VerifyEmail from './pages/VerifyEmail';
-import ResetPassword from './pages/ResetPassword';
-import PasswordResetConfirmation from './pages/PasswordResetConfirmation';
+import PasswordReset from './pages/PasswordReset';
 import SellVehicle from './pages/SellVehicle';
 import AboutPage from './pages/AboutPage';
 import NotFound from './pages/NotFound';
@@ -95,8 +94,7 @@ const AppRoutes: React.FC = () => {
 
       <Route path="/verify-email" element={<EmailVerification />} />
       <Route path="/verify-email/:token" element={<VerifyEmail />} />
-      <Route path="/reset-password/:token" element={<ResetPassword />} />
-      <Route path="/password-reset-confirmation" element={<PasswordResetConfirmation />} />
+      <Route path="/reset-password" element={<PasswordReset />} />
 
       {/* Protected Routes */}
       <Route path="/profile" element={

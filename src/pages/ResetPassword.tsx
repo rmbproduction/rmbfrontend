@@ -35,7 +35,7 @@ const ResetPassword = () => {
       }
 
       await resetPassword.mutateAsync(validatedData);
-      toast.success('Password reset successfully!');
+      toast.success('Password reset link sent to your email!');
       navigate('/login');
     } catch (error: any) {
       if (error.errors) {

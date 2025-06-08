@@ -15,6 +15,15 @@ interface LoginResponse {
   is_first_login?: boolean;
 }
 
+interface PasswordResetRequest {
+  email: string;
+}
+
+interface PasswordResetConfirm {
+  password: string;
+  confirm_password: string;
+}
+
 // Use apiService directly since it already has the correct base URL configured
 export const authService = {
   login: async (email: string, password: string, rememberMe: boolean = false) => {
@@ -97,5 +106,29 @@ export const authService = {
 
   isAuthenticated: (): boolean => {
     return TokenManager.hasValidTokens();
+  },
+
+  requestPasswordReset: async (email: string) => {
+    try {
+      const response = await apiService.auth.forgotPassword({ email });
+      return response.data;
+    } catch (error) {
+      console.error('Password reset request error:', error);
+      throw error;
+    }
+  },
+
+  resetPassword: async (token: string, password: string, confirmPassword: string) => {
+    try {
+      const response = await apiService.auth.resetPassword({
+        token,
+        password,
+        confirm_password: confirmPassword
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Password reset error:', error);
+      throw error;
+    }
   }
 };

@@ -143,8 +143,8 @@ export const API_ENDPOINTS = {
     logout: '/accounts/logout/',
     verifyEmail: (token: string) => `/accounts/verify-email/${token}/`,
     resendVerification: '/accounts/resend-verification/',
-    forgotPassword: '/accounts/password/reset/',
-    resetPassword: '/accounts/password-reset/',
+    forgotPassword: '/accounts/password-reset/',
+    resetPassword: (token: string) => `/accounts/password-reset/${token}/`,
     profile: '/accounts/profile/',
     refreshToken: '/accounts/token/refresh/',
     changePassword: '/accounts/change-password/',
@@ -290,18 +290,20 @@ export const apiService = {
     logout: (data: { refresh: string }) =>
       axiosInstance.post(API_ENDPOINTS.auth.logout, data),
     verifyEmail: (token: string) =>
-      axiosInstance.get(API_ENDPOINTS.auth.verifyEmail(token)),
-    resendVerification: (email: string) =>
-      axiosInstance.post(API_ENDPOINTS.auth.resendVerification, { email }),
+      axiosInstance.post(API_ENDPOINTS.auth.verifyEmail(token)),
+    resendVerification: () =>
+      axiosInstance.post(API_ENDPOINTS.auth.resendVerification),
+    forgotPassword: (data: { email: string }) =>
+      axiosInstance.post(API_ENDPOINTS.auth.forgotPassword, data),
+    resetPassword: (data: { token: string; password: string; confirm_password: string }) =>
+      axiosInstance.post(API_ENDPOINTS.auth.resetPassword(data.token), data),
     getProfile: () =>
       axiosInstance.get<User>(API_ENDPOINTS.auth.profile),
     updateProfile: (data: Partial<User>) =>
-      axiosInstance.patch(API_ENDPOINTS.auth.profile, data),
+      axiosInstance.patch<User>(API_ENDPOINTS.auth.profile, data),
     refreshToken: (data: { refresh: string }) =>
       axiosInstance.post<TokenResponse>(API_ENDPOINTS.auth.refreshToken, data),
-    resetPassword: (data: { email: string }) =>
-      axiosInstance.post(API_ENDPOINTS.auth.resetPassword, data),
-    changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    changePassword: (data: { old_password: string; new_password: string }) =>
       axiosInstance.post(API_ENDPOINTS.auth.changePassword, data),
   },
 
