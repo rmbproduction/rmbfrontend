@@ -1,11 +1,21 @@
 // Profile.tsx
 import { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { apiService, CDN_CONFIG } from '../config/api.config';
 import TokenManager from '../services/tokenManager';
 import { motion } from 'framer-motion';
-import { User, MapPin, Bike, ChevronLeft, Loader2, Camera } from 'lucide-react';
+import { 
+  User, MapPin, Bike, ChevronLeft, Loader2, Camera,
+  Wrench, Clock, Wallet
+} from 'lucide-react';
 import axios from 'axios';
+
+// Import tab components
+import ForSaleVehicles from '../components/ForSaleVehicles';
+import BookedVehicles from '../components/BookedVehicles';
+import MyRepairs from './MyRepairs';
+import SubscriptionOverview from '../components/subscription/SubscriptionOverview';
 
 const API_BASE_URL = 'https://repairmybike.up.railway.app/api';
 
@@ -160,6 +170,9 @@ const optimizeImage = (file: File): Promise<File> => {
 };
 
 const Profile = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const activeTab = searchParams.get('tab') || 'profile';
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<ProfileFormData>(initialFormData);
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
@@ -428,244 +441,235 @@ const Profile = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => window.history.back()}
-              className="flex items-center text-gray-600 hover:text-gray-900"
+  const handleTabChange = (tabId: string) => {
+    setSearchParams({ tab: tabId });
+  };
+
+  // Render the appropriate tab content
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'profile':
+        return (
+          <form onSubmit={handleSubmit} className="space-y-6" encType="multipart/form-data">
+            {/* Profile Picture Section */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white rounded-xl p-6 shadow-sm"
             >
-              <ChevronLeft size={20} />
-              Back
-            </button>
-            <h1 className="text-2xl font-bold text-gray-900">Profile Settings</h1>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-6">
-            <form onSubmit={handleSubmit} className="space-y-6" encType="multipart/form-data">
-              {/* Profile Picture Section */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-xl p-6 shadow-sm"
-              >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
-                    <Camera className="w-5 h-5 text-[#FF5733]" />
-                  </div>
-                  <h3 className="font-semibold">Profile Picture</h3>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                  <Camera className="w-5 h-5 text-[#FF5733]" />
                 </div>
+                <h3 className="font-semibold">Profile Picture</h3>
+              </div>
 
-                <div className="flex flex-col items-center space-y-4">
-                  <div className="relative">
-                    <div className="w-32 h-32 rounded-full overflow-hidden bg-gray-100 border-4 border-white shadow-lg">
-                      {previewImage ? (
-                        <img 
-                          src={previewImage} 
-                          alt="Profile Preview" 
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            console.error('Error loading image:', {
-                              src: previewImage,
-                              error: e
-                            });
-                            setPreviewImage(undefined);
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gray-50">
-                          <User className="w-16 h-16 text-gray-300" />
-                        </div>
-                      )}
-                    </div>
-                    <label 
-                      htmlFor="profile_picture" 
-                      className="absolute bottom-0 right-0 bg-[#FF5733] text-white p-2 rounded-full cursor-pointer shadow-lg hover:bg-[#ff4019] transition-colors"
-                    >
-                      <Camera className="w-4 h-4" />
+              <div className="flex flex-col items-center space-y-4">
+                <div className="relative">
+                  <div className="w-32 h-32 rounded-full overflow-hidden bg-gray-100 border-4 border-white shadow-lg">
+                    {previewImage ? (
+                      <img 
+                        src={previewImage} 
+                        alt="Profile Preview" 
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          console.error('Error loading image:', {
+                            src: previewImage,
+                            error: e
+                          });
+                          setPreviewImage(undefined);
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                        <User className="w-16 h-16 text-gray-300" />
+                      </div>
+                    )}
+                  </div>
+                  <label 
+                    htmlFor="profile_picture" 
+                    className="absolute bottom-0 right-0 bg-[#FF5733] text-white p-2 rounded-full cursor-pointer shadow-lg hover:bg-[#ff4019] transition-colors"
+                  >
+                    <Camera className="w-4 h-4" />
                   </label>
+                  <input
+                    type="file"
+                    id="profile_picture"
+                    name="profile_picture"
+                    onChange={handleChange}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                </div>
+                <p className="text-sm text-gray-500">
+                  Click the camera icon to upload a profile picture
+                </p>
+              </div>
+            </motion.div>
+
+            {/* Personal Information */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded-xl p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                  <User className="w-5 h-5 text-[#FF5733]" />
+                </div>
+                <h3 className="font-semibold">Personal Information</h3>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                  <input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    placeholder="Full Name *"
+                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                    required
+                  />
+                  </div>
+                  <div>
                     <input
-                      type="file"
-                      id="profile_picture"
-                      name="profile_picture"
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      placeholder="Email Address"
+                      className="w-full px-4 py-2 border rounded-lg bg-gray-100 border-gray-300"
+                      readOnly
+                      disabled
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <input
+                    type="tel"
+                    name="phone_number"
+                    value={formData.phone_number}
+                    onChange={handleChange}
+                    placeholder="Phone Number *"
+                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                    required
+                    maxLength={15}
+                  />
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Address Information */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-white rounded-xl p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                  <MapPin className="w-5 h-5 text-[#FF5733]" />
+                </div>
+                <h3 className="font-semibold">Address Information</h3>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <input
+                    type="text"
+                    name="address"
+                    value={formData.address}
+                    onChange={handleChange}
+                    placeholder="Street Address *"
+                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <input
+                      type="text"
+                      name="city"
+                      value={formData.city}
                       onChange={handleChange}
-                      accept="image/*"
-                      className="hidden"
-                    />
-                  </div>
-                  <p className="text-sm text-gray-500">
-                    Click the camera icon to upload a profile picture
-                  </p>
-                </div>
-              </motion.div>
-
-              {/* Personal Information */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="bg-white rounded-xl p-6 shadow-sm"
-              >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
-                    <User className="w-5 h-5 text-[#FF5733]" />
-                  </div>
-                  <h3 className="font-semibold">Personal Information</h3>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                    <input
-                      type="text"
-                      name="name"
-                      value={formData.name}
-              onChange={handleChange}
-                        placeholder="Full Name *"
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
-              required
-                    />
-                    </div>
-                    <div>
-                      <input
-                        type="email"
-                        name="email"
-                        value={formData.email}
-                        placeholder="Email Address"
-                        className="w-full px-4 py-2 border rounded-lg bg-gray-100 border-gray-300"
-                        readOnly
-                        disabled
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <input
-                      type="tel"
-              name="phone_number"
-              value={formData.phone_number}
-              onChange={handleChange}
-                      placeholder="Phone Number *"
+                      placeholder="City *"
                       className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
-              required
-              maxLength={15}
+                      required
                     />
                   </div>
-              </div>
-              </motion.div>
-
-              {/* Address Information */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="bg-white rounded-xl p-6 shadow-sm"
-              >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
-                    <MapPin className="w-5 h-5 text-[#FF5733]" />
-                  </div>
-                  <h3 className="font-semibold">Address Information</h3>
-                </div>
-
-        <div className="space-y-4">
                   <div>
                     <input
                       type="text"
-                      name="address"
-                      value={formData.address}
-              onChange={handleChange}
-                      placeholder="Street Address *"
+                      name="state"
+                      value={formData.state}
+                      onChange={handleChange}
+                      placeholder="State *"
                       className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
-              required
-                />
-              </div>
-
-          <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <input
-                    type="text"
-                    name="city"
-                    value={formData.city}
-                onChange={handleChange}
-                        placeholder="City *"
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
-                required
-                  />
-                </div>
-                <div>
-                  <input
-                    type="text"
-                    name="state"
-                    value={formData.state}
-                onChange={handleChange}
-                        placeholder="State *"
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
-                required
-                  />
-                </div>
-              </div>
-
-          <div className="grid grid-cols-2 gap-4">
-              <div>
-              <input
-                type="text"
-                name="postal_code"
-                value={formData.postal_code}
-                onChange={handleChange}
-                        placeholder="Postal Code *"
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
-                required
-                maxLength={6}
-                pattern="[0-9]{6}"
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="text"
-                        name="country"
-                        value={formData.country}
-                        onChange={handleChange}
-                        placeholder="Country *"
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
-                        required
-              />
-            </div>
-          </div>
-        </div>
-              </motion.div>
-
-              {/* Vehicle Information */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="bg-white rounded-xl p-6 shadow-sm"
-              >
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
-                    <Bike className="w-5 h-5 text-[#FF5733]" />
+                      required
+                    />
                   </div>
-                  <h3 className="font-semibold">Vehicle Information</h3>
                 </div>
 
-        <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <input
+                      type="text"
+                      name="postal_code"
+                      value={formData.postal_code}
+                      onChange={handleChange}
+                      placeholder="Postal Code *"
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                      required
+                      maxLength={6}
+                      pattern="[0-9]{6}"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      name="country"
+                      value={formData.country}
+                      onChange={handleChange}
+                      placeholder="Country *"
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Vehicle Information */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="bg-white rounded-xl p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                  <Bike className="w-5 h-5 text-[#FF5733]" />
+                </div>
+                <h3 className="font-semibold">Vehicle Information</h3>
+              </div>
+
+              <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <select
                       name="vehicle_type"
-                value={formData.vehicle_type || ''}
-                onChange={handleChange}
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
-                required
-              >
-                        <option value="">Select Vehicle Type *</option>
-                {vehicleTypes.map(type => (
-                  <option key={type.id} value={type.id}>{type.name}</option>
+                      value={formData.vehicle_type || ''}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                      required
+                    >
+                      <option value="">Select Vehicle Type *</option>
+                      {vehicleTypes.map(type => (
+                        <option key={type.id} value={type.id}>{type.name}</option>
                       ))}
                     </select>
                   </div>
@@ -673,131 +677,416 @@ const Profile = () => {
                   <div>
                     <select
                       name="manufacturer"
-                value={formData.manufacturer || ''}
-                onChange={handleChange}
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
-                required
+                      value={formData.manufacturer || ''}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                      required
                     >
-                        <option value="">Select Manufacturer *</option>
-                {manufacturers.map(mfr => (
-                  <option key={mfr.id} value={mfr.id}>{mfr.name}</option>
+                      <option value="">Select Manufacturer *</option>
+                      {manufacturers.map(mfr => (
+                        <option key={mfr.id} value={mfr.id}>{mfr.name}</option>
                       ))}
                     </select>
                   </div>
 
                   <div>
                     <select
-                name="vehicle_name"
-                value={formData.vehicle_name || ''}
-                onChange={handleChange}
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
-                required
-                disabled={!formData.vehicle_type || !formData.manufacturer}
-              >
-                        <option value="">Select Vehicle Model *</option>
-                {vehicleModels.map(model => (
-                  <option key={model.id} value={model.id}>{model.name}</option>
+                      name="vehicle_name"
+                      value={formData.vehicle_name || ''}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                      required
+                      disabled={!formData.vehicle_type || !formData.manufacturer}
+                    >
+                      <option value="">Select Vehicle Model *</option>
+                      {vehicleModels.map(model => (
+                        <option key={model.id} value={model.id}>{model.name}</option>
                       ))}
                     </select>
-            </div>
-      </div>
-    </div>
-              </motion.div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
 
-        {/* Submit Button */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
+            {/* Submit Button */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-[#FF5733] text-white py-3 rounded-lg hover:bg-[#ff4019] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-        <button
-          type="submit"
-          disabled={isLoading}
-                  className="w-full bg-[#FF5733] text-white py-3 rounded-lg hover:bg-[#ff4019] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-              Saving...
-                    </>
-                  ) : (
-                    'Save Profile'
-                  )}
-        </button>
-              </motion.div>
-      </form>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Profile'
+                )}
+              </button>
+            </motion.div>
+          </form>
+        );
+      case 'vehicles':
+        return <ForSaleVehicles />;
+      case 'repairs':
+        return <MyRepairs />;
+      case 'bookings':
+        return <BookedVehicles />;
+      case 'subscriptions':
+        return <SubscriptionOverview />;
+      default:
+        return (
+          <form onSubmit={handleSubmit} className="space-y-6" encType="multipart/form-data">
+            {/* Profile Picture Section */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white rounded-xl p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                  <Camera className="w-5 h-5 text-[#FF5733]" />
+                </div>
+                <h3 className="font-semibold">Profile Picture</h3>
+              </div>
+
+              <div className="flex flex-col items-center space-y-4">
+                <div className="relative">
+                  <div className="w-32 h-32 rounded-full overflow-hidden bg-gray-100 border-4 border-white shadow-lg">
+                    {previewImage ? (
+                      <img 
+                        src={previewImage} 
+                        alt="Profile Preview" 
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          console.error('Error loading image:', {
+                            src: previewImage,
+                            error: e
+                          });
+                          setPreviewImage(undefined);
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                        <User className="w-16 h-16 text-gray-300" />
+                      </div>
+                    )}
+                  </div>
+                  <label 
+                    htmlFor="profile_picture" 
+                    className="absolute bottom-0 right-0 bg-[#FF5733] text-white p-2 rounded-full cursor-pointer shadow-lg hover:bg-[#ff4019] transition-colors"
+                  >
+                    <Camera className="w-4 h-4" />
+                  </label>
+                  <input
+                    type="file"
+                    id="profile_picture"
+                    name="profile_picture"
+                    onChange={handleChange}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                </div>
+                <p className="text-sm text-gray-500">
+                  Click the camera icon to upload a profile picture
+                </p>
+              </div>
+            </motion.div>
+
+            {/* Personal Information */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded-xl p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                  <User className="w-5 h-5 text-[#FF5733]" />
+                </div>
+                <h3 className="font-semibold">Personal Information</h3>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                  <input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    placeholder="Full Name *"
+                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                    required
+                  />
+                  </div>
+                  <div>
+                    <input
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      placeholder="Email Address"
+                      className="w-full px-4 py-2 border rounded-lg bg-gray-100 border-gray-300"
+                      readOnly
+                      disabled
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <input
+                    type="tel"
+                    name="phone_number"
+                    value={formData.phone_number}
+                    onChange={handleChange}
+                    placeholder="Phone Number *"
+                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                    required
+                    maxLength={15}
+                  />
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Address Information */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-white rounded-xl p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                  <MapPin className="w-5 h-5 text-[#FF5733]" />
+                </div>
+                <h3 className="font-semibold">Address Information</h3>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <input
+                    type="text"
+                    name="address"
+                    value={formData.address}
+                    onChange={handleChange}
+                    placeholder="Street Address *"
+                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <input
+                      type="text"
+                      name="city"
+                      value={formData.city}
+                      onChange={handleChange}
+                      placeholder="City *"
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      name="state"
+                      value={formData.state}
+                      onChange={handleChange}
+                      placeholder="State *"
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <input
+                      type="text"
+                      name="postal_code"
+                      value={formData.postal_code}
+                      onChange={handleChange}
+                      placeholder="Postal Code *"
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                      required
+                      maxLength={6}
+                      pattern="[0-9]{6}"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      name="country"
+                      value={formData.country}
+                      onChange={handleChange}
+                      placeholder="Country *"
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Vehicle Information */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="bg-white rounded-xl p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#FFF5F2] rounded-full flex items-center justify-center">
+                  <Bike className="w-5 h-5 text-[#FF5733]" />
+                </div>
+                <h3 className="font-semibold">Vehicle Information</h3>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <select
+                      name="vehicle_type"
+                      value={formData.vehicle_type || ''}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                      required
+                    >
+                      <option value="">Select Vehicle Type *</option>
+                      {vehicleTypes.map(type => (
+                        <option key={type.id} value={type.id}>{type.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <select
+                      name="manufacturer"
+                      value={formData.manufacturer || ''}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                      required
+                    >
+                      <option value="">Select Manufacturer *</option>
+                      {manufacturers.map(mfr => (
+                        <option key={mfr.id} value={mfr.id}>{mfr.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <select
+                      name="vehicle_name"
+                      value={formData.vehicle_name || ''}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF5733] border-gray-300"
+                      required
+                      disabled={!formData.vehicle_type || !formData.manufacturer}
+                    >
+                      <option value="">Select Vehicle Model *</option>
+                      {vehicleModels.map(model => (
+                        <option key={model.id} value={model.id}>{model.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Submit Button */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-[#FF5733] text-white py-3 rounded-lg hover:bg-[#ff4019] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Profile'
+                )}
+              </button>
+            </motion.div>
+          </form>
+        );
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => window.history.back()}
+                className="flex items-center text-gray-600 hover:text-gray-900"
+              >
+                <ChevronLeft size={20} />
+                Back
+              </button>
+              <h1 className="text-xl font-bold text-gray-900">Profile Settings</h1>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex gap-8">
+          {/* Left Sidebar - Tabs */}
+          <div className="w-64 flex-shrink-0">
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              <nav className="space-y-1">
+                {[
+                  { id: 'profile', label: 'Profile Information', icon: User },
+                  { id: 'vehicles', label: 'Vehicles for Sale', icon: Bike },
+                  { id: 'repairs', label: 'My Repairs', icon: Wrench },
+                  { id: 'bookings', label: 'My Bookings', icon: Clock },
+                  { id: 'subscriptions', label: 'My Subscriptions', icon: Wallet },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => handleTabChange(tab.id)}
+                    className={`w-full flex items-center px-4 py-3 text-sm font-medium ${
+                      activeTab === tab.id
+                        ? 'bg-[#FFF5F2] text-[#FF5733] border-l-4 border-[#FF5733]'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                  >
+                    <tab.icon className="w-5 h-5 mr-3" />
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
+            </div>
           </div>
 
-          {/* Right Side - Profile Summary */}
-          <div className="lg:col-span-1">
+          {/* Main Content Area */}
+          <div className="flex-1">
             <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="bg-white rounded-xl p-6 shadow-sm sticky top-4"
+              key={activeTab}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white rounded-xl shadow-sm p-6"
             >
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-100">
-                  {previewImage ? (
-                    <img 
-                      src={getCloudinaryUrl(previewImage, 'thumbnail')} 
-                      alt="Profile" 
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        console.error('Error loading thumbnail:', e);
-                        // Try loading the small version if thumbnail fails
-                        if (previewImage.includes('/thumbnail/')) {
-                          const smallUrl = previewImage.replace('/thumbnail/', '/small/');
-                          console.log('Falling back to small image in summary:', smallUrl);
-                          setPreviewImage(smallUrl);
-                        } else {
-                          console.log('All image sizes failed in summary, falling back to default');
-                          setPreviewImage(undefined);
-                        }
-                      }}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-50">
-                      <User className="w-8 h-8 text-gray-300" />
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-semibold text-lg">{formData.name || 'Your Name'}</h3>
-                  <p className="text-sm text-gray-600">{formData.email}</p>
-                </div>
-              </div>
-
-              {/* Personal Details */}
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                <h4 className="text-sm font-medium text-gray-700">Personal Details</h4>
-                <p className="text-sm text-gray-600">{formData.name || 'Not set'}</p>
-                <p className="text-sm text-gray-600">{formData.email || 'Not set'}</p>
-                <p className="text-sm text-gray-600">{formData.phone_number || 'Not set'}</p>
-              </div>
-
-              {/* Address Details */}
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                <h4 className="text-sm font-medium text-gray-700">Address</h4>
-                <p className="text-sm text-gray-600">{formData.address || 'Not set'}</p>
-                <p className="text-sm text-gray-600">
-                  {formData.city && formData.state ? `${formData.city}, ${formData.state}` : 'Not set'}
-                </p>
-                <p className="text-sm text-gray-600">{formData.postal_code || 'Not set'}</p>
-              </div>
-
-              {/* Vehicle Details */}
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <h4 className="text-sm font-medium text-gray-700">Vehicle Information</h4>
-                <p className="text-sm text-gray-600">
-                  {vehicleTypes.find(t => t.id === formData.vehicle_type)?.name || 'Not set'}
-                </p>
-                <p className="text-sm text-gray-600">
-                  {manufacturers.find(m => m.id === formData.manufacturer)?.name || 'Not set'}
-                </p>
-                <p className="text-sm text-gray-600">
-                  {vehicleModels.find(m => m.id === formData.vehicle_name)?.name || 'Not set'}
-                </p>
-              </div>
+              {renderTabContent()}
             </motion.div>
           </div>
         </div>
