@@ -15,7 +15,6 @@ class TokenManager {
   private static readonly REFRESH_TOKEN_KEY = 'refresh_token';
   private static readonly TOKEN_EXPIRY_KEY = 'token_expiry';
   private static readonly STORAGE_TYPE_KEY = 'token_storage_type';
-  private static readonly TOKEN_KEY = 'auth_token';
   private static readonly API_BASE_URL = 'https://repairmybike.up.railway.app/api';
 
   static setTokens(tokens: Tokens, rememberMe: boolean = false): void {
@@ -89,10 +88,6 @@ class TokenManager {
     }
   }
 
-  static getToken(): string | null {
-    return localStorage.getItem(this.TOKEN_KEY);
-  }
-
   static hasValidTokens(): boolean {
     const access = this.getAccessToken();
     const refresh = this.getRefreshToken();
@@ -103,24 +98,45 @@ class TokenManager {
     try {
       const refreshToken = this.getRefreshToken();
       if (!refreshToken) {
+        console.error('No refresh token available');
         return false;
       }
 
       const response = await axios.post<TokenResponse>(
         `${this.API_BASE_URL}/accounts/token/refresh/`,
-        { refresh: refreshToken }
+        { refresh: refreshToken },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        }
       );
 
-      if (response.data?.access) {
-        const storageType = localStorage.getItem(this.STORAGE_TYPE_KEY);
-        const storage = storageType === 'local' ? localStorage : sessionStorage;
-        storage.setItem(this.ACCESS_TOKEN_KEY, response.data.access);
-        return true;
+      if (!response.data?.access) {
+        console.error('Invalid refresh token response');
+        return false;
       }
 
-      return false;
+      // Store new access token
+      const storageType = localStorage.getItem(this.STORAGE_TYPE_KEY);
+      const storage = storageType === 'local' ? localStorage : sessionStorage;
+      storage.setItem(this.ACCESS_TOKEN_KEY, response.data.access);
+
+      // Update token expiry
+      const expiry = new Date();
+      expiry.setMinutes(expiry.getMinutes() + 30);
+      storage.setItem(this.TOKEN_EXPIRY_KEY, expiry.getTime().toString());
+
+      // Verify token storage
+      const storedToken = this.getAccessToken();
+      if (!storedToken) {
+        console.error('Token storage verification failed');
+        return false;
+      }
+
+      return true;
     } catch (error) {
-      console.error('Error refreshing token:', error);
+      console.error('Token refresh error:', error);
       this.clearTokens();
       return false;
     }

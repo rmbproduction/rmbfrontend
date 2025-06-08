@@ -46,14 +46,78 @@ export const queryClient = new QueryClient({
 // API base URL
 const API_BASE_URL = 'https://repairmybike.up.railway.app/api';
 
+// Create axios instance with default config
+const axiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+  timeout: 15000, // Increased timeout
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  }
+});
+
+// Add request interceptor to add auth token
+axiosInstance.interceptors.request.use(
+  (config) => {
+    const token = TokenManager.getAccessToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor to handle token refresh
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    // If the error is 401 and we haven't tried to refresh the token yet
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        const refreshToken = TokenManager.getRefreshToken();
+        if (!refreshToken) {
+          throw new Error('No refresh token available');
+        }
+
+        const response = await axios.post(
+          `${API_BASE_URL}/accounts/token/refresh/`,
+          { refresh: refreshToken }
+        );
+
+        const { access } = response.data;
+        TokenManager.setTokens({ access, refresh: refreshToken });
+
+        // Retry the original request with the new token
+        originalRequest.headers.Authorization = `Bearer ${access}`;
+        return axiosInstance(originalRequest);
+      } catch (refreshError) {
+        // If refresh token fails, clear tokens and redirect to login
+        TokenManager.clearTokens();
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 // Export API configuration for components that need it
 export const API_CONFIG = {
   baseURL: API_BASE_URL,
   withCredentials: true,
-  timeout: 10000,
+  timeout: 15000, // Increased timeout
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json, text/plain, */*',
+    'Accept': 'application/json',
   }
 } as const;
 
@@ -215,66 +279,6 @@ export const API_ENDPOINTS = {
     checkRegistration: '/marketplace/vehicles/check-registration-number/',
   },
 };
-
-// Create axios instance with enforced base URL and CORS configuration
-const axiosInstance = axios.create(API_CONFIG);
-
-// Request interceptor for API calls
-axiosInstance.interceptors.request.use(
-  (config) => {
-    const token = TokenManager.getAccessToken();
-    if (token) {
-      if (!config.headers) {
-        config.headers = {};
-      }
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Response interceptor for API calls
-axiosInstance.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-
-    // Handle network errors
-    if (!error.response) {
-      console.error('Network error:', error);
-      return Promise.reject(new Error('Network Error: Please check your internet connection'));
-    }
-
-    // Handle 401 and token refresh
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      try {
-        const success = await TokenManager.refreshToken();
-        if (!success) {
-          TokenManager.clearTokens();
-          throw new Error('Token refresh failed');
-        }
-
-        const newToken = TokenManager.getAccessToken();
-        if (!originalRequest.headers) {
-          originalRequest.headers = {};
-        }
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        return axiosInstance(originalRequest);
-      } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
-        TokenManager.clearTokens();
-        return Promise.reject(refreshError);
-      }
-    }
-
-    return Promise.reject(error);
-  }
-);
 
 // API service functions
 export const apiService = {

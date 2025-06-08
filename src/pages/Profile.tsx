@@ -62,19 +62,101 @@ const initialFormData: ProfileFormData = {
 };
 
 // Update the getCloudinaryUrl function
-const getCloudinaryUrl = (url: string) => {
-  // If it's a data URL (from FileReader), return as is
-  if (url.startsWith('data:')) {
-    return url;
-  }
+const getCloudinaryUrl = (url: string | undefined | null, size: 'thumbnail' | 'small' | 'medium' | 'original' = 'original'): string | undefined => {
+  try {
+    // If URL is empty or null, return undefined
+    if (!url) {
+      console.warn('Empty or null URL provided to getCloudinaryUrl');
+      return undefined;
+    }
 
-  // If it's already a full Cloudinary URL, return as is
-  if (url.startsWith('https://res.cloudinary.com')) {
-    return url;
-  }
+    // If it's a data URL (from FileReader), return as is
+    if (url.startsWith('data:')) {
+      return url;
+    }
 
-  // If it's just the public ID, construct the full URL
-  return `https://res.cloudinary.com/${CDN_CONFIG.cloudName}/image/upload/${url}`;
+    // If it's already a full Cloudinary URL, return as is
+    if (url.startsWith('https://res.cloudinary.com')) {
+      return url;
+    }
+
+    // If it's a full URL but not Cloudinary, return as is
+    if (url.startsWith('http')) {
+      return url;
+    }
+
+    // Handle the case where the URL is a relative path from the backend
+    // The URL format from backend is like: "image/upload/v1749369482/profiles/nryer7tykrftajpy9clb.png"
+    if (url.startsWith('image/upload/')) {
+      const sizePath = size === 'original' ? '' : `/${size}`;
+      const cloudinaryUrl = `https://res.cloudinary.com/${CDN_CONFIG.cloudName}/image/upload${sizePath}/${url}`;
+      console.log('Generated Cloudinary URL:', cloudinaryUrl);
+      return cloudinaryUrl;
+    }
+
+    // If we get here, the URL format is invalid
+    console.warn('Invalid image URL format:', url);
+    return undefined;
+  } catch (error) {
+    console.error('Error in getCloudinaryUrl:', error);
+    return undefined;
+  }
+};
+
+// Add image optimization function
+const optimizeImage = (file: File): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (e) => {
+      const img = new Image();
+      img.src = e.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Calculate new dimensions while maintaining aspect ratio
+        const MAX_WIDTH = 800;
+        const MAX_HEIGHT = 800;
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width = Math.round((width * MAX_HEIGHT) / height);
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // Convert to blob with reduced quality
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const optimizedFile = new File([blob], file.name, {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(optimizedFile);
+            } else {
+              reject(new Error('Failed to optimize image'));
+            }
+          },
+          'image/jpeg',
+          0.8 // 80% quality
+        );
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+  });
 };
 
 const Profile = () => {
@@ -83,7 +165,7 @@ const Profile = () => {
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([]);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | undefined>(undefined);
 
   // Fetch vehicle types
   const fetchVehicleTypes = async () => {
@@ -138,7 +220,7 @@ const Profile = () => {
     fetchProfile();
   }, []);
 
-  // Add this function
+  // Update the fetchProfile function
   const fetchProfile = async () => {
     try {
       const response = await apiService.profile.getDetails();
@@ -162,26 +244,32 @@ const Profile = () => {
         vehicle_name: profileData.vehicle_name?.id || null
       }));
 
-      // If profile photo exists, use the URL directly
+      // Handle profile photo with responsive images
       if (profileData.profile_photo) {
-        // Log the profile photo URL
-        console.log('Profile photo URL:', profileData.profile_photo);
-        // Check if it's a Cloudinary URL and has a version
-        if (profileData.profile_photo.includes('cloudinary.com')) {
-          // Extract version and public ID
-          const match = profileData.profile_photo.match(/\/v\d+\/(.+)$/);
-          if (match) {
-            const [, publicId] = match;
-            // Use the full URL with version
-            setPreviewImage(profileData.profile_photo);
-          } else {
-            // If no version in URL, use as is
-            setPreviewImage(profileData.profile_photo);
-          }
-        } else {
-          // Not a Cloudinary URL, use as is
-          setPreviewImage(profileData.profile_photo);
+        try {
+          console.log('Profile photo URL from backend:', profileData.profile_photo);
+          
+          // Construct the full Cloudinary URL
+          const cloudinaryUrl = `https://res.cloudinary.com/${CDN_CONFIG.cloudName}/${profileData.profile_photo}`;
+          console.log('Constructed Cloudinary URL:', cloudinaryUrl);
+          
+          // Create a new image object to test the URL
+          const img = new Image();
+          img.onload = () => {
+            console.log('Profile image loaded successfully');
+            setPreviewImage(cloudinaryUrl);
+          };
+          img.onerror = (error) => {
+            console.error('Error loading profile image:', error);
+            setPreviewImage(undefined);
+          };
+          img.src = cloudinaryUrl;
+        } catch (error) {
+          console.error('Error setting profile image:', error);
+          setPreviewImage(undefined);
         }
+      } else {
+        setPreviewImage(undefined);
       }
 
       // If both vehicle type and manufacturer exist, fetch vehicle models
@@ -251,6 +339,48 @@ const Profile = () => {
     return true;
   };
 
+  // Update the handleChange function
+  const handleChange = async (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    
+    if (e.target instanceof HTMLInputElement && e.target.type === 'file') {
+      const file = e.target.files?.[0];
+      if (file) {
+        try {
+          // Show loading state
+          setIsLoading(true);
+          
+          // Optimize the image
+          const optimizedFile = await optimizeImage(file);
+          
+          setFormData(prev => ({
+            ...prev,
+            profile_picture: optimizedFile
+          }));
+          
+          // Preview logic
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            console.log('Setting preview image:', reader.result);
+            setPreviewImage(reader.result as string);
+          };
+          reader.readAsDataURL(optimizedFile);
+        } catch (error) {
+          console.error('Error optimizing image:', error);
+          toast.error('Failed to process image. Please try a different image.');
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
+  };
+
+  // Update the handleSubmit function
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
@@ -278,50 +408,27 @@ const Profile = () => {
       // Log the response data to see the URL format
       console.log('Profile update response:', response);
 
+      // Update the preview image with the new URL
+      if (response.data.profile_photo) {
+        const cloudinaryUrl = getCloudinaryUrl(response.data.profile_photo, 'medium');
+        console.log('New profile photo URL:', cloudinaryUrl);
+        setPreviewImage(cloudinaryUrl);
+      }
+
       toast.success('Profile updated successfully!');
-      // Refresh the profile data
-      fetchProfile();
     } catch (error: any) {
       console.error('Error updating profile:', error);
       const errorMessage = error.response?.data?.detail || 
-                         error.response?.data?.message || 
-                         error.message || 
-                         'Failed to update profile';
+                          error.response?.data?.message || 
+                          error.message || 
+                          'Failed to update profile';
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    
-    if (e.target instanceof HTMLInputElement && e.target.type === 'file') {
-      const file = e.target.files?.[0];
-      if (file) {
-      setFormData(prev => ({
-        ...prev,
-        profile_picture: file
-      }));
-        
-        // Preview logic
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          // Log the preview URL for debugging
-          console.log('Setting preview image:', reader.result);
-          setPreviewImage(reader.result as string);
-        };
-        reader.readAsDataURL(file);
-      }
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value
-      }));
-    }
-  };
-
-        return (
+  return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-8">
@@ -362,32 +469,11 @@ const Profile = () => {
                           alt="Profile Preview" 
                           className="w-full h-full object-cover"
                           onError={(e) => {
-                            const target = e.target as HTMLImageElement;
                             console.error('Error loading image:', {
-                              src: target.src,
-                              naturalWidth: target.naturalWidth,
-                              naturalHeight: target.naturalHeight,
+                              src: previewImage,
                               error: e
                             });
-                            
-                            // If it's a Cloudinary URL, try adding a timestamp
-                            if (target.src.includes('cloudinary.com')) {
-                              const timestamp = new Date().getTime();
-                              const newSrc = `${target.src}${target.src.includes('?') ? '&' : '?'}t=${timestamp}`;
-                              console.log('Retrying with timestamped URL:', newSrc);
-                              target.src = newSrc;
-                              
-                              // If the retry also fails, show default icon
-                              target.onerror = () => {
-                                console.error('Retry failed, showing default icon');
-                                target.onerror = null;
-                                target.src = '';
-                              };
-                            } else {
-                              // Not a Cloudinary URL, just show default icon
-                              target.onerror = null;
-                              target.src = '';
-                            }
+                            setPreviewImage(undefined);
                           }}
                         />
                       ) : (
@@ -653,9 +739,21 @@ const Profile = () => {
                 <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-100">
                   {previewImage ? (
                     <img 
-                      src={previewImage} 
+                      src={getCloudinaryUrl(previewImage, 'thumbnail')} 
                       alt="Profile" 
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        console.error('Error loading thumbnail:', e);
+                        // Try loading the small version if thumbnail fails
+                        if (previewImage.includes('/thumbnail/')) {
+                          const smallUrl = previewImage.replace('/thumbnail/', '/small/');
+                          console.log('Falling back to small image in summary:', smallUrl);
+                          setPreviewImage(smallUrl);
+                        } else {
+                          console.log('All image sizes failed in summary, falling back to default');
+                          setPreviewImage(undefined);
+                        }
+                      }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gray-50">

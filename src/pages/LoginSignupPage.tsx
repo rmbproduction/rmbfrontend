@@ -9,6 +9,7 @@ import { toast } from "react-toastify";
 // Import our custom hooks and context
 import { useAuth } from "../contexts/AuthContext";
 import { useSignup, useForgotPassword, useGoogleLogin } from "../hooks/auth/useAuth";
+import TokenManager from "../services/tokenManager";
 
 // Define interfaces based on actual backend response
 interface LoginResponseData {
@@ -239,6 +240,9 @@ const LoginSignupPage = () => {
           rememberMe: formData.rememberMe
         });
 
+        // Clear any existing tokens before login
+        TokenManager.clearTokens();
+
         try {
           const loginResult = await login(
             formData.email,
@@ -250,11 +254,25 @@ const LoginSignupPage = () => {
           console.log('=== RAW LOGIN RESPONSE ===');
           console.log(loginResult);
 
-          // The login function returns { user, tokens, isFirstLogin }
+          // Validate tokens
           if (!loginResult?.tokens?.access || !loginResult?.tokens?.refresh) {
             console.error('=== LOGIN VALIDATION FAILED ===');
             console.error('Response data:', loginResult);
-            throw new Error('Login failed: No tokens received');
+            throw new Error('Login failed: Invalid token response');
+          }
+
+          // Store tokens immediately after successful login
+          TokenManager.setTokens(
+            {
+              access: loginResult.tokens.access,
+              refresh: loginResult.tokens.refresh
+            },
+            formData.rememberMe
+          );
+
+          // Verify token storage
+          if (!TokenManager.hasValidTokens()) {
+            throw new Error('Token storage verification failed');
           }
 
           // Success path
@@ -279,7 +297,6 @@ const LoginSignupPage = () => {
           setError(errorMessage);
           toast.error(errorMessage);
         }
-
       } else if (mode === "signup") {
         const signupResponse = await signupMutation.mutateAsync({
           username: formData.username,
