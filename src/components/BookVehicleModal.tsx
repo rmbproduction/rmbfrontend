@@ -30,19 +30,33 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
   bookingSuccess = false,
   successMessage = ''
 }) => {
-  const { profile, updateProfile } = useUserProfile();
+  const { prefillFormData, updateSharedFormData } = useUserProfile();
   const [error, setError] = useState<string>('');
   const navigate = useNavigate();
 
-  // Pre-fill contact number from cache if empty
+  // Pre-fill contact number from profile data
   useEffect(() => {
-    if (isOpen && !contactNumber && profile?.phone) {
-      // Simulate an input change event to update the parent's state
-      onInputChange({
-        target: { name: 'contactNumber', value: profile.phone }
-      } as React.ChangeEvent<HTMLInputElement>);
-    }
-  }, [isOpen, contactNumber, profile?.phone, onInputChange]);
+    const loadProfileData = async () => {
+      if (isOpen && !contactNumber) {
+        try {
+          const defaultData = {
+            contactNumber: '',
+          };
+          const prefilledData = await prefillFormData(defaultData, 'profile');
+          if (prefilledData.contactNumber) {
+            // Simulate an input change event to update the parent's state
+            onInputChange({
+              target: { name: 'contactNumber', value: prefilledData.contactNumber }
+            } as React.ChangeEvent<HTMLInputElement>);
+          }
+        } catch (error) {
+          console.error('Error prefilling contact number:', error);
+        }
+      }
+    };
+
+    loadProfileData();
+  }, [isOpen, contactNumber, onInputChange]);
 
   // Validate and handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -60,8 +74,8 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
         setError('Please enter a valid phone number (10-15 digits with optional + prefix)');
       }
       
-      // Update the profile cache with the new number
-      updateProfile({ phone: cleanedNumber });
+      // Update the shared form data with the new number
+      updateSharedFormData({ phone: cleanedNumber });
     }
     
     // Pass the event to parent's handler

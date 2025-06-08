@@ -23,6 +23,7 @@ import SellVehicle from './pages/SellVehicle';
 import AboutPage from './pages/AboutPage';
 import NotFound from './pages/NotFound';
 import Pricing from './pages/pricing';
+import EmailVerification from './pages/EmailVerification';
 
 // Layout wrapper for consistent layout
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -92,6 +93,7 @@ const AppRoutes: React.FC = () => {
         </ProtectedRoute>
       } />
 
+      <Route path="/verify-email" element={<EmailVerification />} />
       <Route path="/verify-email/:token" element={<VerifyEmail />} />
       <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route path="/password-reset-confirmation" element={<PasswordResetConfirmation />} />
