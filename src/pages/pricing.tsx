@@ -58,7 +58,7 @@ const faqs = [
   },
   {
     question: "Is there a refund policy?",
-    answer: "Yes, we offer a pro-rated refund for unused service visits if you need to cancel your subscription. Please contact our support team for refund requests."
+    answer: "Yes, we offer a pro-rated refund for unused service visits if you need to cancel your subscription. Please contact our support team at 8168-1217-11 for refund requests."
   }
 ];
 

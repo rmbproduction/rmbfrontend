@@ -20,8 +20,10 @@ const ErrorModal: React.FC<ErrorModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  const phone = supportPhone || "8168-1217-11";
+
   const handleCallSupport = () => {
-    window.location.href = `tel:${supportPhone}`;
+    window.location.href = `tel:${phone.replace(/-/g, '')}`;
   };
 
   return (
@@ -61,6 +63,9 @@ const ErrorModal: React.FC<ErrorModalProps> = ({
             <Phone className="h-4 w-4 mr-2" />
             Call Us
           </button>
+        </div>
+        <div className="mt-4 text-center">
+          <span>{phone}</span>
         </div>
       </div>
     </div>

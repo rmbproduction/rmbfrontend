@@ -169,7 +169,7 @@ const OrderSuccessModal = ({ isOpen, onClose, mode, bookingReference }: OrderSuc
         </div>
 
         <p className="text-sm text-gray-500 mt-4">
-          Need help? Contact our support team
+          Need help? Contact our support team at <a href="tel:8168121711" className="text-[#FF5733] hover:underline">8168-1217-11</a>
         </p>
       </div>
     </Modal>

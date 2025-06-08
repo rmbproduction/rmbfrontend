@@ -220,7 +220,7 @@ const SubscriptionPlans: React.FC = () => {
         isOpen={showErrorModal}
         onClose={() => setShowErrorModal(false)}
         message={errorMessage}
-        supportPhone="+91 1800 123 4567"
+        supportPhone="8168-1217-11"
         className="max-w-lg mx-auto"
         showCloseButton={true}
       />

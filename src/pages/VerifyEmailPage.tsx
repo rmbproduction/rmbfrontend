@@ -10,7 +10,7 @@ const VerifyEmailPage = () => {
           Please check your inbox and follow the instructions to verify your account.
         </p>
         <p className="text-gray-500 text-sm">
-          Didn&apos;t receive the email? Please check your spam folder or <a href="/contact" className="text-[#FF5733] hover:underline">contact support</a>.
+          Didn&apos;t receive the email? Please check your spam folder or <a href="tel:8168121711" className="text-[#FF5733] hover:underline">contact support: 8168-1217-11</a>.
         </p>
       </div>
     </div>

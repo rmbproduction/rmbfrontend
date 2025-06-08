@@ -158,7 +158,8 @@ const BookVehicleModal: React.FC<BookVehicleModalProps> = ({
             <>
               <h2 className="text-xl font-semibold text-gray-900 mb-2">Book Vehicle</h2>
               <p className="text-gray-600 text-sm mb-6">
-                Fill out the form below to book this vehicle. Our team will contact you soon to guide you through the process.
+                Fill out the form below to book this vehicle. Our team will contact you soon to guide you through the process.<br />
+                <span className="font-semibold">Or call us at <a href="tel:8168121711" className="text-[#FF5733] hover:underline">8168-1217-11</a></span>
               </p>
 
               <form onSubmit={handleSubmit}>

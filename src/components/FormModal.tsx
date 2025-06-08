@@ -34,6 +34,8 @@ const FormModal: React.FC<FormModalProps> = ({
     onClose();
   };
 
+  const phone = supportPhone || "8168-1217-11";
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -108,10 +110,11 @@ const FormModal: React.FC<FormModalProps> = ({
                   
                   {supportPhone && (
                     <button
-                      onClick={() => window.location.href = `tel:${supportPhone}`}
+                      onClick={() => window.location.href = `tel:${phone.replace(/-/g, '')}`}
                       className="w-full py-2 px-4 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
                     >
                       Contact Support
+                      <span>{phone}</span>
                     </button>
                   )}
                 </>

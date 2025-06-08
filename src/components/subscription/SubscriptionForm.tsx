@@ -74,6 +74,8 @@ const validatePostalCode = (postalCode: string): boolean => {
   return postalCodeRegex.test(postalCode);
 };
 
+const supportPhone = "8168-1217-11";
+
 const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onClose, onError }) => {
   const navigate = useNavigate();
   const { prefillFormData, updateSharedFormData } = useUserProfile();
@@ -344,7 +346,7 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
             `• Only one active subscription is allowed at a time\n` +
             `• Your current plan must expire before starting a new one\n\n` +
             `What can you do?\n` +
-            `• Call us to discuss upgrade options\n` +
+            `• Call us at ${supportPhone} to discuss upgrade options\n` +
             `• Continue with your current plan\n` +
             `• Check your subscription status in dashboard`;
 
@@ -367,7 +369,7 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
             `What you can do now:\n` +
             `• Check your email for updates about your request\n` +
             `• View your request status in the "Subscription Requests" tab\n` +
-            `• Contact our support team if you need immediate assistance\n\n` +
+            `• Contact our support team at ${supportPhone} if you need immediate assistance\n\n` +
             `Your request is important to us, and we'll process it as quickly as possible.`;
 
           setErrorModalMessage(pendingMessage);
@@ -407,7 +409,7 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
           `• Check your internet connection\n` +
           `• Refresh the page and try again\n` +
           `• Clear your browser cache\n` +
-          `• Contact our support team if the problem persists\n\n` +
+          `• Contact our support team at ${supportPhone} if the problem persists\n\n` +
           `Error Reference: ${err.response?.status || 'Unknown'}`;
 
         setErrorModalMessage(unexpectedMessage);
@@ -431,7 +433,7 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({ planVariantId, onCl
       <ErrorModal
         isOpen={showErrorModal}
         message={errorModalMessage}
-        supportPhone="+91 1800 123 4567"
+        supportPhone={supportPhone}
         className="max-w-lg mx-auto"
         showCloseButton={false}
       />

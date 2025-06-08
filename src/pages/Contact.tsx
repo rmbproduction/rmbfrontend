@@ -137,6 +137,7 @@ const Contact = () => {
         >
           <h1 className="text-4xl font-bold text-gray-900">Contact Us</h1>
           <p className="mt-4 text-xl text-gray-600">Get in touch with our expert team</p>
+          <p className="mt-2 text-lg text-gray-800 font-semibold">Call us: <a href="tel:8168121711" className="text-[#FF5733] hover:underline">8168-1217-11</a></p>
         </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
@@ -253,6 +254,7 @@ const Contact = () => {
                   <div className="ml-4">
                     <h3 className="font-medium">Phone</h3>
                     <p className="text-gray-600">+91 816 812 1711</p>
+                    <p className="text-gray-800 font-semibold mt-2">Helpline: <a href="tel:8168121711" className="text-[#FF5733] hover:underline">8168-1217-11</a></p>
                   </div>
                 </div>
                 <div className="flex items-start">
@@ -260,6 +262,7 @@ const Contact = () => {
                   <div className="ml-4">
                     <h3 className="font-medium">Email</h3>
                     <p className="text-gray-600">support@repairmybike.in</p>
+                    <p className="text-gray-800 font-semibold mt-2">Helpline: <a href="tel:8168121711" className="text-[#FF5733] hover:underline">8168-1217-11</a></p>
                   </div>
                 </div>
                 <div className="flex items-start">
@@ -283,7 +286,7 @@ const Contact = () => {
             <div className="bg-white rounded-2xl shadow-lg p-8">
               <h2 className="text-2xl font-semibold mb-6">Emergency Service</h2>
               <p className="text-gray-600 mb-4">
-                Need urgent bike repair? Our emergency team is available 24/7.
+                Need urgent bike repair? Our emergency team is available 24/7. <span className="font-semibold">Call <a href="tel:8168121711" className="text-[#FF5733] hover:underline">8168-1217-11</a></span>
               </p>
               <button className="w-full bg-[#FF5733] text-white py-3 px-6 rounded-xl hover:bg-[#ff4019] transition-colors">
                 Call Emergency Service

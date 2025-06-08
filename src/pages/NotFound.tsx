@@ -76,7 +76,7 @@ const NotFound = () => {
             transition={{ duration: 0.5, delay: 0.5 }}
             className="px-6 py-4 bg-gray-50 text-center text-gray-500 text-sm"
           >
-            Need help? <a href="/contact" className="text-[#FF5733] hover:underline">Contact our support team</a>
+            Need help? <a href="tel:8168121711" className="text-[#FF5733] hover:underline">Contact our support team: 8168-1217-11</a>
           </motion.div>
         </motion.div>
       </div>
