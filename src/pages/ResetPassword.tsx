@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Loader } from 'lucide-react';
@@ -13,6 +13,16 @@ const ResetPassword = () => {
     confirmPassword: ''
   });
   const [error, setError] = useState('');
+  const [tokenValid, setTokenValid] = useState(true);
+
+  // Validate token on mount
+  useEffect(() => {
+    if (!token) {
+      setTokenValid(false);
+      setError('Invalid or missing password reset token');
+      toast.error('Invalid password reset link');
+    }
+  }, [token]);
 
   const resetPassword = useResetPassword(token || '');
 
@@ -35,17 +45,48 @@ const ResetPassword = () => {
       }
 
       await resetPassword.mutateAsync(validatedData);
-      toast.success('Password reset link sent to your email!');
+      toast.success('Password has been reset successfully!');
       navigate('/login');
     } catch (error: any) {
+      console.error('Password reset error:', error);
       if (error.errors) {
         setError(error.errors[0].message);
+      } else if (error.response?.data?.detail) {
+        setError(error.response.data.detail);
+      } else if (error.message) {
+        setError(error.message);
       } else {
-        setError(error.response?.data?.detail || 'Failed to reset password');
+        setError('Failed to reset password');
       }
-      toast.error(error.response?.data?.detail || 'Failed to reset password');
+      toast.error(error.response?.data?.detail || error.message || 'Failed to reset password');
     }
   };
+
+  // If token is invalid, show error message
+  if (!tokenValid) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-white to-[#ffe4d4] p-6">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-8">
+          <h2 className="text-3xl font-bold text-center text-gray-800">
+            Invalid Link
+          </h2>
+          <div className="mt-2 h-1 w-16 bg-[#FF5733] mx-auto" />
+          <p className="mt-4 text-center text-gray-600">
+            The password reset link is invalid or has expired.
+          </p>
+          
+          <div className="mt-8 text-center">
+            <button
+              onClick={() => navigate('/login')}
+              className="px-4 py-2 bg-[#FF5733] text-white rounded-md hover:bg-[#ff4019]"
+            >
+              Back to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-white to-[#ffe4d4] p-6">
