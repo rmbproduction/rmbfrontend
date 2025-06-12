@@ -7,10 +7,11 @@ import TokenManager from '../services/tokenManager';
 import { motion } from 'framer-motion';
 import { 
   User, MapPin, Bike, ChevronLeft, Loader2, Camera,
-  Wrench, Clock, Wallet
+  Wrench, Clock, Wallet, Menu, X
 } from 'lucide-react';
 import axios from 'axios';
 import { useUserProfile } from '../hooks/useUserProfile';
+import { AnimatePresence } from 'framer-motion';
 
 // Import tab components
 import ForSaleVehicles from '../components/ForSaleVehicles';
@@ -181,6 +182,7 @@ const Profile = () => {
   const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([]);
   const [previewImage, setPreviewImage] = useState<string | undefined>(undefined);
   const { prefillFormData, updateSharedFormData } = useUserProfile();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Prefill profile form from shared data on mount
   useEffect(() => {
@@ -1076,56 +1078,96 @@ const Profile = () => {
               </button>
               <h1 className="text-xl font-bold text-gray-900">Profile Settings</h1>
             </div>
+            <button
+              onClick={() => setIsDrawerOpen(true)}
+              className="p-2 rounded-lg hover:bg-gray-100"
+              aria-label="Open menu"
+            >
+              <User size={24} className="text-gray-600" />
+            </button>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex gap-8">
-          {/* Left Sidebar - Tabs */}
-          <div className="w-64 flex-shrink-0">
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-              <nav className="space-y-1">
-                {[
-                  { id: 'profile', label: 'Profile Information', icon: User },
-                  { id: 'vehicles', label: 'Vehicles for Sale', icon: Bike },
-                  { id: 'repairs', label: 'My Repairs', icon: Wrench },
-                  { id: 'bookings', label: 'My Bookings', icon: Clock },
-                  { id: 'subscriptions', label: 'My Subscriptions', icon: Wallet },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => handleTabChange(tab.id)}
-                    className={`w-full flex items-center px-4 py-3 text-sm font-medium ${
-                      activeTab === tab.id
-                        ? 'bg-[#FFF5F2] text-[#FF5733] border-l-4 border-[#FF5733]'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    }`}
-                  >
-                    <tab.icon className="w-5 h-5 mr-3" />
-                    {tab.label}
-                  </button>
-                ))}
-              </nav>
-            </div>
-          </div>
-
-          {/* Main Content Area */}
-          <div className="flex-1">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-              className="bg-white rounded-xl shadow-sm p-6"
-            >
-              {renderTabContent()}
-            </motion.div>
-          </div>
-        </div>
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.2 }}
+          className="bg-white rounded-xl shadow-sm p-6"
+        >
+          {renderTabContent()}
+        </motion.div>
       </div>
+
+      {/* Sliding Drawer */}
+      <AnimatePresence>
+        {isDrawerOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.4 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsDrawerOpen(false)}
+              className="fixed inset-0 bg-black z-40"
+            />
+
+            {/* Drawer */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'tween', duration: 0.3 }}
+              className="fixed right-0 top-0 h-full w-80 bg-white shadow-xl z-50"
+            >
+              <div className="flex flex-col h-full">
+                {/* Drawer Header */}
+                <div className="p-4 border-b flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Menu</h2>
+                  <button
+                    onClick={() => setIsDrawerOpen(false)}
+                    className="p-2 rounded-lg hover:bg-gray-100"
+                    aria-label="Close menu"
+                  >
+                    <X size={20} className="text-gray-600" />
+                  </button>
+                </div>
+
+                {/* Drawer Content */}
+                <nav className="flex-1 overflow-y-auto">
+                  {[
+                    { id: 'profile', label: 'Profile Information', icon: User },
+                    { id: 'vehicles', label: 'Vehicles for Sale', icon: Bike },
+                    { id: 'repairs', label: 'My Repairs', icon: Wrench },
+                    { id: 'bookings', label: 'My Bookings', icon: Clock },
+                    { id: 'subscriptions', label: 'My Subscriptions', icon: Wallet },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => {
+                        handleTabChange(tab.id);
+                        setIsDrawerOpen(false);
+                      }}
+                      className={`w-full flex items-center px-6 py-4 text-sm font-medium ${
+                        activeTab === tab.id
+                          ? 'bg-[#FFF5F2] text-[#FF5733] border-l-4 border-[#FF5733]'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <tab.icon className="w-5 h-5 mr-3" />
+                      {tab.label}
+                    </button>
+                  ))}
+                </nav>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
