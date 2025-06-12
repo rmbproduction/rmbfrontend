@@ -43,9 +43,11 @@ const VerifyEmail = () => {
         if (error.response?.status === 404) {
           setError('Invalid verification link or link has expired');
         } else if (error.response?.status === 400) {
-          setError(error.response.data?.error || 'Invalid verification link');
+          setError(error.response.data?.error || 'Verification link has expired or is invalid. Please request a new one.');
+        } else if (error.code === 'ECONNABORTED') {
+          setError('Request timed out. The server might be busy. Please try again later.');
         } else {
-          setError('Failed to verify email. Please try again.');
+          setError('Failed to verify email. Please try again or contact support.');
         }
         
         toast.error('Email verification failed');
@@ -76,7 +78,7 @@ const VerifyEmail = () => {
             </div>
             <div className="mt-4 space-y-2">
               <button
-                onClick={() => navigate('/resend-verification')}
+                onClick={() => navigate('/login', { state: { showResendVerification: true } })}
                 className="w-full py-2 px-4 bg-[#FF5733] text-white rounded-md hover:bg-[#ff4019] transition-colors"
               >
                 Request New Verification Link
@@ -87,6 +89,9 @@ const VerifyEmail = () => {
               >
                 Back to Login
               </button>
+              <p className="text-sm text-gray-500 text-center mt-2">
+                If you continue to have issues, please contact support at <a href="mailto:support@repairmybike.in" className="text-[#FF5733] hover:underline">support@repairmybike.in</a>
+              </p>
             </div>
           </div>
         ) : (

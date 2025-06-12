@@ -5,6 +5,7 @@ import { FaGoogle, FaFacebookF, FaEye, FaEyeSlash, FaCheck } from "react-icons/f
 import { Loader } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
+import { apiService } from "../config/api.config";
 
 // Import our custom hooks and context
 import { useAuth } from "../contexts/AuthContext";
@@ -109,6 +110,13 @@ const LoginSignupPage = () => {
     }
   }, [isAuthenticated, navigate]);
 
+  // Check if we should show the resend verification form
+  useEffect(() => {
+    if (location.state?.showResendVerification) {
+      setShowResendVerification(true);
+    }
+  }, [location.state]);
+
   // Get redirect path from location state
   const from = location.state?.from?.pathname || "/profile";
   
@@ -133,6 +141,9 @@ const LoginSignupPage = () => {
     hasSymbol: false,
     hasMinLength: false,
   });
+  const [showResendVerification, setShowResendVerification] = useState(false);
+  const [resendEmail, setResendEmail] = useState("");
+  const [resendingVerification, setResendingVerification] = useState(false);
 
   // Use our custom hooks
   const signupMutation = useSignup();
@@ -338,11 +349,33 @@ const LoginSignupPage = () => {
   const handleGoogleLogin = async () => {
     try {
       const response = await googleLoginMutation.mutateAsync();
-      if (response.data?.auth_url) {
-        window.location.href = response.data.auth_url;
+      // Handle the response based on the actual structure
+      const authUrl = response?.auth_url || response?.data?.auth_url;
+      if (authUrl) {
+        window.location.href = authUrl;
       }
     } catch (error: any) {
       handleApiError(error);
+    }
+  };
+  
+  const handleResendVerification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resendEmail) {
+      toast.error("Please enter your email address");
+      return;
+    }
+    
+    try {
+      setResendingVerification(true);
+      await apiService.auth.resendVerification({ email: resendEmail });
+      toast.success("Verification email sent! Please check your inbox.");
+      setShowResendVerification(false);
+    } catch (error: any) {
+      console.error("Resend verification error:", error);
+      toast.error(error.response?.data?.error || "Failed to resend verification email. Please try again.");
+    } finally {
+      setResendingVerification(false);
     }
   };
 
@@ -394,9 +427,48 @@ const LoginSignupPage = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-white to-[#ffe4d4] p-6">
+          <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-white to-[#ffe4d4] p-6">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-8 overflow-hidden">
-        <AnimatePresence mode="wait" custom={direction}>
+        {showResendVerification ? (
+          <div>
+            <h2 className="text-4xl font-extrabold text-center text-gray-800">Resend Verification</h2>
+            <div className="mt-2 h-1 w-16 bg-[#FF5733] mx-auto" />
+            <p className="mt-3 text-center text-gray-500">Enter your email to receive a new verification link</p>
+            
+            <form onSubmit={handleResendVerification} className="mt-6 space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700">Email</label>
+                <input
+                  type="email"
+                  value={resendEmail}
+                  onChange={(e) => setResendEmail(e.target.value)}
+                  className="mt-1 w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF5733]"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={resendingVerification}
+                className="w-full py-2 px-4 bg-[#FF5733] text-white rounded-md hover:bg-[#ff4019] transition-colors flex items-center justify-center disabled:opacity-70"
+              >
+                {resendingVerification ? (
+                  <>
+                    <Loader className="animate-spin mr-2 h-4 w-4" />
+                    Sending...
+                  </>
+                ) : "Send Verification Email"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowResendVerification(false)}
+                className="w-full py-2 px-4 border border-[#FF5733] text-[#FF5733] rounded-md hover:bg-[#fff5f2] transition-colors"
+              >
+                Back to Login
+              </button>
+            </form>
+          </div>
+        ) : (
+          <AnimatePresence mode="wait" custom={direction}>
           <motion.div
             key={mode}
             custom={direction}
@@ -639,6 +711,7 @@ const LoginSignupPage = () => {
             </div>
           </motion.div>
         </AnimatePresence>
+        )}
       </div>
     </div>
   );
