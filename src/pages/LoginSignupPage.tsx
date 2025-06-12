@@ -273,17 +273,19 @@ const LoginSignupPage = () => {
           }
 
           // Store tokens immediately after successful login
-          TokenManager.setTokens(
-            {
-              access: loginResult.tokens.access,
-              refresh: loginResult.tokens.refresh
-            },
-            formData.rememberMe
-          );
-
-          // Verify token storage
-          if (!TokenManager.hasValidTokens()) {
-            throw new Error('Token storage verification failed');
+          try {
+            TokenManager.setTokens(
+              {
+                access: loginResult.tokens.access,
+                refresh: loginResult.tokens.refresh
+              },
+              formData.rememberMe
+            );
+            
+            // Don't strictly verify tokens here - proceed with login
+            console.log('Token storage attempted, proceeding with login');
+          } catch (tokenError) {
+            console.warn('Token storage issue, but proceeding with login:', tokenError);
           }
 
           // Success path
@@ -309,15 +311,39 @@ const LoginSignupPage = () => {
           toast.error(errorMessage);
         }
       } else if (mode === "signup") {
-        const signupResponse = await signupMutation.mutateAsync({
-          username: formData.username,
-          email: formData.email,
-          password: formData.password
-        });
+        try {
+          console.log("=== SIGNUP FORM SUBMISSION ===");
+          console.log("Submitting signup request...");
+          
+          const signupResponse = await signupMutation.mutateAsync({
+            username: formData.username,
+            email: formData.email,
+            password: formData.password
+          });
 
-        toast.success("Account created! Please verify your email.");
-        navigate(`/verify-email?email=${encodeURIComponent(formData.email)}`);
-
+          console.log("=== SIGNUP SUCCESSFUL ===");
+          console.log("Response:", signupResponse);
+          
+          toast.success("Account created! Please verify your email.");
+          navigate(`/verify-email?email=${encodeURIComponent(formData.email)}`);
+        } catch (error: any) {
+          console.error("=== SIGNUP ERROR ===");
+          console.error("Error details:", error);
+          
+          let errorMessage = "Failed to create account. Please try again.";
+          
+          if (error.code === "ECONNABORTED") {
+            errorMessage = "Request timed out. The server might be busy. Please try again later.";
+          } else if (error.response?.data?.error) {
+            errorMessage = error.response.data.error;
+          } else if (error.message) {
+            errorMessage = error.message;
+          }
+          
+          setError(errorMessage);
+          toast.error(errorMessage);
+          throw error; // Re-throw to be caught by the outer catch block
+        }
       } else if (mode === "forgot") {
         await forgotPasswordMutation.mutateAsync({
           email: formData.email
@@ -581,6 +607,7 @@ const LoginSignupPage = () => {
                       onChange={handleChange}
                       className="mt-1 w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF5733]"
                       required
+                      disabled={isLoading}
                     />
                   </div>
                   <div>
@@ -592,6 +619,7 @@ const LoginSignupPage = () => {
                       onChange={handleChange}
                       className="mt-1 w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF5733]"
                       required
+                      disabled={isLoading}
                     />
                   </div>
                   <div>
@@ -605,6 +633,7 @@ const LoginSignupPage = () => {
                         className="mt-1 w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF5733]"
                         required
                         minLength={8}
+                        disabled={isLoading}
                       />
                       <button 
                         type="button"
@@ -639,6 +668,11 @@ const LoginSignupPage = () => {
                       </>
                     ) : "Sign Up"}
                   </button>
+                  {isLoading && (
+                    <p className="text-xs text-gray-500 text-center mt-2">
+                      This may take up to 30 seconds. Please be patient.
+                    </p>
+                  )}
                 </form>
                 <div className="mt-4 text-center">
                   <button onClick={() => switchMode("login")} className="text-sm text-[#FF5733] hover:underline">

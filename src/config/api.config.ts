@@ -50,7 +50,7 @@ const API_BASE_URL = 'https://repairmybike.up.railway.app/api';
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
-  timeout: 15000, // Increased timeout
+  timeout: 30000, // Increased timeout to 30 seconds
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -114,7 +114,7 @@ axiosInstance.interceptors.response.use(
 export const API_CONFIG = {
   baseURL: API_BASE_URL,
   withCredentials: true,
-  timeout: 15000, // Increased timeout
+  timeout: 30000, // Increased timeout to 30 seconds
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -318,8 +318,8 @@ export const apiService = {
       axiosInstance.post(API_ENDPOINTS.auth.logout, data),
     verifyEmail: (token: string) =>
       axiosInstance.get(API_ENDPOINTS.auth.verifyEmail(token)),
-    resendVerification: () =>
-      axiosInstance.post(API_ENDPOINTS.auth.resendVerification),
+    resendVerification: (data: { email: string }) =>
+      axiosInstance.post(API_ENDPOINTS.auth.resendVerification, data),
     forgotPassword: (data: { email: string }) =>
       axiosInstance.post(API_ENDPOINTS.auth.forgotPassword, data),
     resetPassword: (data: { token: string; password: string; confirm_password: string }) =>
