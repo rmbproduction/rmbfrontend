@@ -317,7 +317,7 @@ export const apiService = {
     logout: (data: { refresh: string }) =>
       axiosInstance.post(API_ENDPOINTS.auth.logout, data),
     verifyEmail: (token: string) =>
-      axiosInstance.post(API_ENDPOINTS.auth.verifyEmail(token)),
+      axiosInstance.get(API_ENDPOINTS.auth.verifyEmail(token)),
     resendVerification: () =>
       axiosInstance.post(API_ENDPOINTS.auth.resendVerification),
     forgotPassword: (data: { email: string }) =>
