@@ -154,26 +154,42 @@ const ServiceDetails = () => {
     queryKey: ['serviceCategory', serviceId],
     queryFn: async () => {
       try {
-        // Use query parameter to filter by UUID
-        const response = await fetch(`https://repairmybike.up.railway.app/api/repairing-service/service-categories/?id=${serviceId}`);
-        const categories = await response.json();
+        // First try to fetch as a service category
+        const categoryResponse = await fetch(`https://repairmybike.up.railway.app/api/repairing-service/service-categories/?id=${serviceId}`);
+        const categories = await categoryResponse.json();
         
         // Find the matching category
         const category = categories.find((cat: ServiceCategory) => cat.uuid === serviceId);
         
-        if (!category) {
-          throw new Error('Service category not found');
+        if (category) {
+          return category;
+        }
+
+        // If not found as category, try to fetch as individual service
+        const serviceResponse = await fetch(`https://repairmybike.up.railway.app/api/repairing-service/services/${serviceId}/`);
+        const service = await serviceResponse.json();
+        
+        if (service) {
+          // Create a category-like structure for individual service
+          return {
+            uuid: service.category_uuid || serviceId,
+            name: service.category_name || 'Service Details',
+            slug: service.category_slug || 'service',
+            image: service.category_image || null,
+            description: service.category_description || '',
+            services: [service]
+          };
         }
         
-        return category;
+        throw new Error('Service not found');
       } catch (error) {
-        console.error('Error fetching service category:', error);
+        console.error('Error fetching service details:', error);
         throw error;
       }
     },
     enabled: !!serviceId,
-    retry: 1, // Only retry once on failure
-    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+    retry: 1,
+    staleTime: 5 * 60 * 1000,
   });
 
   // Filter services based on search query

@@ -24,6 +24,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import HowItWorks from './components/HowItWorks';
 import Contact from './pages/Contact';
 import AboutPage from './pages/AboutPage';
+import ServiceDetails from './pages/ServiceDetails';
 
 // Temporary: Log the API URL to verify environment variable
 console.log('API URL:', import.meta.env.VITE_API_BASE_URL);
@@ -72,6 +73,14 @@ const router = createBrowserRouter([
   {
     path: "/sell-vehicle",
     element: <MainLayout><ProtectedRoute><SellVehicle /></ProtectedRoute></MainLayout>
+  },
+  {
+    path: "/service/:serviceId/*",
+    element: <MainLayout><ServiceDetails /></MainLayout>
+  },
+  {
+    path: "/services/:serviceId/*",
+    element: <MainLayout><ServiceDetails /></MainLayout>
   },
   {
     path: "verify-email/:token",

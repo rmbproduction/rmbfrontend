@@ -79,7 +79,13 @@ const AppRoutes: React.FC = () => {
         </MainLayout>
       } />
 
-      <Route path="/service/:serviceId" element={
+      <Route path="/service/:serviceId/*" element={
+        <MainLayout>
+          <ServiceDetails />
+        </MainLayout>
+      } />
+
+      <Route path="/services/:serviceId/*" element={
         <MainLayout>
           <ServiceDetails />
         </MainLayout>
