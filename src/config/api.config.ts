@@ -80,27 +80,48 @@ axiosInstance.interceptors.response.use(
     // If the error is 401 and we haven't tried to refresh the token yet
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
+      console.log('Received 401 error, attempting to refresh token');
 
       try {
         const refreshToken = TokenManager.getRefreshToken();
         if (!refreshToken) {
+          console.error('No refresh token available for automatic refresh');
           throw new Error('No refresh token available');
         }
 
+        console.log('Calling token refresh endpoint');
         const response = await axios.post(
           `${API_BASE_URL}/accounts/token/refresh/`,
           { refresh: refreshToken }
         );
 
-        const { access } = response.data;
-        TokenManager.setTokens({ access, refresh: refreshToken });
+        if (!response.data?.access) {
+          console.error('Invalid refresh token response');
+          throw new Error('Invalid refresh token response');
+        }
+
+        const { access, refresh } = response.data;
+        console.log('Token refresh successful, updating tokens');
+        
+        // Get the remember me preference
+        const storageType = localStorage.getItem('token_storage_type') || 'local';
+        const rememberMe = storageType === 'local';
+        
+        // Update tokens with the same storage preference
+        TokenManager.setTokens({ 
+          access, 
+          refresh: refresh || refreshToken // Use new refresh token if provided
+        }, rememberMe);
 
         // Retry the original request with the new token
         originalRequest.headers.Authorization = `Bearer ${access}`;
+        console.log('Retrying original request with new token');
         return axiosInstance(originalRequest);
       } catch (refreshError) {
+        console.error('Token refresh failed:', refreshError);
         // If refresh token fails, clear tokens and redirect to login
         TokenManager.clearTokens();
+        console.log('Redirecting to login page');
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }

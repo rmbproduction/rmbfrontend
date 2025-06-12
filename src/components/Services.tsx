@@ -196,7 +196,7 @@ const Services: React.FC = () => {
                   </div>
                   <div className="ml-4">
                     <h4 className="text-lg font-semibold">Need More Information?</h4>
-                    <p className="text-gray-600">Our AI chatbot is available 24/7 to answer your questions</p>
+                    <p className="text-gray-600">Our customer support is available 24/7 to answer your questions</p>
                   </div>
                 </div>
                 <button className="transform hover:scale-105 transition-transform bg-[#FF5733] text-white font-medium px-6 py-3 rounded-xl shadow-lg hover:shadow-xl">

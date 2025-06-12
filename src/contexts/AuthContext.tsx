@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../services/authService';
 import { tokenService } from '../services/tokenService';
 import type { User } from '../types/api';
+import TokenManager from '../services/tokenManager';
 
 interface AuthResponse {
   user: User;
@@ -52,10 +53,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (!isAuthenticated) return;
 
+    console.log('Setting up token refresh mechanism');
+
     const checkToken = async () => {
       try {
-        if (tokenService.isTokenExpired()) {
-          await authService.refreshToken();
+        // Check if access token is expired or will expire soon (within 5 minutes)
+        if (TokenManager.isTokenExpired() || TokenManager.willExpireSoon(5)) {
+          console.log('Token expired or will expire soon, refreshing...');
+          const success = await authService.refreshToken();
+          if (!success) {
+            console.error('Token refresh failed, logging out');
+            await handleLogout();
+          } else {
+            console.log('Token refreshed successfully');
+          }
         }
       } catch (error) {
         console.error('Token refresh error:', error);
@@ -63,7 +74,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    const interval = setInterval(checkToken, 4 * 60 * 1000); // Check every 4 minutes
+    // Run once immediately to check current token status
+    checkToken();
+
+    // Then set up interval - check every 4 minutes
+    const interval = setInterval(checkToken, 4 * 60 * 1000);
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
