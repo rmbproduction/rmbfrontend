@@ -15,7 +15,7 @@ const EmailVerification = () => {
   useEffect(() => {
     if (!email) {
       setTimeout(() => {
-        navigate('/login-signup');
+        navigate('/login');
       }, 3000);
       return;
     }
@@ -131,7 +131,7 @@ const EmailVerification = () => {
 
             <div className="mt-8 space-y-4">
               <button
-                onClick={() => navigate('/login-signup')}
+                onClick={() => navigate('/login')}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-[#FF5733] hover:bg-[#ff4019] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FF5733]"
               >
                 Return to Login

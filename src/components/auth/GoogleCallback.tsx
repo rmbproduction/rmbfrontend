@@ -20,7 +20,7 @@ export const GoogleCallback = () => {
 
         if (!code) {
           toast.error('No authorization code received');
-          navigate('/login-signup');
+          navigate('/login');
           return;
         }
 
@@ -43,7 +43,7 @@ export const GoogleCallback = () => {
       } catch (error: any) {
         console.error('Google OAuth error:', error);
         toast.error(error.response?.data?.error || 'Failed to authenticate with Google');
-        navigate('/login-signup');
+        navigate('/login');
       }
     };
 

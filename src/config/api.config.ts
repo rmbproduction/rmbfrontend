@@ -200,6 +200,33 @@ export const API_ENDPOINTS = {
     history: '/services/chatbot/history/',
   },
 
+  // Spare parts endpoints
+  spareParts: {
+    parts: '/spare-parts/parts/',
+    part: (uuid: string) => `/spare-parts/parts/${uuid}/`,
+    featured: '/spare-parts/parts/featured/',
+    reviews: (uuid: string) => `/spare-parts/parts/${uuid}/reviews/`,
+    addReview: (uuid: string) => `/spare-parts/parts/${uuid}/add_review/`,
+    categories: '/spare-parts/categories/',
+    category: (uuid: string) => `/spare-parts/categories/${uuid}/`,
+    
+    // Cart endpoints
+    createCart: '/spare-parts/cart/create/',
+    cart: (id: number) => `/spare-parts/cart/${id}/`,
+    addToCart: (id: number) => `/spare-parts/cart/${id}/add/`,
+    updateCartItem: (id: number) => `/spare-parts/cart/${id}/update-item/`,
+    removeCartItem: (id: number) => `/spare-parts/cart/items/${id}/`,
+    clearCart: (id: number) => `/spare-parts/cart/${id}/clear/`,
+    userCarts: '/spare-parts/cart/list/',
+    
+    // Order endpoints
+    orders: '/spare-parts/orders/',
+    userOrders: '/spare-parts/orders/user/',
+    
+    // Utility endpoints
+    calculateDistanceFee: '/spare-parts/calculate-distance-fee/',
+  },
+
   // Admin dashboard endpoints
   admin: {
     statistics: '/services/admin/dashboard/statistics/',
@@ -510,6 +537,112 @@ export const apiService = {
     checkCloudinary: () => axiosInstance.get(API_ENDPOINTS.vehicle.checkCloudinary),
     getVehicleImages: (id: string) => axiosInstance.get(API_ENDPOINTS.vehicle.vehicleImages(id)),
     getUploadParams: (id: string) => axiosInstance.get(API_ENDPOINTS.vehicle.uploadParams(id)),
+  },
+
+  // Spare parts services
+  spareParts: {
+    getAllParts: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.parts);
+      return response.data;
+    },
+    getPartDetail: async (partId: string) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.part(partId));
+      return response.data;
+    },
+    createCart: async () => {
+      const response = await axiosInstance.post(API_ENDPOINTS.spareParts.createCart);
+      return response.data;
+    },
+    getCart: async (cartId: number) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.cart(cartId));
+      return response.data;
+    },
+    addToCart: async (partId: string, cartId?: number, quantity: number = 1) => {
+      // If no cartId is provided, create a new cart first
+      let finalCartId: number;
+      
+      if (!cartId) {
+        const cartResponse = await axiosInstance.post(API_ENDPOINTS.spareParts.createCart);
+        finalCartId = cartResponse.data.id;
+      } else {
+        finalCartId = cartId;
+      }
+      
+      const response = await axiosInstance.post(API_ENDPOINTS.spareParts.addToCart(finalCartId), {
+        part: partId,
+        quantity
+      });
+      return response.data;
+    },
+    buyNow: async (partId: string, quantity: number = 1) => {
+      // Create a cart, add the item, and return the cart ID for immediate checkout
+      const cartResponse = await axiosInstance.post(API_ENDPOINTS.spareParts.createCart);
+      const cartId = cartResponse.data.id;
+      
+      await axiosInstance.post(API_ENDPOINTS.spareParts.addToCart(cartId), {
+        part: partId,
+        quantity
+      });
+      
+      return { cartId };
+    },
+    getUserCarts: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.userCarts);
+      return response.data;
+    },
+    createOrder: async (cartId: number, shippingInfo: any) => {
+      const response = await axiosInstance.post(API_ENDPOINTS.spareParts.orders, {
+        cart_id: cartId,
+        ...shippingInfo
+      });
+      return response.data;
+    },
+    getUserOrders: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.userOrders);
+      return response.data;
+    },
+    calculateDistanceFee: async (latitude: number, longitude: number) => {
+      const response = await axiosInstance.post(API_ENDPOINTS.spareParts.calculateDistanceFee, {
+        latitude,
+        longitude
+      });
+      return response.data;
+    },
+    getFeaturedParts: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.featured);
+      return response.data;
+    },
+    getPartReviews: async (uuid: string) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.reviews(uuid));
+      return response.data;
+    },
+    addReview: async (uuid: string, data: any) => {
+      const response = await axiosInstance.post(API_ENDPOINTS.spareParts.addReview(uuid), data);
+      return response.data;
+    },
+    getCategories: async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.categories);
+      return response.data;
+    },
+    getCategory: async (uuid: string) => {
+      const response = await axiosInstance.get(API_ENDPOINTS.spareParts.category(uuid));
+      return response.data;
+    },
+    removeCartItem: async (itemId: number) => {
+      const response = await axiosInstance.delete(API_ENDPOINTS.spareParts.removeCartItem(itemId));
+      return response.data;
+    },
+    updateCartItem: async (cartId: number, itemId: number, quantity: number) => {
+      const response = await axiosInstance.post(API_ENDPOINTS.spareParts.updateCartItem(cartId), {
+        item_id: itemId,
+        quantity
+      });
+      return response.data;
+    },
+    clearCart: async (cartId: number) => {
+      const response = await axiosInstance.delete(API_ENDPOINTS.spareParts.clearCart(cartId));
+      return response.data;
+    },
   },
 };
 

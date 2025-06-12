@@ -183,7 +183,7 @@ const Navbar = () => {
           {/* Cart and User Menu */}
           <div className="flex items-center space-x-4">
             <button 
-              onClick={() => navigate('/cart')}
+              onClick={() => navigate('/spare-parts/cart')}
               className="relative p-2 hover:bg-gray-50 rounded-lg transition-colors"
             >
               <ShoppingCart className="h-6 w-6 text-gray-700 hover:text-[#FF5733]" />

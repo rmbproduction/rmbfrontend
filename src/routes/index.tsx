@@ -6,7 +6,8 @@ import Home from '../pages/Home';
 import VehicleList from '../pages/VehicleList';
 import SellVehicle from '../pages/SellVehicle';
 import NotFound from '../pages/NotFound';
-import ProtectedRoute from '../components/ProtectedRoute';
+import { ProtectedRoute } from '../components/ProtectedRoute';
+import SpareParts, { SparePartDetail } from '../pages/SpareParts';
 
 const AppRoutes: React.FC = () => {
   return (
@@ -15,6 +16,8 @@ const AppRoutes: React.FC = () => {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/vehicles" element={<VehicleList />} />
+        <Route path="/spare-parts" element={<SpareParts />} />
+        <Route path="/spare-parts/:partId" element={<SparePartDetail />} />
         <Route 
           path="/profile" 
           element={

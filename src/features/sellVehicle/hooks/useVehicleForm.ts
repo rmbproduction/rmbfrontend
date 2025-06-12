@@ -171,7 +171,7 @@ export const useVehicleForm = () => {
       });
       // Redirect to login page after a short delay
       setTimeout(() => {
-        navigate('/login-signup', { state: { redirectTo: '/sell-vehicle' } });
+        navigate('/login', { state: { redirectTo: '/sell-vehicle' } });
       }, 2000);
     }
   }, [navigate]);
@@ -456,7 +456,7 @@ export const useVehicleForm = () => {
     const isAuthenticated = await checkUserAuthentication();
     if (!isAuthenticated) {
       toast.error('Please log in to submit your vehicle');
-      navigate('/login-signup', { state: { redirectTo: '/sell-vehicle' } });
+      navigate('/login', { state: { redirectTo: '/sell-vehicle' } });
       return;
     }
 

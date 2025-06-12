@@ -29,7 +29,7 @@ const EmailConfirmation = () => {
           setVerificationStatus('success');
           // Redirect to login after 3 seconds on success
           setTimeout(() => {
-            navigate('/login-signup');
+            navigate('/login');
           }, 3000);
         } else {
           console.log('Unexpected response status:', response.status);
@@ -95,7 +95,7 @@ const EmailConfirmation = () => {
             <p className="text-gray-600 mb-8">{errorMessage}</p>
             <div className="space-y-4">
               <button
-                onClick={() => navigate('/login-signup')}
+                onClick={() => navigate('/login')}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-[#FF5733] hover:bg-[#ff4019] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FF5733]"
               >
                 Return to Login

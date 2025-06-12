@@ -19,7 +19,7 @@ const Hero = () => {
       });
     } else {
       // Fallback if element not found
-      navigate('/login-signup');
+      navigate('/login');
     }
   };
 

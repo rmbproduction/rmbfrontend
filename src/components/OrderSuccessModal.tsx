@@ -31,7 +31,7 @@ interface BookingData {
 interface OrderSuccessModalProps {
   isOpen: boolean;
   onClose: () => void;
-  mode: 'cart' | 'buy-now';
+  mode: 'cart' | 'buy-now' | 'spare-parts';
   bookingReference?: string | null;
 }
 
@@ -68,7 +68,11 @@ const OrderSuccessModal = ({ isOpen, onClose, mode, bookingReference }: OrderSuc
 
   const handleViewRepairs = () => {
     onClose();
-    navigate('/profile?tab=subscriptions');
+    if (mode === 'spare-parts') {
+      navigate('/profile?tab=orders');
+    } else {
+      navigate('/profile?tab=subscriptions');
+    }
   };
 
   const handleBackToHome = () => {
@@ -115,11 +119,12 @@ const OrderSuccessModal = ({ isOpen, onClose, mode, bookingReference }: OrderSuc
         </div>
         
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          Booking Confirmed!
+          {mode === 'spare-parts' ? 'Order Confirmed!' : 'Booking Confirmed!'}
         </h2>
         
         <p className="text-gray-600 mb-4">
-          Your booking reference: <span className="font-semibold">{bookingData?.reference || bookingReference}</span>
+          {mode === 'spare-parts' ? 'Your order reference: ' : 'Your booking reference: '}
+          <span className="font-semibold">{bookingData?.reference || bookingReference}</span>
         </p>
 
         {bookingData && (
@@ -156,7 +161,7 @@ const OrderSuccessModal = ({ isOpen, onClose, mode, bookingReference }: OrderSuc
             onClick={handleViewRepairs}
             className="w-full bg-[#FF5733] text-white py-3 rounded-lg hover:bg-[#ff4019] transition-colors flex items-center justify-center gap-2"
           >
-            View My Repairs
+            {mode === 'spare-parts' ? 'View My Orders' : 'View My Repairs'}
             <ArrowRight className="w-4 h-4" />
           </button>
           
