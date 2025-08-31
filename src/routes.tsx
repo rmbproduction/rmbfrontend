@@ -23,6 +23,11 @@ import AboutPage from './pages/AboutPage';
 import NotFound from './pages/NotFound';
 import Pricing from './pages/pricing';
 import EmailVerification from './pages/EmailVerification';
+import TermsAndConditions from './pages/TermsAndConditions';
+import RefundPolicy from './pages/RefundPolicy';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import ReturnPolicy from './pages/ReturnPolicy';
+import ShippingPolicy from './pages/ShippingPolicy';
 
 // Layout wrapper for consistent layout
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -138,6 +143,37 @@ const AppRoutes: React.FC = () => {
       <Route path="/contact" element={
         <MainLayout>
           <Contact />
+        </MainLayout>
+      } />
+
+      {/* Policy Pages */}
+      <Route path="/terms-and-conditions" element={
+        <MainLayout>
+          <TermsAndConditions />
+        </MainLayout>
+      } />
+
+      <Route path="/refund-policy" element={
+        <MainLayout>
+          <RefundPolicy />
+        </MainLayout>
+      } />
+
+      <Route path="/privacy-policy" element={
+        <MainLayout>
+          <PrivacyPolicy />
+        </MainLayout>
+      } />
+
+      <Route path="/return-policy" element={
+        <MainLayout>
+          <ReturnPolicy />
+        </MainLayout>
+      } />
+
+      <Route path="/shipping-policy" element={
+        <MainLayout>
+          <ShippingPolicy />
         </MainLayout>
       } />
 

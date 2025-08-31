@@ -25,6 +25,11 @@ import HowItWorks from './components/HowItWorks';
 import Contact from './pages/Contact';
 import AboutPage from './pages/AboutPage';
 import ServiceDetails from './pages/ServiceDetails';
+import TermsAndConditions from './pages/TermsAndConditions';
+import RefundPolicy from './pages/RefundPolicy';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import ReturnPolicy from './pages/ReturnPolicy';
+import ShippingPolicy from './pages/ShippingPolicy';
 
 // Temporary: Log the API URL to verify environment variable
 console.log('API URL:', import.meta.env.VITE_API_BASE_URL);
@@ -117,6 +122,27 @@ const router = createBrowserRouter([
   {
     path: "about-us",
     element: <MainLayout><AboutPage /></MainLayout>
+  },
+  // Policy Pages
+  {
+    path: "/terms-and-conditions",
+    element: <MainLayout><TermsAndConditions /></MainLayout>
+  },
+  {
+    path: "/refund-policy",
+    element: <MainLayout><RefundPolicy /></MainLayout>
+  },
+  {
+    path: "/privacy-policy",
+    element: <MainLayout><PrivacyPolicy /></MainLayout>
+  },
+  {
+    path: "/return-policy",
+    element: <MainLayout><ReturnPolicy /></MainLayout>
+  },
+  {
+    path: "/shipping-policy",
+    element: <MainLayout><ShippingPolicy /></MainLayout>
   },
   {
     path: "*",

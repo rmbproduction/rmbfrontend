@@ -5,7 +5,7 @@ const Footer = () => {
   return (
     <footer className="bg-gray-900">
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
           <div>
             <h3 className="text-white text-lg font-semibold mb-4">RepairMyBike</h3>
             <p className="text-gray-400">Professional bike repair services at your doorstep. Available 24/7 for all your bike maintenance needs.</p>
@@ -85,6 +85,36 @@ const Footer = () => {
                 <Instagram className="h-6 w-6" />
               </a>
             </div>
+          </div>
+          <div>
+            <h3 className="text-white text-lg font-semibold mb-4">Legal</h3>
+            <ul className="space-y-2">
+              <li>
+                <Link to="/terms-and-conditions" className="text-gray-400 hover:text-white">
+                  Terms & Conditions
+                </Link>
+              </li>
+              <li>
+                <Link to="/privacy-policy" className="text-gray-400 hover:text-white">
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link to="/refund-policy" className="text-gray-400 hover:text-white">
+                  Refund Policy
+                </Link>
+              </li>
+              <li>
+                <Link to="/return-policy" className="text-gray-400 hover:text-white">
+                  Return Policy
+                </Link>
+              </li>
+              <li>
+                <Link to="/shipping-policy" className="text-gray-400 hover:text-white">
+                  Shipping Policy
+                </Link>
+              </li>
+            </ul>
           </div>
         </div>
         <div className="mt-8 pt-8 border-t border-gray-700">
